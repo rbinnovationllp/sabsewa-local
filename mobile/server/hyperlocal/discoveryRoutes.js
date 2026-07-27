@@ -1,0 +1,256 @@
+import express from "express";
+import { supabase } from "../connection.js";
+
+const router = express.Router();
+
+const MAX_RADIUS_M = 1000;
+const FIRST_RADIUS_M = 500;
+
+function toRad(value) {
+  return (Number(value) * Math.PI) / 180;
+}
+
+function distanceMeters(aLat, aLng, bLat, bLng) {
+  const earthRadiusM = 6371000;
+  const dLat = toRad(bLat - aLat);
+  const dLng = toRad(bLng - aLng);
+  const lat1 = toRad(aLat);
+  const lat2 = toRad(bLat);
+  const h =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  return 2 * earthRadiusM * Math.asin(Math.sqrt(h));
+}
+
+function categoryMatches(vendorCategory, requestedCategory) {
+  if (!requestedCategory) return true;
+  const vendor = String(vendorCategory || "").toLowerCase();
+  const requested = String(requestedCategory || "").toLowerCase();
+  if (requested === "grocery" || requested === "kirana") return ["grocery", "kirana"].includes(vendor);
+  if (requested === "restaurant" || requested === "tiffin") return ["restaurant", "tiffin"].includes(vendor);
+  return vendor.includes(requested) || requested.includes(vendor);
+}
+
+function rankVendor(a, b) {
+  if (a.distance_m !== b.distance_m) return a.distance_m - b.distance_m;
+  if (a.open_now !== b.open_now) return a.open_now ? -1 : 1;
+  if (a.available_product_count !== b.available_product_count) {
+    return b.available_product_count - a.available_product_count;
+  }
+  if (Number(a.rating || 0) !== Number(b.rating || 0)) return Number(b.rating || 0) - Number(a.rating || 0);
+  return Number(a.estimated_fulfilment_minutes || 999) - Number(b.estimated_fulfilment_minutes || 999);
+}
+
+function vendorCard({ vendor, terminal, items, distanceM }) {
+  const terminalFulfilment = terminal.estimated_fulfilment_minutes;
+  return {
+    id: vendor.id,
+    public_vendor_id: vendor.public_vendor_id,
+    terminal_id: terminal.id,
+    public_terminal_id: terminal.public_terminal_id,
+    shop_name: vendor.shop_name,
+    category: vendor.category,
+    distance_m: Math.round(distanceM),
+    distance_label: distanceM < 1000 ? `${Math.round(distanceM)} m` : `${(distanceM / 1000).toFixed(1)} km`,
+    open_now: vendor.status === "approved" && terminal.status === "active" && terminal.is_open_today !== false,
+    operating_hours: terminal.operating_hours || {},
+    delivery_available: terminal.delivery_available !== false && vendor.delivery_available !== false,
+    pickup_available: terminal.pickup_available !== false && vendor.pickup_available !== false,
+    delivery_terms: vendor.delivery_terms || "Payment and delivery terms are confirmed directly with the vendor.",
+    rating: Number(vendor.rating || 0),
+    rating_count: Number(vendor.rating_count || 0),
+    estimated_fulfilment_minutes: terminalFulfilment || vendor.estimated_fulfilment_minutes || 45,
+    available_product_count: items.length,
+    available_products: items.slice(0, 6).map((item) => ({
+      id: item.id,
+      item_name: item.item_name,
+      price: item.price_display_mode === "show_price" ? Number(item.price || 0) : null,
+      price_display_mode: item.price_display_mode || "show_price",
+      price_label: item.price_display_mode === "hide_price"
+        ? "Price on Request"
+        : item.price_display_mode === "market_price"
+          ? "Market Price"
+          : `Rs ${Number(item.price || 0).toFixed(2)}${item.price_unit_label ? `/${item.price_unit_label}` : ""}`,
+      unit: item.unit || null,
+      price_unit_label: item.price_unit_label || null,
+      item_pic: item.item_pic || null,
+    })),
+  };
+}
+
+router.get("/vendors", async (req, res) => {
+  try {
+    const category = String(req.query.category || "").trim();
+    const lat = Number(req.query.lat);
+    const lng = Number(req.query.lng);
+    const pincode = String(req.query.pincode || "").trim();
+    const locality = String(req.query.locality || "").trim();
+
+    if ((!Number.isFinite(lat) || !Number.isFinite(lng)) && !pincode && !locality) {
+      return res.status(400).json({
+        success: false,
+        error: "Location permission or manual PIN/locality is required.",
+      });
+    }
+
+    const { data: vendors, error: vendorError } = await supabase
+      .from("vendors")
+      .select("*")
+      .eq("status", "approved");
+
+    if (vendorError) throw vendorError;
+
+    const filteredVendors = (vendors || []).filter((vendor) => categoryMatches(vendor.category, category));
+    const vendorIds = filteredVendors.map((vendor) => vendor.id);
+
+    if (vendorIds.length === 0) {
+      return res.json({ success: true, search_radius_m: MAX_RADIUS_M, expanded: true, vendors: [] });
+    }
+
+    const [{ data: terminals, error: terminalError }, { data: items, error: itemError }] = await Promise.all([
+      supabase
+        .from("vendor_terminals")
+        .select("*")
+        .in("vendor_id", vendorIds)
+        .eq("status", "active"),
+      supabase
+        .from("vendor_items")
+        .select("id, vendor_id, terminal_id, item_name, item_pic, price, price_display_mode, price_unit_label, unit, is_available, available_today, stock_status")
+        .in("vendor_id", vendorIds)
+        .eq("is_available", true)
+        .eq("available_today", true)
+        .neq("stock_status", "out_of_stock"),
+    ]);
+
+    if (terminalError) throw terminalError;
+    if (itemError) throw itemError;
+
+    const vendorById = new Map(filteredVendors.map((vendor) => [vendor.id, vendor]));
+    const itemsByTerminal = new Map();
+    for (const item of items || []) {
+      const key = item.terminal_id || "vendor:" + item.vendor_id;
+      const current = itemsByTerminal.get(key) || [];
+      current.push(item);
+      itemsByTerminal.set(key, current);
+    }
+
+    const allCards = [];
+    for (const terminal of terminals || []) {
+      const vendor = vendorById.get(terminal.vendor_id);
+      if (!vendor) continue;
+
+      const terminalItems = itemsByTerminal.get(terminal.id) || itemsByTerminal.get("vendor:" + terminal.vendor_id) || [];
+      if (terminalItems.length === 0) continue;
+
+      let distanceM = 0;
+      if (Number.isFinite(lat) && Number.isFinite(lng) && terminal.lat && terminal.lng) {
+        distanceM = distanceMeters(lat, lng, Number(terminal.lat), Number(terminal.lng));
+        const vendorMaxRadius = Math.min(Number(vendor.max_service_radius_m || MAX_RADIUS_M), MAX_RADIUS_M);
+        if (distanceM > vendorMaxRadius) continue;
+      } else if (pincode || locality) {
+        const cityText = String(terminal.city || vendor.city || "").toLowerCase();
+        const addressText = String(vendor.address || "").toLowerCase();
+        const localityText = locality.toLowerCase();
+        if (localityText && !cityText.includes(localityText) && !addressText.includes(localityText)) continue;
+        distanceM = MAX_RADIUS_M;
+      }
+
+      allCards.push(vendorCard({ vendor, terminal, items: terminalItems, distanceM }));
+    }
+
+    const within500 = allCards.filter((vendor) => vendor.distance_m <= FIRST_RADIUS_M);
+    const result = (within500.length > 0 ? within500 : allCards.filter((vendor) => vendor.distance_m <= MAX_RADIUS_M))
+      .sort(rankVendor);
+
+    return res.json({
+      success: true,
+      search_radius_m: within500.length > 0 ? FIRST_RADIUS_M : MAX_RADIUS_M,
+      expanded: within500.length === 0,
+      vendors: result,
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+router.post("/unserved-area-leads", async (req, res) => {
+  try {
+    const {
+      customer_id,
+      category,
+      locality,
+      pincode,
+      city,
+      lat,
+      lng,
+      consent_given,
+      requested_button,
+    } = req.body;
+
+    if (!category) {
+      return res.status(400).json({ success: false, error: "Category is required." });
+    }
+
+    if (!consent_given) {
+      return res.status(400).json({ success: false, error: "Customer consent is required before saving a recruitment lead." });
+    }
+
+    const cleanLat = Number.isFinite(Number(lat)) ? Number(lat) : null;
+    const cleanLng = Number.isFinite(Number(lng)) ? Number(lng) : null;
+
+    let existingQuery = supabase
+      .from("unserved_area_leads")
+      .select("*")
+      .eq("category", category);
+
+    existingQuery = pincode ? existingQuery.eq("pincode", pincode) : existingQuery.is("pincode", null);
+    existingQuery = locality ? existingQuery.eq("locality", locality) : existingQuery.is("locality", null);
+
+    const { data: existing } = await existingQuery.maybeSingle();
+
+    if (existing) {
+      const buttons = Array.isArray(existing.requested_buttons) ? existing.requested_buttons : [];
+      const { data, error } = await supabase
+        .from("unserved_area_leads")
+        .update({
+          customer_count: Number(existing.customer_count || 1) + 1,
+          last_requested_at: new Date().toISOString(),
+          requested_buttons: [...buttons, requested_button || "notify_me"],
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", existing.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return res.json({ success: true, lead: data });
+    }
+
+    const { data, error } = await supabase
+      .from("unserved_area_leads")
+      .insert({
+        customer_id: customer_id || null,
+        category,
+        locality: locality || null,
+        pincode: pincode || null,
+        city: city || null,
+        lat: cleanLat,
+        lng: cleanLng,
+        search_radius_m: MAX_RADIUS_M,
+        consent_given: true,
+        requested_buttons: [requested_button || "notify_me"],
+        metadata: {
+          privacy_note: "Exact address intentionally not stored for vendor recruitment.",
+        },
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return res.status(201).json({ success: true, lead: data });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+export default router;

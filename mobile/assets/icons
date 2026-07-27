@@ -1,0 +1,138 @@
+import React from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Image,
+} from "react-native";
+import { useNavigation, useRoute } from "@react-navigation/native";
+
+export default function BookingConfirmationScreen() {
+  const navigation = useNavigation();
+  const route = useRoute();
+
+  // Values received from the previous screen
+  const { bookingId, serviceName, bookingDate } = route.params || {};
+
+  return (
+    <View style={styles.container}>
+      {/* Success Icon */}
+      <Image
+        source={require("../assets/icons/success.png")}
+        style={styles.icon}
+      />
+
+      <Text style={styles.title}>Booking Confirmed 🎉</Text>
+
+      <Text style={styles.subtitle}>
+        Your {serviceName || "service"} request has been successfully created.
+      </Text>
+
+      {/* Booking Summary Card */}
+      <View style={styles.card}>
+        <Text style={styles.label}>🆔 Booking ID</Text>
+        <Text style={styles.value}>{bookingId || "TEMP-12345"}</Text>
+
+        <Text style={styles.label}>📅 Scheduled Date</Text>
+        <Text style={styles.value}>{bookingDate || "Tomorrow"}</Text>
+
+        <Text style={styles.label}>🛠 Worker Status</Text>
+        <Text style={styles.value}>Worker will be assigned shortly</Text>
+      </View>
+
+      {/* Buttons */}
+      <TouchableOpacity
+        style={styles.primaryBtn}
+        onPress={() =>
+          navigation.navigate("BookingDetails", { bookingId: bookingId })
+        }
+      >
+        <Text style={styles.primaryBtnText}>View Booking Details</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={styles.secondaryBtn}
+        onPress={() => navigation.navigate("RoleRouter")}
+      >
+        <Text style={styles.secondaryBtnText}>Go to Home</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+/* ------------------ STYLES ------------------ */
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#ffffff",
+    padding: 28,
+    alignItems: "center",
+  },
+  icon: {
+    width: 110,
+    height: 110,
+    marginTop: 40,
+    marginBottom: 20,
+  },
+  title: {
+    fontSize: 26,
+    fontWeight: "800",
+    color: "#222",
+    marginBottom: 6,
+    textAlign: "center",
+  },
+  subtitle: {
+    fontSize: 16,
+    color: "#666",
+    textAlign: "center",
+    marginBottom: 26,
+    paddingHorizontal: 20,
+  },
+  card: {
+    width: "100%",
+    backgroundColor: "#f6f6f6",
+    borderRadius: 12,
+    padding: 20,
+    marginBottom: 30,
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#444",
+    marginTop: 10,
+  },
+  value: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#ff6600",
+    marginBottom: 8,
+  },
+  primaryBtn: {
+    width: "100%",
+    backgroundColor: "#ff6600",
+    paddingVertical: 14,
+    borderRadius: 10,
+    marginBottom: 12,
+  },
+  primaryBtnText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  secondaryBtn: {
+    width: "100%",
+    paddingVertical: 14,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: "#ff6600",
+  },
+  secondaryBtnText: {
+    color: "#ff6600",
+    fontSize: 16,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+});

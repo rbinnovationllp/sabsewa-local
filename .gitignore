@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+mobile/node_modules/
+mobile/server/node_modules/
+
+# Environment secrets
+.env
+.env.*
+!.env.example
+!.env.sabsewa-local.example
+!mobile/.env.example
+!mobile/.env.sabsewa-local.example
+!mobile/server/.env.example
+!mobile/server/.env.sabsewa-local.example
+!backend/.env.example
+mobile/.env
+mobile/.env.local
+mobile/server/.env
+backend/.env
+
+# Supabase local runtime/cache
+supabase/.temp/
+mobile/supabase/.temp/
+
+# Expo/cache/build output
+.expo/
+mobile/.expo/
+mobile/.npm-cache/
+dist/
+build/
+coverage/
+
+# Local archives and generated logs
+mobile/_archived_non_local_20260725/
+*.log

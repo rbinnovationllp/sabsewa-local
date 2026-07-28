@@ -100,7 +100,8 @@ export default function VendorExitAndRefundScreen() {
       <View style={styles.panel}>
         <Text style={styles.panelTitle}>Refund Preview</Text>
         <View style={styles.row}><Text>Current advance balance</Text><Text style={styles.value}>{money(preview?.balance_at_request)}</Text></View>
-        <View style={styles.row}><Text>Activation and usage charge</Text><Text style={styles.debit}>- {money(preview?.activation_usage_charge)}</Text></View>
+        <View style={styles.row}><Text>Activation/service charge deducted at closure</Text><Text style={styles.debit}>- {money(preview?.activation_usage_charge)}</Text></View>
+        <View style={styles.row}><Text>Non-refundable activation fee already collected</Text><Text style={styles.value}>{money(preview?.non_refundable_activation_fee_previously_collected || 500)}</Text></View>
         <View style={styles.row}><Text>Unpaid completed-order fees</Text><Text style={styles.debit}>- {money(preview?.unpaid_order_fees)}</Text></View>
         <View style={styles.row}><Text>Other legal adjustments</Text><Text style={styles.debit}>- {money(preview?.legal_adjustments)}</Text></View>
         <View style={styles.totalRow}><Text style={styles.totalLabel}>Estimated refund</Text><Text style={styles.total}>{money(preview?.estimated_refund)}</Text></View>
@@ -109,10 +110,10 @@ export default function VendorExitAndRefundScreen() {
       <View style={styles.notice}>
         <Text style={styles.noticeTitle}>Important</Text>
         <Text style={styles.noticeText}>
-          New orders stop when the available advance balance falls below Rs 515. This preserves Rs 500 as the activation and usage charge plus Rs 15 for one successful completed-order platform fee.
+          New orders stop when the available advance balance falls below Rs 515. This preserves the operational threshold for platform continuity and one Rs 15 successful-order platform fee.
         </Text>
         <Text style={styles.noticeText}>
-          The Rs 500 activation and usage charge applies once the minimum advance amount has been deposited, even if no orders were received before voluntary exit.
+          The Rs 500 activation and platform-service charge is collected once during initial activation as part of the Rs 5,500 payment. It is recorded separately, is non-refundable, and is not deducted again at voluntary closure.
         </Text>
         <Text style={styles.noticeText}>
           Suspensions, fraud allegations, NDA violations, confidentiality breaches, or other policy violations require separate investigation, notice, evidence, and reasonable opportunity to respond.

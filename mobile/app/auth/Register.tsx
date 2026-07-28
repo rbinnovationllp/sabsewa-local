@@ -12,6 +12,14 @@ import {
 import { supabase } from "@/lib/supabase";
 import LanguageSelector from "@/components/LanguageSelector";
 import { useLanguage } from "@/providers/LanguageProvider";
+import { getDeviceMetadata } from "@/lib/deviceIdentity";
+import {
+  SABSEWA_ACCEPTANCE_STATEMENT,
+  SABSEWA_ACCEPTED_DOCUMENT_VERSIONS,
+  SABSEWA_POLICY_BUNDLE_VERSION,
+  SABSEWA_PRIVACY_VERSION,
+  SABSEWA_TERMS_VERSION,
+} from "@/lib/legalVersions";
 
 export default function RegisterScreen() {
   const router = useRouter();
@@ -23,6 +31,7 @@ export default function RegisterScreen() {
   const [address, setAddress] = useState("");
   const [extra, setExtra] = useState("");
   const [acceptedPolicies, setAcceptedPolicies] = useState(false);
+  const [marketingConsent, setMarketingConsent] = useState(false);
   const [error, setError] = useState("");
   const { language } = useLanguage();
 
@@ -39,7 +48,7 @@ export default function RegisterScreen() {
       return setError("Enter a valid 10-digit mobile number");
     if (!city) return setError("Enter your city name");
     if (role === "customer" && !address.trim()) return setError("Enter your primary delivery address");
-    if (!acceptedPolicies) return setError("Please accept the Terms, Privacy Policy and direct vendor-payment terms.");
+    if (!acceptedPolicies) return setError("Please tick the Terms of Use and Privacy Notice acceptance before registration.");
 
     if ((role === "vendor" || role === "rider") && !extra)
       return setError("Please fill all required fields");
@@ -47,6 +56,7 @@ export default function RegisterScreen() {
     setError("");
 
     const formattedPhone = phone.startsWith("+") ? phone : `+91${phone}`;
+    const deviceMetadata = await getDeviceMetadata();
     const { error: otpError } = await supabase.auth.signInWithOtp({
       phone: formattedPhone,
       options: {
@@ -58,6 +68,14 @@ export default function RegisterScreen() {
           preferred_language: language,
           service_type_or_area: extra,
           accepted_policies: true,
+          terms_version: SABSEWA_TERMS_VERSION,
+          privacy_version: SABSEWA_PRIVACY_VERSION,
+          policy_bundle_version: SABSEWA_POLICY_BUNDLE_VERSION,
+          accepted_document_versions: SABSEWA_ACCEPTED_DOCUMENT_VERSIONS,
+          policy_acceptance_statement: SABSEWA_ACCEPTANCE_STATEMENT,
+          policy_acceptance_language: language,
+          policy_acceptance_device: deviceMetadata,
+          marketing_consent: marketingConsent,
         },
       },
     });
@@ -177,20 +195,60 @@ export default function RegisterScreen() {
       {/* ERROR */}
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
+      <View style={styles.legalBox}>
+        <Text style={styles.legalTitle}>Required before registration</Text>
+        <Text style={styles.legalText}>
+          Please open and review each applicable document before ticking acceptance. These documents remain visible in the app and are recorded by version for future dispute evidence.
+        </Text>
+        <View style={styles.legalLinks}>
+          <TouchableOpacity onPress={() => router.push("/terms" as any)}>
+            <Text style={styles.legalLink}>Open Terms of Use</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => router.push("/customer-terms" as any)}>
+            <Text style={styles.legalLink}>Open Customer Terms</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => router.push("/vendor-terms" as any)}>
+            <Text style={styles.legalLink}>Open Vendor Terms</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => router.push("/privacy" as any)}>
+            <Text style={styles.legalLink}>Open Privacy Notice</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => router.push("/credit-disclaimer" as any)}>
+            <Text style={styles.legalLink}>Open Credit Record Disclaimer</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => router.push("/refund-cancellation" as any)}>
+            <Text style={styles.legalLink}>Open Refund/Cancellation Policy</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => router.push("/grievance-dispute" as any)}>
+            <Text style={styles.legalLink}>Open Grievance and Dispute Policy</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => router.push("/policy" as any)}>
+            <Text style={styles.legalLink}>Open Platform Policy</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
       <TouchableOpacity style={styles.consentRow} onPress={() => setAcceptedPolicies((value) => !value)}>
         <View style={[styles.checkbox, acceptedPolicies && styles.checked]}>
           {acceptedPolicies ? <Text style={styles.checkText}>✓</Text> : null}
         </View>
-        <Text style={styles.consentText}>I accept the Terms, Privacy Policy, direct customer-to-vendor payment model, and data processing required for SabSewa Local.</Text>
+        <Text style={styles.consentText}>{SABSEWA_ACCEPTANCE_STATEMENT}</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity style={styles.consentRow} onPress={() => setMarketingConsent((value) => !value)}>
+        <View style={[styles.checkbox, marketingConsent && styles.checked]}>
+          {marketingConsent ? <Text style={styles.checkText}>✓</Text> : null}
+        </View>
+        <Text style={styles.consentText}>Optional: I agree to receive promotional offers and marketing updates from SabSewa Local. I can opt out later.</Text>
       </TouchableOpacity>
 
       {/* SUBMIT */}
-      <TouchableOpacity style={styles.registerBtn} onPress={handleRegister}>
-        <Text style={styles.registerBtnText}>Create Account</Text>
+      <TouchableOpacity style={[styles.registerBtn, !acceptedPolicies && styles.registerBtnDisabled]} onPress={handleRegister}>
+        <Text style={styles.registerBtnText}>Accept and Register</Text>
       </TouchableOpacity>
 
       {/* BACK */}
-      <TouchableOpacity onPress={() => router.push("/auth/index")}>
+      <TouchableOpacity onPress={() => router.push("/auth")}>
         <Text style={styles.backText}>← Back</Text>
       </TouchableOpacity>
     </ScrollView>
@@ -227,6 +285,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   textArea: { minHeight: 84, textAlignVertical: "top" },
+  legalBox: { borderWidth: 1, borderColor: "#d6e4ff", backgroundColor: "#f8fbff", padding: 12, borderRadius: 10, marginBottom: 14 },
+  legalTitle: { fontSize: 14, fontWeight: "800", color: "#1a237e", marginBottom: 6 },
+  legalText: { fontSize: 13, color: "#444", lineHeight: 19, marginBottom: 10 },
+  legalLinks: { gap: 8 },
+  legalLink: { color: "#1e88e5", fontWeight: "700", fontSize: 13 },
   consentRow: { flexDirection: "row", gap: 10, alignItems: "center", marginBottom: 14 },
   checkbox: { width: 24, height: 24, borderWidth: 1, borderColor: "#777", borderRadius: 6, alignItems: "center", justifyContent: "center" },
   checked: { backgroundColor: "#1e88e5", borderColor: "#1e88e5" },
@@ -247,6 +310,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 16,
   },
+  registerBtnDisabled: { opacity: 0.65 },
   registerBtnText: {
     color: "#fff",
     fontWeight: "700",

@@ -66,7 +66,7 @@ export default function OtpScreen() {
       </TouchableOpacity>
 
       {/* BACK */}
-      <TouchableOpacity onPress={() => router.push("/auth/login")}>
+      <TouchableOpacity onPress={() => router.push("/auth/Login")}>
         <Text style={styles.backText}>← Back to Login</Text>
       </TouchableOpacity>
     </ScrollView>

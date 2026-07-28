@@ -37,6 +37,11 @@
       "expo-image-picker",
       "expo-location"
     ],
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "favicon": "./assets/images/icon.png"
+    },
     "experiments": {
       "typedRoutes": true
     },

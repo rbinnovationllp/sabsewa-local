@@ -32,11 +32,11 @@ useEffect(() => {
 }, [loading, user, role]);
 
 
-  const goLogin = () => router.push("/auth/login");
+  const goLogin = () => router.push("/auth/Login");
 
   const goRegister = (role: string) =>
     router.push({
-      pathname: "/auth/register",
+      pathname: "/auth/Register",
       params: { role },
     });
 

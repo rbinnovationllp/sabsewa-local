@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { apiUrl } from "@/lib/backend";
 import { useAuth } from "@/providers/AuthProvider";
+import BrandHeader from "@/components/BrandHeader";
 
 export default function CompanyDataRecoveryScreen() {
   const { user } = useAuth();
@@ -82,6 +83,7 @@ export default function CompanyDataRecoveryScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
+      <BrandHeader compact subtitle="Company Master CRM" />
       <Text style={styles.heading}>Data Recovery</Text>
       <Text style={styles.subtitle}>
         Recover only required archived or soft-deleted records within the approved six-month window. Every search is audit logged.

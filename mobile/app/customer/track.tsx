@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, Alert } from "react-native";
 import { useLocalSearchParams } from "expo-router";
-import MapView, { Marker } from "react-native-maps";
+import CrossPlatformMap from "@/components/CrossPlatformMap";
 import { apiUrl } from "@/lib/backend";
 import { useAuth } from "@/providers/AuthProvider";
 
@@ -94,7 +94,7 @@ export default function CustomerTrackScreen() {
         </View>
       ) : null}
 
-      <MapView
+      <CrossPlatformMap
         style={{ flex: 1 }}
         initialRegion={{
           latitude: riderLat || order.delivery_lat,
@@ -102,26 +102,27 @@ export default function CustomerTrackScreen() {
           latitudeDelta: 0.02,
           longitudeDelta: 0.02,
         }}
-      >
-        {riderLat && riderLng && (
-          <Marker
-            coordinate={{ latitude: riderLat, longitude: riderLng }}
-            title="Delivery Boy"
-            pinColor="blue"
-          />
-        )}
-
-        {order.delivery_lat && order.delivery_lng && (
-          <Marker
-            coordinate={{
-              latitude: order.delivery_lat,
-              longitude: order.delivery_lng,
-            }}
-            title="Delivery Address"
-            pinColor="green"
-          />
-        )}
-      </MapView>
+        markers={[
+          ...(riderLat && riderLng
+            ? [{
+                id: "rider",
+                latitude: Number(riderLat),
+                longitude: Number(riderLng),
+                title: "Delivery Rider",
+                pinColor: "blue",
+              }]
+            : []),
+          ...(order.delivery_lat && order.delivery_lng
+            ? [{
+                id: "delivery",
+                latitude: Number(order.delivery_lat),
+                longitude: Number(order.delivery_lng),
+                title: "Delivery Address",
+                pinColor: "green",
+              }]
+            : []),
+        ]}
+      />
     </View>
   );
 }

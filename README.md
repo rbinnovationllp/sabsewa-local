@@ -1,3 +1,5 @@
+![SabSewa Local](mobile/assets/images/sabsewa-local-readme-banner.png)
+
 # SabSewa Local
 
 SabSewa Local is a mobile-first hyperlocal marketplace connecting customers with verified nearby shops, including kirana stores, vegetable and fruit sellers, medical stores, dairy shops, bakeries, restaurants and tiffin providers.
@@ -5,6 +7,20 @@ SabSewa Local is a mobile-first hyperlocal marketplace connecting customers with
 The platform supports local product discovery, multilingual ordering, vendor catalogues, delivery tracking, vendor advance wallets, fixed Rs 15 platform facilitation fees linked to confirmed vendor order acceptance, and vendor-managed customer credit records.
 
 SabSewa Local is an independent project. It does not include SabSewa Pro, SabSewa Job or SabSewa SHG.
+
+## Build with Gemini XPRIZE
+
+Hackathon category: **Small Business Services**
+
+Live web app target: [https://www.sabsewa.in](https://www.sabsewa.in)
+
+Support: `support@sabsewa.in` | `+91 8450092846` | `+91 8178113449`
+
+SabSewa Local uses Gemini as the AI operating layer for small local vendors:
+
+1. **Multimodal vendor inventory capture:** Gemini reads shelf photos, invoices and handwritten product lists, then returns structured catalogue drafts for vendor review.
+2. **Multilingual customer ordering:** Gemini parses English, Hindi, Hinglish and local-language order requests into structured carts.
+3. **Human-in-the-loop audit logging:** Gemini outputs are validated by the app workflow and logged in Supabase `gemini_agent_logs` for transparency and submission evidence.
 
 ## Hackathon Positioning
 
@@ -17,6 +33,14 @@ SabSewa Local is being prepared for participation in a Gemini-focused hackathon.
 5. Structured AI outputs with appropriate validation and audit records.
 
 Codex is used for project scaffolding, user-interface development, database structure, security policies, documentation and other non-AI implementation work.
+
+AWS S3 is used only for secure file and image storage. This is acceptable under the supplied hackathon guidance because SabSewa Local still uses Gemini / Google Cloud for its required AI-operated business workflows.
+
+See [`docs/HACKATHON_ALIGNMENT.md`](docs/HACKATHON_ALIGNMENT.md) for the detailed eligibility checklist, evidence requirements, reused-code disclosure risk and demo acceptance criteria.
+
+Use [`docs/DEVPOST_SUBMISSION_CHECKLIST.md`](docs/DEVPOST_SUBMISSION_CHECKLIST.md) for the final upload, live Gemini evidence, demo video and Devpost steps.
+
+For final AI handover, use [`docs/GEMINI_HANDOVER_PROMPT.md`](docs/GEMINI_HANDOVER_PROMPT.md).
 
 ## Core Features
 
@@ -36,7 +60,7 @@ Codex is used for project scaffolding, user-interface development, database stru
 - Multilingual interface for Indian languages
 - Supabase authentication, database and Row-Level Security
 - Secure image and document storage
-- Razorpay integration for vendor wallet top-ups
+- Razorpay integration for Rs 5,500 first vendor activation and Rs 5,000 later wallet top-ups
 - Gemini-powered product and ordering assistance
 
 ## Project Structure
@@ -70,6 +94,51 @@ SabSewa-Local/
 
 Never commit actual API keys, passwords, service-role keys or production credentials to GitHub.
 
+## Local Setup
+
+```powershell
+git clone https://github.com/your-username/sabsewa-local.git
+cd sabsewa-local\mobile
+npm install
+Copy-Item .env.example .env
+npm.cmd run web
+```
+
+For mobile testing:
+
+```powershell
+cd C:\Users\HP\SabSewa-Local\mobile
+$env:EXPO_NO_DEPENDENCY_VALIDATION="1"
+npx.cmd expo start -c --offline
+```
+
+For Hostinger web export:
+
+```powershell
+cd C:\Users\HP\SabSewa-Local\mobile
+$env:EXPO_NO_DEPENDENCY_VALIDATION="1"
+npm.cmd run export:web:hostinger
+```
+
+Upload the contents of `mobile/dist` to Hostinger `public_html`. See [`docs/HOSTINGER_WEB_DEPLOYMENT.md`](docs/HOSTINGER_WEB_DEPLOYMENT.md).
+
+## Security Notes
+
+Only browser-safe variables may use the `EXPO_PUBLIC_` prefix:
+
+- `EXPO_PUBLIC_SUPABASE_URL`
+- `EXPO_PUBLIC_SUPABASE_ANON_KEY`
+- `EXPO_PUBLIC_BACKEND_URL`
+- `EXPO_PUBLIC_RAZORPAY_KEY_ID`, if used directly by the browser checkout
+
+Never expose these in the mobile or web bundle:
+
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `GEMINI_API_KEY`
+- `AWS_SECRET_ACCESS_KEY`
+- `RAZORPAY_KEY_SECRET`
+- `RAZORPAY_WEBHOOK_SECRET`
+
 ## Demonstration Requirements
 
 The demonstration should include:
@@ -79,9 +148,12 @@ The demonstration should include:
 - Nearby-vendor discovery and product display
 - Full or partial order acceptance
 - Rs 15 vendor-wallet deduction linked to genuine vendor order acceptance
+- First vendor activation payment split into Rs 500 non-refundable activation/service charge and Rs 5,000 refundable advance wallet credit
 - Customer details revealed only after confirmed acceptance
 - Vendor rejection or shortage -> Gemini-assisted customer message
 - Relevant security and audit records
+- Gemini API usage evidence and redacted Gemini audit logs
+- Clear disclosure of any older SabSewa prototype code reused in this independent SabSewa Local project
 
 ## Project Status
 

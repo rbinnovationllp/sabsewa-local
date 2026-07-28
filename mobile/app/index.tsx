@@ -1,16 +1,14 @@
 import { useRouter } from "expo-router";
 import React from "react";
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import BrandHeader from "@/components/BrandHeader";
 
 export default function HomeScreen() {
   const router = useRouter();
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <View style={styles.header}>
-        <Text style={styles.title}>SabSewa Local</Text>
-        <Text style={styles.subtitle}>Nearby shops, fast ordering, and local delivery.</Text>
-      </View>
+      <BrandHeader subtitle="Nearby shops, fast ordering, and local delivery." />
 
       <View style={styles.panel}>
         <Text style={styles.panelTitle}>Customer</Text>
@@ -45,9 +43,6 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#ffffff" },
   content: { padding: 20, paddingTop: 64, paddingBottom: 40 },
-  header: { marginBottom: 22 },
-  title: { fontSize: 32, fontWeight: "900", color: "#111827" },
-  subtitle: { marginTop: 8, color: "#4b5563", fontSize: 16, lineHeight: 22 },
   panel: {
     borderWidth: 1,
     borderColor: "#e5e7eb",

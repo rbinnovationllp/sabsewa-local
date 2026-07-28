@@ -73,6 +73,11 @@ Database:
 - RLS for user/vendor/order isolation.
 - `gemini_agent_logs` table for proof.
 
+Storage:
+- AWS S3 is acceptable for product images, shared catalogue images, documents and generated files.
+- Google Workspace/Drive should not be used as the application image-storage backend.
+- S3 usage does not replace the need for real Gemini / Google Cloud usage in core AI workflows.
+
 ## Do Not Do This
 
 - Do not use OpenAI or Codex as the core AI engine in the hackathon demo.
@@ -84,12 +89,17 @@ Database:
 ## Submission Proof Checklist
 
 - [ ] Gemini API key configured in backend environment.
+- [ ] Google AI Studio or Vertex AI project/account evidence available.
 - [ ] At least one live Gemini call for inventory capture.
 - [ ] At least one live Gemini call for conversational ordering.
 - [ ] At least one live Gemini call for smart rejection/support.
 - [ ] Logs show model name, timestamp, workflow type, and response JSON.
+- [ ] Logs redact sensitive customer address, phone, password and payment details.
 - [ ] Demo video shows the mobile app and the AI result.
 - [ ] 3 to 5 real/local vendor conversations or onboarding proof collected.
+- [ ] Real or pilot order evidence and Rs 15 fee deduction evidence collected where available.
+- [ ] Expenses disclosed for Gemini/Google Cloud, Supabase, AWS S3, Razorpay, support, marketing and operations.
+- [ ] Reused code from the older combined SabSewa prototype disclosed clearly.
 - [ ] Devpost write-up mentions Gemini-powered workflows clearly.
 
 ## Fast Build Priority
@@ -101,4 +111,3 @@ Database:
 5. Add smart rejection flow.
 6. Add `gemini_agent_logs`.
 7. Record demo with real test data.
-

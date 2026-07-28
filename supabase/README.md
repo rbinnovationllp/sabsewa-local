@@ -44,6 +44,8 @@ The migration set includes:
 - Vendor-owned credit tables: `vendor_credit_accounts`, `vendor_credit_transactions`, `vendor_credit_reminders`
 - Vendor storage tables: `vendor_storage_usage`, `vendor_storage_files`
 - Vendor-contributed shared catalogue table: `shared_product_images`
+- Registration legal acceptance table: `user_policy_acceptances`
+- Revised vendor activation and wallet policy migration: `202607280001_revised_vendor_activation_wallet_policy.sql`
 
 For a completely blank Supabase database, run the full bundled file once:
 
@@ -59,7 +61,19 @@ If the initial/base migrations were already applied and you got duplicate policy
 C:\Users\HP\SabSewa-Local\supabase\RUN_INCREMENTAL_AFTER_INITIAL_SUCCESS.sql
 ```
 
-The `vendor_security_*` table names are legacy internal names. In SabSewa Local product wording, this is the vendor advance balance: minimum Rs 5,000, Rs 15 deducted when the vendor securely confirms and accepts a real-world order, and customer order payment remains direct between customer and vendor.
+If you only need the registration Terms/Privacy/legal acceptance update after the full bundle failed with an existing policy such as `Approved vendors are public readable`, run only:
+
+```text
+C:\Users\HP\SabSewa-Local\supabase\RUN_ONLY_TERMS_PRIVACY_ACCEPTANCE.sql
+```
+
+If you only need the revised vendor activation payment and wallet accounting update, run only:
+
+```text
+C:\Users\HP\SabSewa-Local\supabase\RUN_ONLY_REVISED_VENDOR_ACTIVATION_WALLET_POLICY.sql
+```
+
+The `vendor_security_*` table names are legacy internal names. In SabSewa Local product wording, this is the vendor advance balance. The first vendor payment is Rs 5,500, split into a one-time non-refundable Rs 500 activation/service charge and Rs 5,000 refundable advance wallet credit. Later standard top-ups are Rs 5,000. Rs 15 is deducted when the vendor securely confirms and accepts a real-world order, and customer order payment remains direct between customer and vendor.
 
 ## After Applying
 

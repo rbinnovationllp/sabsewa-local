@@ -1,6 +1,7 @@
 import { useRouter } from "expo-router";
 import React from "react";
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import BrandHeader from "@/components/BrandHeader";
 
 export default function CustomerDashboard() {
   const router = useRouter();
@@ -8,8 +9,7 @@ export default function CustomerDashboard() {
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ padding: 20 }}>
 
-      <Text style={styles.heading}>SabSewa Local</Text>
-      <Text style={styles.subheading}>Order nearby products and local services from verified vendors</Text>
+      <BrandHeader subtitle="Order nearby products and local services from verified vendors" />
 
       {/* SERVICE CARDS */}
       <View style={styles.grid}>
@@ -68,9 +68,6 @@ export default function CustomerDashboard() {
 
 const styles = StyleSheet.create({
   container: { backgroundColor: "#ffffff" },
-  heading: { fontSize: 26, fontWeight: "800", color: "#2962ff" },
-  subheading: { fontSize: 14, color: "#616161", marginBottom: 20 },
-
   grid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between" },
 
   card: {

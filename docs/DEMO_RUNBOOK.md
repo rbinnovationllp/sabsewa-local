@@ -36,9 +36,11 @@ Show a local shop owner and customer scenario:
 Show:
 - Supabase order row.
 - Gemini audit logs.
+- Gemini / Google AI Studio or Vertex AI usage evidence.
+- Wallet transaction showing the Rs 15 platform fee linked to the accepted order.
 - At least one vendor test/onboarding note.
+- A short disclosure slide naming any reused older SabSewa prototype code or boilerplate.
 
 ## Final Pitch Line
 
 SabSewa Local uses Gemini as the AI operating layer for small local shops: inventory capture, natural-language ordering, and customer support, while keeping vendors in control.
-

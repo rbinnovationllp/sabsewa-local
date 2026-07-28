@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { View, Text, StyleSheet, ActivityIndicator } from "react-native";
-import MapView, { Marker } from "react-native-maps";
 import { useLocalSearchParams } from "expo-router";
 import { supabase } from "@/lib/supabase";
+import CrossPlatformMap from "@/components/CrossPlatformMap";
 
 export default function TrackRiderScreen() {
   const params: any = useLocalSearchParams();
@@ -53,7 +53,7 @@ export default function TrackRiderScreen() {
       </View>
 
       {/* MAP */}
-      <MapView
+      <CrossPlatformMap
         style={{ flex: 1 }}
         initialRegion={{
           latitude: rider.rider_lat || 28.6139,
@@ -61,31 +61,27 @@ export default function TrackRiderScreen() {
           latitudeDelta: 0.01,
           longitudeDelta: 0.01,
         }}
-      >
-        {/* RIDER MARKER */}
-        <Marker
-          coordinate={{
-            latitude: rider.rider_lat,
-            longitude: rider.rider_lng,
-          }}
-          title="Delivery Boy"
-          description="Current rider location"
-          pinColor="blue"
-        />
-
-        {/* CUSTOMER LOCATION */}
-        {params.customer_lat && params.customer_lng && (
-          <Marker
-            coordinate={{
-              latitude: Number(params.customer_lat),
-              longitude: Number(params.customer_lng),
-            }}
-            title="Customer"
-            description="Delivery destination"
-            pinColor="green"
-          />
-        )}
-      </MapView>
+        markers={[
+          {
+            id: "rider",
+            latitude: Number(rider.rider_lat || 28.6139),
+            longitude: Number(rider.rider_lng || 77.2090),
+            title: "Delivery Rider",
+            description: "Current rider location",
+            pinColor: "blue",
+          },
+          ...(params.customer_lat && params.customer_lng
+            ? [{
+                id: "customer",
+                latitude: Number(params.customer_lat),
+                longitude: Number(params.customer_lng),
+                title: "Customer",
+                description: "Delivery destination",
+                pinColor: "green",
+              }]
+            : []),
+        ]}
+      />
     </View>
   );
 }

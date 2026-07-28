@@ -8,6 +8,7 @@ import {
     TouchableOpacity,
     View
 } from "react-native";
+import BrandHeader from "@/components/BrandHeader";
 
 export default function SabSewaHLM() {
   const router = useRouter();
@@ -17,11 +18,7 @@ export default function SabSewaHLM() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      {/* HEADER */}
-      <View style={styles.header}>
-        <Text style={styles.title}>SabSewa Local</Text>
-        <Text style={styles.subtitle}>Nearby shops and real-world local services</Text>
-      </View>
+      <BrandHeader subtitle="Nearby shops and real-world local services" />
 
       {/* INTRO BOX */}
       <View style={styles.infoCard}>
@@ -128,10 +125,6 @@ export default function SabSewaHLM() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#fff" },
   content: { padding: 18, paddingBottom: 30 },
-
-  header: { marginBottom: 12 },
-  title: { fontSize: 24, fontWeight: "800", color: "#e65100" },
-  subtitle: { fontSize: 14, color: "#fb8c00", marginTop: 2 },
 
   infoCard: {
     backgroundColor: "#fff3e0",

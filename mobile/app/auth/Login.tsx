@@ -11,6 +11,13 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useAuth } from "@/providers/AuthProvider";
 import { routeUser } from "@/src/utils/roleRouter";
 import { supabase } from "@/lib/supabase";
+import {
+  SABSEWA_ACCEPTANCE_STATEMENT,
+  SABSEWA_ACCEPTED_DOCUMENT_VERSIONS,
+  SABSEWA_POLICY_BUNDLE_VERSION,
+  SABSEWA_PRIVACY_VERSION,
+  SABSEWA_TERMS_VERSION,
+} from "@/lib/legalVersions";
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -59,7 +66,33 @@ export default function LoginScreen() {
           full_name: metadata.full_name || "",
           phone,
           city: metadata.city || "",
+          preferred_language: metadata.preferred_language || "en",
+          terms_version: metadata.terms_version || SABSEWA_TERMS_VERSION,
+          privacy_version: metadata.privacy_version || SABSEWA_PRIVACY_VERSION,
+          policies_accepted_at: new Date().toISOString(),
+          policies_accepted_language: metadata.policy_acceptance_language || metadata.preferred_language || "en",
         }, { onConflict: "user_id" });
+
+        if (metadata.accepted_policies) {
+          const device = metadata.policy_acceptance_device || {};
+          await supabase.from("user_policy_acceptances").insert({
+            user_id: user.id,
+            role: metadata.role,
+            terms_version: metadata.terms_version || SABSEWA_TERMS_VERSION,
+            privacy_version: metadata.privacy_version || SABSEWA_PRIVACY_VERSION,
+            policy_bundle_version: metadata.policy_bundle_version || SABSEWA_POLICY_BUNDLE_VERSION,
+            accepted_document_versions: metadata.accepted_document_versions || SABSEWA_ACCEPTED_DOCUMENT_VERSIONS,
+            accepted_statement: metadata.policy_acceptance_statement || SABSEWA_ACCEPTANCE_STATEMENT,
+            displayed_language: metadata.policy_acceptance_language || metadata.preferred_language || "en",
+            device_id: device.device_id || null,
+            device_name: device.device_name || null,
+            platform: device.platform || null,
+            app_version: device.app_version || null,
+            session_id: data.session?.access_token ? data.session.access_token.slice(0, 16) : null,
+            otp_verified: true,
+            marketing_consent: Boolean(metadata.marketing_consent),
+          });
+        }
 
         if (metadata.role === "customer" && metadata.primary_address) {
           await supabase.from("customer_addresses").insert({
@@ -152,7 +185,7 @@ export default function LoginScreen() {
       )}
 
       <TouchableOpacity
-        onPress={() => router.push("/auth/index")}
+        onPress={() => router.push("/auth")}
         style={styles.backBtn}
       >
         <Text style={styles.backText}>â† Back</Text>

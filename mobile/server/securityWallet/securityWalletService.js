@@ -3,6 +3,8 @@ import axios from "axios";
 import { supabase } from "../connection.js";
 
 export const SECURITY_DEPOSIT_MINIMUM = 5000;
+export const INITIAL_VENDOR_PAYMENT = 5500;
+export const STANDARD_WALLET_TOPUP = 5000;
 export const ORDER_FEE = 15;
 export const REMINDER_THRESHOLD = 1000;
 export const FINAL_WARNING_THRESHOLD = 500;
@@ -28,6 +30,8 @@ export async function getOrCreateSecurityWallet(vendorId) {
       opening_balance: 0,
       current_balance: 0,
       minimum_security_deposit: SECURITY_DEPOSIT_MINIMUM,
+      wallet_credit_amount: SECURITY_DEPOSIT_MINIMUM,
+      activation_fee_paid: false,
       reminder_threshold: REMINDER_THRESHOLD,
       final_warning_threshold: FINAL_WARNING_THRESHOLD,
       stop_orders_threshold: STOP_ORDERS_THRESHOLD,
@@ -92,7 +96,7 @@ export async function createWalletWarning(wallet, status) {
   const messageMap = {
     top_up_reminder: "Your SabSewa Local vendor advance balance is Rs 1,000 or below. Please top up soon.",
     final_warning: "Final warning: your SabSewa Local vendor advance balance is below Rs 500.",
-    orders_stopped: "New SabSewa Local orders are stopped because your vendor advance balance is below Rs 515. This preserves Rs 500 activation/usage fee plus one Rs 15 order-acceptance platform fee.",
+    orders_stopped: "New SabSewa Local orders are stopped because your vendor advance balance is below Rs 515. Please top up before receiving new orders. Existing accepted orders must still be completed and applicable Rs 15 fees recorded.",
     restored: "Your SabSewa Local order eligibility has been restored.",
   };
 
@@ -192,14 +196,44 @@ export async function deductConfirmedOrderFee({ vendorId, orderId }) {
   return updatedWallet;
 }
 
-export async function createRazorpayOrder({ vendorId, amount }) {
+export async function getVendorPublicId(vendorId) {
+  const { data } = await supabase
+    .from("vendors")
+    .select("public_vendor_id")
+    .eq("id", vendorId)
+    .maybeSingle();
+  return data?.public_vendor_id || vendorId;
+}
+
+export async function createRazorpayOrder({ vendorId, amount, purpose = "vendor_wallet_topup" }) {
   if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
     const error = new Error("Razorpay keys are not configured.");
     error.statusCode = 500;
     throw error;
   }
 
-  const receipt = `secwallet_${vendorId}_${Date.now()}`.slice(0, 40);
+  const wallet = await getOrCreateSecurityWallet(vendorId);
+  const publicVendorId = await getVendorPublicId(vendorId);
+  const isInitialActivation = purpose === "vendor_initial_activation";
+  const expectedAmount = isInitialActivation ? INITIAL_VENDOR_PAYMENT : STANDARD_WALLET_TOPUP;
+  const requestedAmount = Number(amount || expectedAmount);
+
+  if (isInitialActivation && wallet.activation_fee_paid) {
+    const error = new Error("Vendor activation fee is already paid. Use standard Rs 5,000 top-up.");
+    error.statusCode = 409;
+    throw error;
+  }
+
+  if (requestedAmount !== expectedAmount) {
+    const error = new Error(isInitialActivation
+      ? "Initial vendor activation payment must be Rs 5,500."
+      : "Standard vendor wallet top-up must be Rs 5,000.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const receiptPrefix = isInitialActivation ? "SSL-ACTIVATION" : "SSL-TOPUP";
+  const receipt = `${receiptPrefix}-${Date.now()}`.slice(0, 40);
   const auth = Buffer.from(
     `${process.env.RAZORPAY_KEY_ID}:${process.env.RAZORPAY_KEY_SECRET}`
   ).toString("base64");
@@ -207,14 +241,21 @@ export async function createRazorpayOrder({ vendorId, amount }) {
   const { data } = await axios.post(
     "https://api.razorpay.com/v1/orders",
     {
-      amount: Math.round(Number(amount) * 100),
+      amount: Math.round(requestedAmount * 100),
       currency: "INR",
       receipt,
       notes: {
-        product: "SabSewa Local vendor advance balance top-up",
-        payment_purpose: "vendor_advance_balance_top_up",
+        application: "sabsewa_local",
+        product: isInitialActivation
+          ? "SabSewa Local vendor activation and refundable wallet credit"
+          : "SabSewa Local vendor advance wallet top-up",
+        purpose,
+        payment_purpose: purpose,
+        service_charge: isInitialActivation ? String(ACTIVATION_USAGE_CHARGE) : "0",
+        wallet_credit: isInitialActivation ? String(SECURITY_DEPOSIT_MINIMUM) : String(STANDARD_WALLET_TOPUP),
         real_world_services: "true",
-        vendor_id: vendorId,
+        vendor_id: publicVendorId,
+        internal_vendor_id: vendorId,
       },
     },
     {
@@ -274,6 +315,17 @@ export async function applyWalletCredit({
   metadata = {},
 }) {
   const wallet = await getOrCreateSecurityWallet(vendorId);
+  if (razorpayPaymentId) {
+    const { data: existingTx, error: existingTxError } = await supabase
+      .from("vendor_security_wallet_transactions")
+      .select("id")
+      .eq("razorpay_payment_id", razorpayPaymentId)
+      .maybeSingle();
+
+    if (existingTxError) throw existingTxError;
+    if (existingTx) return wallet;
+  }
+
   const balanceBefore = Number(wallet.current_balance);
   const creditAmount = Number(amount);
   const balanceAfter = balanceBefore + creditAmount;
@@ -326,9 +378,7 @@ export async function applyWalletCredit({
 export async function calculateVendorExitPreview({ vendorId, legalAdjustments = 0 }) {
   const wallet = await getOrCreateSecurityWallet(vendorId);
   const balance = Number(wallet.current_balance || 0);
-  const activationCharge = Number(wallet.opening_balance || 0) >= SECURITY_DEPOSIT_MINIMUM
-    ? ACTIVATION_USAGE_CHARGE
-    : 0;
+  const activationCharge = 0;
 
   const { data: completedOrders, error: completedError } = await supabase
     .from("hyperlocal_orders")
@@ -364,20 +414,56 @@ export async function calculateVendorExitPreview({ vendorId, legalAdjustments = 
     wallet,
     balance_at_request: balance,
     activation_usage_charge: activationCharge,
+    non_refundable_activation_fee_previously_collected: Number(wallet.activation_fee_amount || ACTIVATION_USAGE_CHARGE),
     unpaid_order_fees: unpaidOrderFees,
     legal_adjustments: legalAdjustmentAmount,
     estimated_refund: estimatedRefund,
     calculation: {
       minimum_advance_balance: SECURITY_DEPOSIT_MINIMUM,
       activation_usage_charge: ACTIVATION_USAGE_CHARGE,
+      activation_fee_not_deducted_again: true,
       operational_stop_threshold: STOP_ORDERS_THRESHOLD,
       completed_order_count: completedOrderIds.length,
       charged_order_count: chargedOrderIds.length,
       unpaid_completed_order_ids: unpaidCompletedOrderIds,
       order_fee: ORDER_FEE,
-      note: "Customer order payments are direct between customer and vendor. This refund preview applies only to the vendor advance balance held for SabSewa Local platform fees.",
+      note: "Customer order payments are direct between customer and vendor. The initial Rs 500 activation/service charge was collected separately at activation and is not deducted again at closure.",
     },
   };
+}
+
+export async function applyInitialActivationPayment({
+  vendorId,
+  razorpayOrderId,
+  razorpayPaymentId,
+  razorpaySignature,
+  payment,
+}) {
+  const paymentMetadata = {
+    gateway: "razorpay",
+    method: payment.method,
+    bank: payment.bank,
+    card_id: payment.card_id,
+    vpa: payment.vpa,
+    status: payment.status,
+    total_initial_payment: INITIAL_VENDOR_PAYMENT,
+    service_charge: ACTIVATION_USAGE_CHARGE,
+    wallet_credit: SECURITY_DEPOSIT_MINIMUM,
+    gst_treatment_configurable: true,
+    ca_confirmation_required: true,
+  };
+
+  const { data, error } = await supabase.rpc("record_vendor_initial_activation_payment", {
+    p_vendor_id: vendorId,
+    p_razorpay_order_id: razorpayOrderId,
+    p_razorpay_payment_id: razorpayPaymentId,
+    p_razorpay_signature: razorpaySignature,
+    p_payment_metadata: paymentMetadata,
+  });
+
+  if (error) throw error;
+
+  return data && typeof data === "object" ? data : await getOrCreateSecurityWallet(vendorId);
 }
 
 export async function requestVendorClosure({
@@ -414,6 +500,8 @@ export async function requestVendorClosure({
       status: "closure_requested",
       balance_at_request: preview.balance_at_request,
       activation_usage_charge: preview.activation_usage_charge,
+      non_refundable_activation_fee_previously_collected: preview.non_refundable_activation_fee_previously_collected,
+      activation_fee_deducted_again: false,
       unpaid_order_fees: preview.unpaid_order_fees,
       legal_adjustments: preview.legal_adjustments,
       estimated_refund: preview.estimated_refund,

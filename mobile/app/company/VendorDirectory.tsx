@@ -9,6 +9,7 @@ import {
   View,
 } from "react-native";
 import { apiUrl } from "@/lib/backend";
+import BrandHeader from "@/components/BrandHeader";
 
 export default function CompanyVendorDirectoryScreen() {
   const [search, setSearch] = useState("");
@@ -31,6 +32,7 @@ export default function CompanyVendorDirectoryScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
+      <BrandHeader compact subtitle="Company Master CRM" />
       <Text style={styles.heading}>Vendor Directory</Text>
       <Text style={styles.subtitle}>
         Search by Vendor ID, terminal ID, shop, owner, phone, city, or locality.

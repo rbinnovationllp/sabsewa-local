@@ -4,6 +4,7 @@ import { useAuth } from "@/providers/AuthProvider";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import BrandHeader from "@/components/BrandHeader";
 
 export default function VendorDashboard() {
   const legacyUser = useUser().user;
@@ -41,6 +42,7 @@ export default function VendorDashboard() {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
+      <BrandHeader compact subtitle="Vendor CRM and shop operations" />
       <Text style={styles.heading}>Vendor Dashboard</Text>
 
       {vendor ? (

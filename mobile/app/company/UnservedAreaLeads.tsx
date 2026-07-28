@@ -8,9 +8,10 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import MapView, { Marker } from "react-native-maps";
 import { apiUrl } from "@/lib/backend";
 import { useAuth } from "@/providers/AuthProvider";
+import BrandHeader from "@/components/BrandHeader";
+import CrossPlatformMap from "@/components/CrossPlatformMap";
 
 export default function CompanyUnservedAreaLeadsScreen() {
   const { user } = useAuth();
@@ -85,6 +86,7 @@ export default function CompanyUnservedAreaLeadsScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
+      <BrandHeader compact subtitle="Company Master CRM" />
       <Text style={styles.heading}>Unserved Area Leads</Text>
       <Text style={styles.subtitle}>Locality-wise customer demand for vendor recruitment. Exact customer addresses are not stored here.</Text>
 
@@ -95,7 +97,7 @@ export default function CompanyUnservedAreaLeadsScreen() {
       </TouchableOpacity>
 
       {leads.some((lead) => lead.lat && lead.lng) ? (
-        <MapView
+        <CrossPlatformMap
           style={styles.map}
           initialRegion={{
             latitude: Number(leads.find((lead) => lead.lat && lead.lng)?.lat || 28.4595),
@@ -103,18 +105,16 @@ export default function CompanyUnservedAreaLeadsScreen() {
             latitudeDelta: 0.04,
             longitudeDelta: 0.04,
           }}
-        >
-          {leads
+          markers={leads
             .filter((lead) => lead.lat && lead.lng)
-            .map((lead) => (
-              <Marker
-                key={lead.id}
-                coordinate={{ latitude: Number(lead.lat), longitude: Number(lead.lng) }}
-                title={`${lead.category} demand`}
-                description={`${lead.customer_count} request(s) near ${lead.locality || lead.pincode || "this area"}`}
-              />
-            ))}
-        </MapView>
+            .map((lead) => ({
+              id: String(lead.id),
+              latitude: Number(lead.lat),
+              longitude: Number(lead.lng),
+              title: `${lead.category} demand`,
+              description: `${lead.customer_count} request(s) near ${lead.locality || lead.pincode || "this area"}`,
+            }))}
+        />
       ) : null}
 
       {leads.map((lead) => (

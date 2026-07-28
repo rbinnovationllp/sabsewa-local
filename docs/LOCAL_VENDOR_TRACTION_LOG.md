@@ -41,3 +41,13 @@ Use this file to record real-world hackathon traction.
 | --- | --- | --- | --- | --- | --- |
 | | | | Conversational order | Yes | |
 
+## Revenue And Expense Evidence
+
+| Date | Evidence Type | Reference | Amount | Notes |
+| --- | --- | --- | ---: | --- |
+| | Vendor wallet top-up | | | |
+| | Rs 15 platform fee deduction | | | |
+| | Gemini / Google Cloud usage | | | |
+| | Supabase usage | | | |
+| | AWS S3 usage | | | |
+| | Razorpay charge | | | |

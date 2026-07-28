@@ -167,10 +167,20 @@ When vendor rejects an order:
 - Customer order payment is direct between the customer and the concerned vendor.
 - SabSewa Local and Rashi Bhartiya Innovation LLP do not collect, settle, refund, or recover vendor order amounts.
 - Vendor can view completed order totals and payment notes for reporting.
-- Every vendor must maintain a minimum Rs 5,000 SabSewa Local advance balance to receive orders.
-- SabSewa Local deducts a fixed Rs 15 platform fee from the vendor advance balance only after an order is successfully completed.
-- New orders automatically stop when the available advance balance falls below Rs 515. This threshold preserves Rs 500 for the one-time activation and usage charge plus Rs 15 for one completed-order platform fee.
-- If a vendor voluntarily closes the account, the refund preview must show current balance, Rs 500 activation/usage charge, unpaid completed-order fees, authorised adjustments, and estimated eligible refund before submission.
+- Every new vendor must make an initial Rs 5,500 Razorpay payment before becoming eligible to receive orders.
+- The initial payment is split into a one-time non-refundable Rs 500 setup, activation and platform-service charge plus Rs 5,000 credited to the refundable vendor advance wallet.
+- Subsequent standard top-ups are Rs 5,000 and do not include another activation/service charge.
+- SabSewa Local deducts a fixed Rs 15 platform facilitation fee from the vendor advance balance only when the vendor securely confirms and accepts a real-world order, before customer contact and full delivery details are unlocked.
+- New orders automatically stop when the available advance balance falls below Rs 515. Existing accepted orders must still be completed and applicable Rs 15 charges must still be recorded.
+- If a vendor voluntarily closes the account, the refund preview must show current balance, the Rs 500 activation/service charge already collected and not deducted again, unpaid completed-order fees, authorised adjustments, and estimated eligible refund before submission.
+
+### 4.12 Vendor Product Responsibility And Verification
+- Vendors are responsible for the accuracy, legality, safety, quality, quantity, price, packaging and description of products supplied through SabSewa Local.
+- Customers should be prompted, where reasonably possible, to check product quantity, packaging and seals, expiry date, visible condition, invoice and price, and whether delivered items match the confirmed order.
+- Product quality, quantity, substitution, price, refund and replacement complaints should initially be resolved between the customer and concerned vendor. SabSewa Local may provide transaction evidence and complaint channels without attempting to remove statutory consumer rights.
+- Every vendor must complete neutral business verification before appearing to customers, including proprietor/entity name, public shop/trade name, business address, verified phone, authorised representative, category, PAN/GSTIN where applicable, FSSAI/drug/category licences where required, shop photos, location verification and accuracy declaration.
+- Company CRM must record verification status, reviewed documents, reviewer, date, expiry and discrepancies.
+- SabSewa Local must not collect, investigate, rank or disclose a vendor's religion, and must not treat a vendor differently because religion differs from religious or cultural wording in a shop name.
 
 ## 5. Data Entities
 

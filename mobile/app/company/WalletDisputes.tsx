@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { apiUrl } from "@/lib/backend";
 import { useAuth } from "@/providers/AuthProvider";
+import BrandHeader from "@/components/BrandHeader";
 
 export default function CompanyWalletDisputesScreen() {
   const { user } = useAuth();
@@ -69,6 +70,7 @@ export default function CompanyWalletDisputesScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
+      <BrandHeader compact subtitle="Company Master CRM" />
       <Text style={styles.heading}>Wallet Disputes</Text>
       <Text style={styles.subtitle}>
         Search, compare evidence, and approve only documented reversal entries. Original transactions remain unchanged.

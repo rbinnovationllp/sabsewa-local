@@ -1,6 +1,6 @@
 import crypto from "crypto";
 import express from "express";
-import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { supabase } from "../connection.js";
 
@@ -15,6 +15,10 @@ const ALLOWED_PRODUCT_IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "webp"])
 const PRODUCT_IMAGE_TARGET_NOTE = "Compress product images to roughly 100-200 KB before upload.";
 const SHARED_IMAGE_RIGHTS_TEXT =
   "I own this image or have permission to use it, and I authorise SabSewa Local to make it available to other registered vendors for use in their digital shops.";
+const MASTER_IMAGE_RIGHTS_TEXT =
+  "I own this image or have permission to use it, and I authorise SabSewa Local to include it in the shared master catalogue and allow other registered vendors to reference it in their digital shops.";
+const MASTER_IMAGE_TERMS_VERSION = "sabsewa-local-master-image-consent-v1";
+const MAX_MASTER_THUMBNAIL_BYTES = 40 * 1024;
 
 function quotaForSuccessfulOrders(successfulOrders) {
   const orders = Number(successfulOrders || 0);
@@ -101,6 +105,23 @@ function getS3Client() {
           }
         : undefined,
   });
+}
+
+function slugify(value) {
+  return String(value || "product")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60) || "product";
+}
+
+async function presignPrivateReadUrl(objectKey) {
+  const client = getS3Client();
+  const command = new GetObjectCommand({
+    Bucket: process.env.AWS_S3_BUCKET,
+    Key: objectKey,
+  });
+  return getSignedUrl(client, command, { expiresIn: 900 });
 }
 
 router.post("/presign-product-image", async (req, res) => {
@@ -454,6 +475,260 @@ router.get("/shared-product-images", async (req, res) => {
       success: false,
       error: err.message,
     });
+  }
+});
+
+router.get("/master-product-images", async (req, res) => {
+  try {
+    const search = String(req.query.search || "").trim();
+    const productId = String(req.query.productId || "").trim();
+
+    let query = supabase
+      .from("master_product_images")
+      .select("id, product_id, product_title, category, subcategory, s3_object_key, thumbnail_object_key, source_type, source_vendor_id, moderation_status, takedown_status, created_at")
+      .eq("moderation_status", "approved")
+      .eq("takedown_status", "none")
+      .order("created_at", { ascending: false })
+      .limit(50);
+
+    if (productId) query = query.eq("product_id", productId);
+    if (search) query = query.ilike("product_title", `%${search}%`);
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    const images = await Promise.all((data || []).map(async (image) => ({
+      ...image,
+      image_url: await presignPrivateReadUrl(image.s3_object_key),
+      thumbnail_url: await presignPrivateReadUrl(image.thumbnail_object_key),
+      quota_note: "Shared master images are referenced only and do not consume the receiving vendor storage quota.",
+    })));
+
+    return res.json({ success: true, images });
+  } catch (err) {
+    return res.status(err.statusCode || 500).json({ success: false, error: err.message });
+  }
+});
+
+router.post("/presign-master-catalog-image", async (req, res) => {
+  try {
+    const {
+      productId,
+      vendorId,
+      userId,
+      fileName,
+      mainFileSize,
+      thumbnailFileSize,
+      contentChecksum,
+      perceptualHash,
+      productTitle,
+      category,
+      subcategory,
+      rightsConfirmed,
+      rightsConfirmationText,
+      declaredOwnership,
+      allowSharedCatalogueUse,
+      metadataRemoved,
+      moderated = false,
+      squareCrop = true,
+      sourceType = "vendor_contributed",
+    } = req.body;
+
+    if (!productId || !vendorId || !fileName || !productTitle || !category || !subcategory) {
+      return res.status(400).json({ success: false, error: "Product, vendor, filename, title, category and subcategory are required." });
+    }
+
+    if (sourceType !== "vendor_contributed") {
+      return res.status(400).json({ success: false, error: "Only vendor-contributed master-image submissions are accepted through this mobile route. Other source types require Company CRM approval." });
+    }
+
+    if (!rightsConfirmed || !declaredOwnership || !allowSharedCatalogueUse || rightsConfirmationText !== MASTER_IMAGE_RIGHTS_TEXT) {
+      return res.status(400).json({
+        success: false,
+        error: "The master-catalogue image rights declaration must be accepted before upload.",
+        required_confirmation: MASTER_IMAGE_RIGHTS_TEXT,
+      });
+    }
+
+    if (!metadataRemoved || !squareCrop) {
+      return res.status(400).json({
+        success: false,
+        error: "Images must be metadata-stripped and cropped to a square product-focused format before permanent storage.",
+      });
+    }
+
+    const mainSize = Number(mainFileSize || 0);
+    const thumbSize = Number(thumbnailFileSize || 0);
+    if (!mainSize || mainSize > MAX_PRODUCT_IMAGE_BYTES) {
+      return res.status(413).json({ success: false, error: "Master image main WebP must be 100-200 KB after optimization." });
+    }
+    if (!thumbSize || thumbSize > MAX_MASTER_THUMBNAIL_BYTES) {
+      return res.status(413).json({ success: false, error: "Master image thumbnail WebP must be 40 KB or smaller." });
+    }
+    if (!contentChecksum) {
+      return res.status(400).json({ success: false, error: "Content checksum is required for duplicate detection and audit." });
+    }
+
+    const { data: duplicate, error: duplicateError } = await supabase
+      .from("master_product_images")
+      .select("id, moderation_status, takedown_status")
+      .eq("content_checksum", contentChecksum)
+      .maybeSingle();
+
+    if (duplicateError) throw duplicateError;
+    if (duplicate) {
+      return res.status(409).json({
+        success: false,
+        error: "This master catalogue image appears to have already been submitted.",
+        existing_image: duplicate,
+      });
+    }
+
+    const productUuid = crypto.randomUUID();
+    const safeCategory = slugify(category);
+    const safeSubcategory = slugify(subcategory);
+    const safeProduct = slugify(productTitle);
+    const baseKey = `master-catalog/${safeCategory}/${safeSubcategory}/${safeProduct}/${productUuid}`;
+    const mainKey = `${baseKey}/main.webp`;
+    const thumbnailKey = `${baseKey}/thumbnail.webp`;
+
+    const client = getS3Client();
+    const [mainUploadUrl, thumbnailUploadUrl] = await Promise.all([
+      getSignedUrl(client, new PutObjectCommand({
+        Bucket: process.env.AWS_S3_BUCKET,
+        Key: mainKey,
+        ContentType: "image/webp",
+        Metadata: {
+          product_id: String(productId),
+          vendor_id: String(vendorId),
+          storage_purpose: "sabsewa_local_master_catalogue_main",
+          rights_terms_version: MASTER_IMAGE_TERMS_VERSION,
+        },
+      }), { expiresIn: 300 }),
+      getSignedUrl(client, new PutObjectCommand({
+        Bucket: process.env.AWS_S3_BUCKET,
+        Key: thumbnailKey,
+        ContentType: "image/webp",
+        Metadata: {
+          product_id: String(productId),
+          vendor_id: String(vendorId),
+          storage_purpose: "sabsewa_local_master_catalogue_thumbnail",
+          rights_terms_version: MASTER_IMAGE_TERMS_VERSION,
+        },
+      }), { expiresIn: 300 }),
+    ]);
+
+    const { data: consent, error: consentError } = await supabase
+      .from("master_product_image_consents")
+      .insert({
+        product_id: productId,
+        source_vendor_id: vendorId,
+        source_user_id: userId || null,
+        consent_text: MASTER_IMAGE_RIGHTS_TEXT,
+        consent_terms_version: MASTER_IMAGE_TERMS_VERSION,
+        original_filename: fileName,
+        content_checksum: contentChecksum,
+        perceptual_hash: perceptualHash || null,
+        declared_ownership: true,
+        allow_shared_catalogue_use: true,
+        metadata: {
+          unchecked_by_default_required: true,
+          metadata_removed: true,
+          square_crop: true,
+          moderated_before_approval: Boolean(moderated),
+        },
+      })
+      .select()
+      .single();
+
+    if (consentError) throw consentError;
+
+    const { data: image, error: imageError } = await supabase
+      .from("master_product_images")
+      .insert({
+        product_id: productId,
+        product_title: productTitle,
+        category,
+        subcategory,
+        s3_object_key: mainKey,
+        thumbnail_object_key: thumbnailKey,
+        source_type: "vendor_contributed",
+        source_vendor_id: vendorId,
+        source_user_id: userId || null,
+        licence_or_consent_reference: consent.id,
+        consent_timestamp: consent.consented_at,
+        original_filename: fileName,
+        content_checksum: contentChecksum,
+        perceptual_hash: perceptualHash || null,
+        moderation_status: "pending",
+        metadata: {
+          standard_object_key_pattern: "master-catalog/{category}/{subcategory}/{product-slug}/{uuid}/main.webp",
+          thumbnail_object_key_pattern: "master-catalog/{category}/{subcategory}/{product-slug}/{uuid}/thumbnail.webp",
+          quota_note: "Does not count against receiving vendor storage quota after approval.",
+        },
+      })
+      .select()
+      .single();
+
+    if (imageError) throw imageError;
+
+    return res.json({
+      success: true,
+      master_image_id: image.id,
+      consent_id: consent.id,
+      main_upload_url: mainUploadUrl,
+      thumbnail_upload_url: thumbnailUploadUrl,
+      s3_object_key: mainKey,
+      thumbnail_object_key: thumbnailKey,
+      moderation_status: "pending",
+      required_confirmation: MASTER_IMAGE_RIGHTS_TEXT,
+      expires_in_seconds: 300,
+    });
+  } catch (err) {
+    return res.status(err.statusCode || 500).json({ success: false, error: err.message });
+  }
+});
+
+router.post("/use-master-product-image", async (req, res) => {
+  try {
+    const { vendorId, vendorItemId, masterImageId } = req.body;
+    if (!vendorId || !vendorItemId || !masterImageId) {
+      return res.status(400).json({ success: false, error: "Vendor, vendor item and master image are required." });
+    }
+
+    const { data: image, error: imageError } = await supabase
+      .from("master_product_images")
+      .select("id, product_id, moderation_status, takedown_status")
+      .eq("id", masterImageId)
+      .single();
+
+    if (imageError) throw imageError;
+    if (image.moderation_status !== "approved" || image.takedown_status !== "none") {
+      return res.status(409).json({ success: false, error: "This master image is not available for vendor reuse." });
+    }
+
+    const { data: item, error: itemError } = await supabase
+      .from("vendor_items")
+      .update({
+        master_product_id: image.product_id,
+        master_image_id: image.id,
+        shared_image_id: null,
+        image_reference_type: "master_shared",
+      })
+      .eq("id", vendorItemId)
+      .eq("vendor_id", vendorId)
+      .select()
+      .single();
+
+    if (itemError) throw itemError;
+
+    return res.json({
+      success: true,
+      item,
+      quota_note: "Reference created only. No S3 copy was created and vendor product-image quota was not consumed.",
+    });
+  } catch (err) {
+    return res.status(err.statusCode || 500).json({ success: false, error: err.message });
   }
 });
 

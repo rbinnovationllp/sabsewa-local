@@ -25,8 +25,8 @@ export default function CustomerDashboard() {
           style={[styles.card, { backgroundColor: "#0f766e" }]}
           onPress={() => router.push("/customer/GeminiOrder")}
         >
-          <Text style={styles.cardTitle}>AI Order Helper</Text>
-          <Text style={styles.cardText}>Describe what you need</Text>
+          <Text style={styles.cardTitle}>Place Order</Text>
+          <Text style={styles.cardText}>Type or speak items</Text>
         </TouchableOpacity>
 
         <TouchableOpacity

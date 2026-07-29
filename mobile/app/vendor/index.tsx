@@ -1,11 +1,3 @@
-import ProtectedRoute from "@/components/ProtectedRoute";
+import VendorDashboard from "./dashboard";
 
-export default function VendorDashboard() {
-  return (
-    <ProtectedRoute allowedRoles={["vendor"]}>
-      {/* Vendor UI here */}
-    </ProtectedRoute>
-  );
-}
-
-
+export default VendorDashboard;

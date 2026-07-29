@@ -11,6 +11,8 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useAuth } from "@/providers/AuthProvider";
 import { routeUser } from "@/src/utils/roleRouter";
 import { supabase } from "@/lib/supabase";
+import { apiUrl } from "@/lib/backend";
+import { getDeviceMetadata } from "@/lib/deviceIdentity";
 import {
   SABSEWA_ACCEPTANCE_STATEMENT,
   SABSEWA_ACCEPTED_DOCUMENT_VERSIONS,
@@ -27,6 +29,7 @@ export default function LoginScreen() {
   const [phone, setPhone] = useState(params.phone ? String(params.phone) : "");
   const [otpSent, setOtpSent] = useState(false);
   const [token, setToken] = useState("");
+  const [trustDevice, setTrustDevice] = useState(true);
 
   const [submitLoading, setSubmitLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -121,6 +124,21 @@ export default function LoginScreen() {
 
       if (!role) throw new Error("User role not found.");
 
+      if (trustDevice && data.session?.user?.id) {
+        const device = await getDeviceMetadata();
+        await fetch(apiUrl("/api/auth/trusted-device"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            user_id: data.session.user.id,
+            device_id: device.device_id,
+            device_name: device.device_name,
+            platform: device.platform,
+            app_version: device.app_version,
+          }),
+        });
+      }
+
       // ðŸŽ¯ Redirect user based on role
       router.replace(routeUser(role) as any);
     } catch (err: any) {
@@ -169,6 +187,16 @@ export default function LoginScreen() {
             value={token}
             onChangeText={setToken}
           />
+
+          <TouchableOpacity style={styles.trustRow} onPress={() => setTrustDevice((value) => !value)}>
+            <View style={[styles.checkbox, trustDevice && styles.checked]}>
+              {trustDevice ? <Text style={styles.checkText}>✓</Text> : null}
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.trustTitle}>Trust this device</Text>
+              <Text style={styles.trustText}>Stay signed in securely on this phone/browser until logout, revocation, prolonged inactivity or a security event.</Text>
+            </View>
+          </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.button}
@@ -234,6 +262,12 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   errorText: { color: "red", marginBottom: 10, textAlign: "center" },
+  trustRow: { flexDirection: "row", gap: 10, alignItems: "flex-start", marginBottom: 12 },
+  checkbox: { width: 24, height: 24, borderWidth: 1, borderColor: "#777", borderRadius: 6, alignItems: "center", justifyContent: "center", marginTop: 2 },
+  checked: { backgroundColor: "#1e88e5", borderColor: "#1e88e5" },
+  checkText: { color: "#fff", fontWeight: "900" },
+  trustTitle: { fontWeight: "900", color: "#222" },
+  trustText: { color: "#555", lineHeight: 18, fontSize: 12, marginTop: 2 },
   backBtn: { marginTop: 20, alignItems: "center" },
   backText: { color: "#1a237e", fontWeight: "600" },
 });

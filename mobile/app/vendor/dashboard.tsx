@@ -40,6 +40,69 @@ export default function VendorDashboard() {
     setTerminals(terminalData || []);
   }
 
+  const vendorLoaded = Boolean(vendor?.id);
+  const actionCards = [
+    {
+      title: "Add New Item",
+      description: "Create catalogue items, upload images, stock details and daily availability.",
+      color: "#007bff",
+      route: vendorLoaded ? `/vendor/AddItem?vendor=${vendor.id}` : "",
+    },
+    {
+      title: "Gemini Inventory Capture",
+      description: "Use AI to read shelf photos, invoices or handwritten lists into inventory drafts.",
+      color: "#0f766e",
+      route: vendorLoaded ? `/vendor/GeminiInventory?vendor=${vendor.id}` : "",
+    },
+    {
+      title: "Storage Usage",
+      description: "View product-image quota, warnings and optimized image-storage usage.",
+      color: "#475569",
+      route: vendorLoaded ? `/vendor/StorageUsage?vendor=${vendor.id}` : "",
+    },
+    {
+      title: "Manage Items & Prices",
+      description: "Update stock, daily availability, show-price, ask-price and market-price items.",
+      color: "#28a745",
+      route: vendorLoaded ? `/vendor/EditItem?vendor=${vendor.id}` : "",
+    },
+    {
+      title: "Today's Availability",
+      description: "Review today's orderable products, limited stock, restock time and daily price changes.",
+      color: "#0f766e",
+      route: vendorLoaded ? `/vendor/TodayAvailability?vendor=${vendor.id}` : "",
+    },
+    {
+      title: "Customer Credits",
+      description: "Maintain vendor-approved credit limits, payments, dues and reminders.",
+      color: "#ff8800",
+      route: vendorLoaded ? `/vendor/CreditList?vendor=${vendor.id}` : "",
+    },
+    {
+      title: "Vendor Advance Balance",
+      description: "Review Rs 5,500 activation split, Rs 5,000 wallet, top-ups and Rs 15 fees.",
+      color: "#1166ff",
+      route: vendorLoaded ? `/vendor/SecurityWallet?vendor=${vendor.id}` : "",
+    },
+    {
+      title: "Orders",
+      description: "Accept, partially fulfil or reject orders while protecting customer details.",
+      color: "#6f42c1",
+      route: vendorLoaded ? `/vendor/Orders?vendor=${vendor.id}` : "",
+    },
+    {
+      title: "Exit & Refund",
+      description: "Preview voluntary closure, refundable balance and final statement.",
+      color: "#b91c1c",
+      route: vendorLoaded ? `/vendor/ExitAndRefund?vendor=${vendor.id}` : "",
+    },
+  ];
+
+  function openVendorRoute(route: string) {
+    if (!route) return;
+    router.push(route as any);
+  }
+
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <BrandHeader compact subtitle="Vendor CRM and shop operations" />
@@ -53,9 +116,40 @@ export default function VendorDashboard() {
             {vendor.city_code || "UNK"}-{vendor.locality_code || "GEN"}
           </Text>
         </View>
-      ) : null}
+      ) : (
+        <View style={styles.noticePanel}>
+          <Text style={styles.noticeTitle}>Vendor profile not loaded</Text>
+          <Text style={styles.noticeText}>
+            Sign in with a vendor account that has completed business verification and activation. Once your vendor profile is linked, terminals, catalogue, wallet and order actions will unlock here.
+          </Text>
+        </View>
+      )}
+
+      <View style={styles.summaryGrid}>
+        <View style={styles.summaryCard}>
+          <Text style={styles.summaryValue}>{vendorLoaded ? "Active" : "Locked"}</Text>
+          <Text style={styles.summaryLabel}>Order receiving</Text>
+        </View>
+        <View style={styles.summaryCard}>
+          <Text style={styles.summaryValue}>{terminals.length}</Text>
+          <Text style={styles.summaryLabel}>Terminals</Text>
+        </View>
+        <View style={styles.summaryCard}>
+          <Text style={styles.summaryValue}>{vendorLoaded ? "Rs 515" : "Pending"}</Text>
+          <Text style={styles.summaryLabel}>Minimum balance</Text>
+        </View>
+      </View>
 
       <Text style={styles.sectionTitle}>Available Terminals</Text>
+
+      {terminals.length === 0 ? (
+        <View style={styles.emptyBox}>
+          <Text style={styles.emptyTitle}>No terminal available yet</Text>
+          <Text style={styles.emptyText}>
+            Terminals will appear after the vendor profile, branch details and service location are configured in SabSewa Local.
+          </Text>
+        </View>
+      ) : null}
 
       {terminals.map((terminal) => (
         <TouchableOpacity
@@ -71,61 +165,28 @@ export default function VendorDashboard() {
         </TouchableOpacity>
       ))}
 
-      <TouchableOpacity
-        style={[styles.btn, { backgroundColor: "#007bff" }]}
-        onPress={() => vendor && router.push(`/vendor/AddItem?vendor=${vendor.id}`)}
-      >
-        <Text style={styles.btnText}>Add New Item</Text>
-      </TouchableOpacity>
+      <Text style={styles.sectionTitle}>Vendor Operations</Text>
 
-      <TouchableOpacity
-        style={[styles.btn, { backgroundColor: "#0f766e" }]}
-        onPress={() => vendor && router.push(`/vendor/GeminiInventory?vendor=${vendor.id}`)}
-      >
-        <Text style={styles.btnText}>Gemini Inventory Capture</Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={[styles.btn, { backgroundColor: "#475569" }]}
-        onPress={() => vendor && router.push(`/vendor/StorageUsage?vendor=${vendor.id}`)}
-      >
-        <Text style={styles.btnText}>Storage Usage</Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={[styles.btn, { backgroundColor: "#28a745" }]}
-        onPress={() => vendor && router.push(`/vendor/EditItem?vendor=${vendor.id}`)}
-      >
-        <Text style={styles.btnText}>Manage Items & Prices</Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={[styles.btn, { backgroundColor: "#ff8800" }]}
-        onPress={() => vendor && router.push(`/vendor/CreditList?vendor=${vendor.id}`)}
-      >
-        <Text style={styles.btnText}>Customer Credits</Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={[styles.btn, { backgroundColor: "#1166ff" }]}
-        onPress={() => vendor && router.push(`/vendor/SecurityWallet?vendor=${vendor.id}`)}
-      >
-        <Text style={styles.btnText}>Vendor Advance Balance</Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={[styles.btn, { backgroundColor: "#6f42c1" }]}
-        onPress={() => vendor && router.push(`/vendor/Orders?vendor=${vendor.id}`)}
-      >
-        <Text style={styles.btnText}>Orders</Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={[styles.btn, { backgroundColor: "#b91c1c" }]}
-        onPress={() => vendor && router.push(`/vendor/ExitAndRefund?vendor=${vendor.id}`)}
-      >
-        <Text style={styles.btnText}>Exit & Refund</Text>
-      </TouchableOpacity>
+      <View style={styles.actionGrid}>
+        {actionCards.map((action) => (
+          <TouchableOpacity
+            key={action.title}
+            style={[
+              styles.actionCard,
+              { borderTopColor: action.color },
+              !vendorLoaded && styles.actionDisabled,
+            ]}
+            onPress={() => openVendorRoute(action.route)}
+            disabled={!vendorLoaded}
+          >
+            <Text style={styles.actionTitle}>{action.title}</Text>
+            <Text style={styles.actionText}>{action.description}</Text>
+            <Text style={[styles.actionStatus, { color: vendorLoaded ? action.color : "#6b7280" }]}>
+              {vendorLoaded ? "Open" : "Unlocks after vendor login"}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
     </ScrollView>
   );
 }
@@ -135,6 +196,7 @@ const styles = StyleSheet.create({
     paddingTop: 70,
     paddingBottom: 50,
     paddingHorizontal: 20,
+    backgroundColor: "#fff",
   },
   heading: {
     fontSize: 28,
@@ -148,6 +210,47 @@ const styles = StyleSheet.create({
     padding: 12,
     marginBottom: 25,
     backgroundColor: "#f8fafc",
+  },
+  noticePanel: {
+    borderWidth: 1,
+    borderColor: "#fed7aa",
+    borderRadius: 8,
+    padding: 14,
+    marginBottom: 18,
+    backgroundColor: "#fff7ed",
+  },
+  noticeTitle: {
+    fontSize: 16,
+    fontWeight: "900",
+    color: "#9a3412",
+  },
+  noticeText: {
+    color: "#7c2d12",
+    marginTop: 6,
+    lineHeight: 20,
+  },
+  summaryGrid: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 22,
+  },
+  summaryCard: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    borderRadius: 8,
+    padding: 12,
+    backgroundColor: "#f9fafb",
+  },
+  summaryValue: {
+    fontSize: 16,
+    fontWeight: "900",
+    color: "#111827",
+  },
+  summaryLabel: {
+    color: "#6b7280",
+    marginTop: 4,
+    fontSize: 12,
   },
   vendorName: {
     fontSize: 20,
@@ -169,6 +272,57 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     marginBottom: 15,
     backgroundColor: "#f5f5f5",
+  },
+  emptyBox: {
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    borderRadius: 8,
+    padding: 14,
+    marginBottom: 18,
+    backgroundColor: "#f9fafb",
+  },
+  emptyTitle: {
+    fontWeight: "900",
+    color: "#111827",
+  },
+  emptyText: {
+    color: "#6b7280",
+    marginTop: 5,
+    lineHeight: 19,
+  },
+  actionGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
+  },
+  actionCard: {
+    width: "48%",
+    minWidth: 260,
+    flexGrow: 1,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    borderTopWidth: 4,
+    borderRadius: 8,
+    padding: 14,
+    backgroundColor: "#fff",
+  },
+  actionDisabled: {
+    backgroundColor: "#f9fafb",
+    opacity: 0.9,
+  },
+  actionTitle: {
+    fontSize: 16,
+    fontWeight: "900",
+    color: "#111827",
+  },
+  actionText: {
+    color: "#4b5563",
+    marginTop: 6,
+    lineHeight: 19,
+  },
+  actionStatus: {
+    marginTop: 10,
+    fontWeight: "900",
   },
   terminalName: {
     fontSize: 16,

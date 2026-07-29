@@ -54,6 +54,19 @@ coverage/
 .nyc_output/
 *.tsbuildinfo
 
+# Android release artifacts and signing material
+*.apk
+*.aab
+*.apks
+*.keystore
+*.jks
+*.p12
+*.mobileprovision
+*.cer
+*.der
+android-signing/
+release-keys/
+
 # Framework and tooling caches
 .cache/
 .parcel-cache/

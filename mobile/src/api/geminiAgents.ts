@@ -1,4 +1,4 @@
-const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || "http://localhost:5001";
+const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || "https://api.sabsewa.in";
 
 export async function captureInventoryWithGemini(input: {
   imageBase64: string;
@@ -46,4 +46,3 @@ export async function createSmartRejectionMessage(input: {
 
   return response.json();
 }
-

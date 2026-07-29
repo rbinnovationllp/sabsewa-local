@@ -13,6 +13,7 @@ import { supabase } from "@/lib/supabase";
 import LanguageSelector from "@/components/LanguageSelector";
 import { useLanguage } from "@/providers/LanguageProvider";
 import { getDeviceMetadata } from "@/lib/deviceIdentity";
+import * as Location from "expo-location";
 import {
   SABSEWA_ACCEPTANCE_STATEMENT,
   SABSEWA_ACCEPTED_DOCUMENT_VERSIONS,
@@ -30,6 +31,8 @@ export default function RegisterScreen() {
   const [city, setCity] = useState("");
   const [address, setAddress] = useState("");
   const [extra, setExtra] = useState("");
+  const [shopName, setShopName] = useState("");
+  const [locationCoords, setLocationCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [acceptedPolicies, setAcceptedPolicies] = useState(false);
   const [marketingConsent, setMarketingConsent] = useState(false);
   const [error, setError] = useState("");
@@ -48,6 +51,8 @@ export default function RegisterScreen() {
       return setError("Enter a valid 10-digit mobile number");
     if (!city) return setError("Enter your city name");
     if (role === "customer" && !address.trim()) return setError("Enter your primary delivery address");
+    if (role === "vendor" && !shopName.trim()) return setError("Enter your shop or trade name");
+    if (role === "vendor" && !address.trim()) return setError("Enter your shop address");
     if (!acceptedPolicies) return setError("Please tick the Terms of Use and Privacy Notice acceptance before registration.");
 
     if ((role === "vendor" || role === "rider") && !extra)
@@ -65,6 +70,8 @@ export default function RegisterScreen() {
           full_name: fullname,
           city,
           primary_address: address,
+          shop_name: shopName,
+          location_coordinates: locationCoords,
           preferred_language: language,
           service_type_or_area: extra,
           accepted_policies: true,
@@ -90,6 +97,17 @@ export default function RegisterScreen() {
       params: { phone: formattedPhone },
     });
   };
+
+  async function captureLocation() {
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== "granted") {
+      setError("Location permission was not granted. You can continue and add location later.");
+      return;
+    }
+    const current = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+    setLocationCoords({ lat: current.coords.latitude, lng: current.coords.longitude });
+    setError("");
+  }
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.wrapper}>
@@ -141,19 +159,22 @@ export default function RegisterScreen() {
         />
       </View>
 
-      {role === "customer" && (
+      {(role === "customer" || role === "vendor") && (
         <View style={styles.inputBlock}>
-          <Text style={styles.label}>Primary Delivery Address</Text>
+          <Text style={styles.label}>{role === "vendor" ? "Shop Address" : "Primary Delivery Address"}</Text>
           <TextInput
             style={[styles.input, styles.textArea]}
             multiline
-            placeholder="House number, street, landmark"
+            placeholder={role === "vendor" ? "Shop number, street, locality, landmark" : "House number, street, landmark"}
             value={address}
             onChangeText={(t) => {
               setAddress(t);
               setError("");
             }}
           />
+          <TouchableOpacity style={styles.locationBtn} onPress={captureLocation}>
+            <Text style={styles.locationText}>{locationCoords ? "Location Added" : "Use Current Location"}</Text>
+          </TouchableOpacity>
         </View>
       )}
 
@@ -164,6 +185,16 @@ export default function RegisterScreen() {
       {/* ROLE-SPECIFIC EXTRA FIELD */}
       {role === "vendor" && (
         <View style={styles.inputBlock}>
+          <Text style={styles.label}>Shop / Trade Name</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Public shop name"
+            value={shopName}
+            onChangeText={(t) => {
+              setShopName(t);
+              setError("");
+            }}
+          />
           <Text style={styles.label}>Shop or Service Type</Text>
           <TextInput
             style={styles.input}
@@ -285,6 +316,8 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   textArea: { minHeight: 84, textAlignVertical: "top" },
+  locationBtn: { borderWidth: 1, borderColor: "#0f766e", padding: 11, borderRadius: 10, alignItems: "center", marginTop: 10 },
+  locationText: { color: "#0f766e", fontWeight: "900" },
   legalBox: { borderWidth: 1, borderColor: "#d6e4ff", backgroundColor: "#f8fbff", padding: 12, borderRadius: 10, marginBottom: 14 },
   legalTitle: { fontSize: 14, fontWeight: "800", color: "#1a237e", marginBottom: 6 },
   legalText: { fontSize: 13, color: "#444", lineHeight: 19, marginBottom: 10 },

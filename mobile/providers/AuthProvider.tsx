@@ -1,8 +1,6 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
-import { apiUrl } from "@/lib/backend";
-import { getDeviceMetadata } from "@/lib/deviceIdentity";
 
 export type AppUser = User | null;
 
@@ -30,31 +28,10 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
     setSession(data.session ?? null);
   }
 
-  async function registerTrustedDevice(nextSession: Session | null) {
-    if (!nextSession?.user?.id) return;
-    try {
-      const device = await getDeviceMetadata();
-      await fetch(apiUrl("/api/auth/trusted-device"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          user_id: nextSession.user.id,
-          device_id: device.device_id,
-          device_name: device.device_name,
-          platform: device.platform,
-          app_version: device.app_version,
-        }),
-      });
-    } catch {
-      // Device registration must not block login; backend audit will catch live failures.
-    }
-  }
-
   useEffect(() => {
     refreshSession().finally(() => setLoading(false));
     const { data } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       setSession(nextSession);
-      if (nextSession) registerTrustedDevice(nextSession);
     });
     return () => data.subscription.unsubscribe();
   }, []);

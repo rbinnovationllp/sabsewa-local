@@ -34,16 +34,19 @@ $env:EXPO_NO_DEPENDENCY_VALIDATION="1"
 npx.cmd expo export --platform web
 ```
 
-For local testing, keep:
+For local development only, you may temporarily override the backend URL:
 
 ```text
 EXPO_PUBLIC_BACKEND_URL=http://localhost:5001
 ```
 
+Do not use `localhost` in the production Hostinger export.
+
 ## Build
 
 ```powershell
 cd C:\Users\HP\SabSewa-Local\mobile
+$env:EXPO_PUBLIC_BACKEND_URL="https://api.sabsewa.in"
 $env:EXPO_NO_DEPENDENCY_VALIDATION="1"
 npx.cmd expo export --platform web
 ```

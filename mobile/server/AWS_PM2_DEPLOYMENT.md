@@ -21,13 +21,22 @@ PORT=5001
 SUPABASE_URL=replace_with_supabase_project_url
 SUPABASE_SERVICE_ROLE_KEY=replace_with_supabase_service_role_key
 
+GEMINI_API_KEY=replace_with_gemini_api_key
+GEMINI_MODEL=gemini-1.5-flash
+GEMINI_PROVIDER=google_ai_studio
+
+RAZORPAY_MODE=test
 RAZORPAY_KEY_ID=replace_with_razorpay_key_id
 RAZORPAY_KEY_SECRET=replace_with_razorpay_key_secret
+RAZORPAY_WEBHOOK_SECRET=replace_with_razorpay_webhook_secret
 
-PUBLIC_APP_URL=https://your-app-or-domain.example
+AWS_REGION=ap-south-1
+AWS_S3_BUCKET=sabsewa-local-product-images-624719611353-ap-south-1-an
+
+PUBLIC_APP_URL=https://www.sabsewa.in
 ```
 
-Keep the Supabase service role key only on the AWS backend. Do not put it in the Expo mobile app.
+Keep the Supabase service-role key, Gemini API key, Razorpay secret, webhook secret, and AWS secret credentials only on the AWS backend. Do not put them in the Expo mobile/web app or GitHub.
 
 ## Start On AWS
 
@@ -55,7 +64,7 @@ npm run pm2:reload
 Set this before building the mobile app:
 
 ```env
-EXPO_PUBLIC_BACKEND_URL=https://api.your-sabsewa-domain.example
+EXPO_PUBLIC_BACKEND_URL=https://api.sabsewa.in
 ```
 
 For physical Android/iOS devices, do not use `localhost`. The mobile app must call the AWS HTTPS API domain.

@@ -15,10 +15,11 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.sabsewa.local"
+      "bundleIdentifier": "in.sabsewa.local"
     },
     "android": {
-      "package": "com.sabsewa.local",
+      "package": "in.sabsewa.local",
+      "versionCode": 1,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
@@ -34,8 +35,19 @@
     },
     "plugins": [
       "expo-router",
-      "expo-image-picker",
-      "expo-location"
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "SabSewa Local uses selected photos only when a vendor uploads product images or required business documents.",
+          "cameraPermission": "SabSewa Local uses the camera only when you choose to capture product images, inventory photos or verification documents."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "SabSewa Local uses your location only with permission to find nearby vendors, verify shop locations and support delivery tracking."
+        }
+      ]
     ],
     "web": {
       "bundler": "metro",
@@ -46,7 +58,7 @@
       "typedRoutes": true
     },
     "extra": {
-      "EXPO_PUBLIC_BACKEND_URL": "http://localhost:5001"
+      "EXPO_PUBLIC_BACKEND_URL": "https://api.sabsewa.in"
     }
   }
 }

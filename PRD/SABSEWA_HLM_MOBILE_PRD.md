@@ -49,14 +49,18 @@ These Gemini workflows must be visible in the demo video and backed by logs, scr
 ## 4. Core Mobile Modules
 
 ### 4.1 Public HLM Landing
-- Explain HyperLocal Marketplace.
+- Display `SabSewa Local` and `Everything Local. One Trusted Marketplace.`
+- Show logo, brand colours, language selector, location selector and search by shop, category or product.
 - Show categories such as kirana, vegetables, fruits, medical, bakery, restaurant, dairy, and tiffin.
-- Provide login/register entry for customer and shop owner.
+- Provide clear customer actions: Shop from Nearby Stores, Register as Customer, Continue Shopping, Order Again, Recent Shops and My Orders where applicable.
+- Provide clear vendor actions: Register Your Shop, Vendor Login, Open Vendor Dashboard, Manage Today's Items, View Orders and Wallet Balance where applicable.
+- Do not display raw Vendor IDs or Terminal IDs to customers.
 
 ### 4.2 Customer Vendor Discovery
 - Show nearby approved vendors.
 - Filter by category, distance, and open/closed status.
-- Allow customer to pick vendor and terminal.
+- Allow customer to pick a customer-friendly shop or branch without seeing raw internal vendor or terminal IDs.
+- Display shop name, category, locality or partial address, approximate distance, open status, verified badge and currently available products. If similar shop names exist, distinguish them by locality, partial address and distance, not by Vendor ID or Terminal ID.
 - Show vendor details, phone, address, and available catalog.
 
 ### 4.3 Catalog And Cart
@@ -65,11 +69,16 @@ These Gemini workflows must be visible in the demo video and backed by logs, scr
 - Show cart total, delivery address, phone, and notes.
 - Place order against selected vendor and terminal.
 
-### 4.4 Gemini Conversational Ordering
+### 4.4 AI-Powered Conversational Ordering Using Gemini
 - Customer enters text or voice order in English, Hindi, or another Indian language.
+- Customer must first select a nearby verified shop by location, category, shop name or product/item search.
+- The normal customer-facing page title must be `Place Your Order`, not `Gemini Conversational Ordering`.
+- Customer-facing ordering screens must never require or display raw `vendor_id` or `terminal_id`; these identifiers remain internal, hidden, non-editable and backend-validated.
+- Customer-facing copy should say: `Select a nearby shop and type or speak what you need. We will prepare a cart for your review before placing the order.`
 - Gemini converts request into structured cart JSON.
 - App shows extracted items for customer confirmation.
 - Customer can edit quantities before placing order.
+- Gemini must match requested items only against the selected shop's currently active and available-today catalogue, identify unavailable items, and never invent products, prices, stock or availability.
 
 Required output format:
 
@@ -102,6 +111,36 @@ Required output format:
 - Vendors may contribute product images to a moderated shared product catalogue only after confirming they own or have permission to use the image and authorise reuse by other registered vendors.
 - Approved shared images are stored once and referenced by multiple vendors; reuse does not consume the receiving vendor's storage quota.
 - SabSewa Local may reject or remove misleading, copyrighted, branded, inappropriate or poor-quality shared images. Prices, stock, offers and units remain vendor-specific.
+- SabSewa Local must maintain a rights-compliant master product catalogue for kirana/general stores, vegetable shops and fruit shops. The master catalogue may store standard product titles, category/subcategory, common Indian-language names, units, brand/pack size where applicable, keywords, spelling variants and an image status field.
+- Master catalogue entries must not include copied descriptions, photos, logos or other copyrighted material from Amazon, Flipkart, BigBasket, Zepto, Blinkit or any other third-party commercial website unless Rashi Bhartiya Innovation LLP has documented commercial-use permission.
+- Master product images may be accepted only from vendor-contributed images with explicit shared-use consent, manufacturer/distributor permission, properly licensed commercial-reuse images, or SabSewa-commissioned photography.
+- The vendor shared-image consent checkbox must remain unchecked by default. Consent records must store vendor/user ID, vendor ID, consent timestamp, terms version, original filename, checksum and declared ownership.
+- Approved master images must be private S3 objects served through CloudFront or time-limited presigned URLs. Other vendors may reference approved master images without creating another S3 copy and without consuming their 100 MB vendor product-image quota.
+- If no authorised image is available, the product must show a neutral placeholder and remain `image_pending`. The system must never silently substitute or copy an unauthorised third-party image.
+- Company admins must have a copyright/takedown workflow that disables disputed images immediately while preserving consent, moderation and audit history.
+- The master catalogue is a reference only. Every vendor must have a separate shop catalogue/index in `vendor_items` where that vendor controls price, stock, brand/variant, pack size, daily availability, expiry details and substitution policy.
+- Brand and pack-size variants must remain distinct purchasable items. Example: Sunflower 5 kg atta, Aastha 5 kg atta and Raja 10 kg atta must not be merged into one indistinguishable item.
+- Vendors may choose `Show Price`, `Ask Vendor` or `Market Price` for each listing. Hidden/market/on-request items require vendor quotation and customer approval before final order acceptance.
+- If a requested brand or pack size is unavailable, the app and Gemini must not silently substitute another item. Alternatives require customer approval.
+- If no suitable registered vendor is available within the permitted service area, display: `We’re sorry. No SabSewa Local vendor matching your requirement is currently listed in your area. As more people start using SabSewa Local in your locality, our team will work to identify and onboard suitable nearby vendors.`
+- Provide `Request a Vendor in My Area` to record locality, required category/requested items and consent for notification when a suitable vendor becomes available.
+
+### 4.5.0 Registration And Trusted Device Login
+- Customer registration collects only necessary service data: name, OTP-verified mobile number, preferred language, delivery address, optional location coordinates and current Terms/Privacy acceptance.
+- Vendor registration collects owner/entity name, shop/trade name, category, shop address/geolocation, OTP-verified mobile number, KYC/business information placeholder, terms/privacy acceptance, verification status and activation/payment status.
+- Do not implement literal permanent login. Use Supabase refresh sessions, secure device storage, server-side device-session records, logout and device revocation.
+- The login screen must offer `Trust this device`. A trusted-device record is created only after OTP verification and user confirmation.
+- New vendor device/terminal activation must require OTP verification, terminal ownership validation, active/verified vendor status, device limits and audit logging.
+
+### 4.5.1 Daily Product Availability
+- Vendor Dashboard must provide a clearly visible `Today's Availability` screen.
+- Supported daily statuses: Available, Limited Stock, Temporarily Unavailable, Out of Stock and Available on Request.
+- Vendors can update one product or multiple selected products together using large simple controls.
+- Vendors can update daily quantity, daily price, expected restock date/time and reason.
+- Vendors can choose whether to keep last confirmed status, confirm availability every day or automatically mark selected fresh products unavailable each morning.
+- Customers see only currently orderable products by default. Unavailable and out-of-stock items must not be added to cart.
+- Backend order creation must recheck availability, quantity, brand/pack variant, price/quotation requirement and vendor/terminal status.
+- Every availability change must be recorded in `vendor_item_availability_audit` with previous status, new status, quantity, reason, restock time, changed user/device and timestamp.
 
 ### 4.6 Gemini Inventory Capture
 - Vendor takes a photo of shelf, paper list, invoice, or handwritten stock note.
@@ -191,6 +230,10 @@ Minimum mobile-facing data entities:
 - `vendor_terminals`
 - `vendor_items`
 - `catalog_items`
+- `master_product_catalog`
+- `master_product_images`
+- `master_product_image_consents`
+- `master_product_image_takedown_audit`
 - `hyperlocal_orders`
 - `order_items`
 - `riders`

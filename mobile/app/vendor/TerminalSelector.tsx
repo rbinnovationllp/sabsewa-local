@@ -73,7 +73,7 @@ export default function TerminalSelector() {
 
       <TouchableOpacity
         style={[styles.actionBtn, { backgroundColor: "#e63946" }]}
-        onPress={() => router.push(`/vendor/EditItem?terminal=${terminalId}&vendor=${terminal.vendor_id}`)}
+        onPress={() => router.push(`/vendor/TodayAvailability?terminal=${terminalId}&vendor=${terminal.vendor_id}` as any)}
       >
         <Text style={styles.btnText}>📊 Update Stock</Text>
       </TouchableOpacity>

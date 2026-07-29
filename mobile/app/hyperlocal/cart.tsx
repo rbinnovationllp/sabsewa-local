@@ -22,6 +22,14 @@ type VendorItem = {
   available_today?: boolean;
   is_available?: boolean;
   stock_status?: string;
+  daily_availability_status?: string;
+  expected_restock_at?: string;
+  generic_product_name?: string;
+  brand_name?: string;
+  variant_name?: string;
+  pack_size?: number;
+  pack_unit?: string;
+  product_variant_id?: string;
   price_display_mode?: "show_price" | "hide_price" | "market_price";
   price_unit_label?: string;
 };
@@ -47,6 +55,7 @@ export default function SabSewaLocalCartScreen() {
   const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(true);
   const [placing, setPlacing] = useState(false);
+  const [notice, setNotice] = useState("");
 
   const total = useMemo(
     () => lines.reduce((sum, line) => sum + (line.price_quote_required ? 0 : line.total), 0),
@@ -77,11 +86,12 @@ export default function SabSewaLocalCartScreen() {
 
     const { data, error } = await supabase
       .from("vendor_items")
-      .select("id, item_name, price, item_pic, is_available, available_today, stock_status, price_display_mode, price_unit_label")
+      .select("id, item_name, price, item_pic, is_available, available_today, stock_status, daily_availability_status, expected_restock_at, generic_product_name, brand_name, variant_name, pack_size, pack_unit, product_variant_id, price_display_mode, price_unit_label")
       .in("id", itemIds)
       .eq("is_available", true)
       .eq("available_today", true)
-      .neq("stock_status", "out_of_stock");
+      .neq("stock_status", "out_of_stock")
+      .not("daily_availability_status", "in", "(temporarily_unavailable,out_of_stock)");
 
     if (error) {
       Alert.alert("Cart error", error.message);
@@ -99,7 +109,7 @@ export default function SabSewaLocalCartScreen() {
     setLines(
       (data || []).map((item: VendorItem) => {
         const qty = Number(cart[item.id] || 0);
-        const quoteRequired = item.price_display_mode === "hide_price" || item.price_display_mode === "market_price";
+        const quoteRequired = item.price_display_mode === "hide_price" || item.price_display_mode === "market_price" || item.daily_availability_status === "available_on_request";
         const price = quoteRequired ? 0 : Number(item.price);
         const priceLabel = quoteRequired
           ? item.price_display_mode === "market_price"
@@ -128,22 +138,28 @@ export default function SabSewaLocalCartScreen() {
   }
 
   async function placeOrder(paymentMethod: "prepaid" | "credit") {
+    setNotice("");
+
     if (!user?.id) {
+      setNotice("Please login before placing an order. This protects order history, delivery details and credit records.");
       Alert.alert("Login required", "Please login before placing an order.");
       return;
     }
 
     if (!vendorId || !terminalId) {
+      setNotice("Please select a nearby vendor first. The cart must be linked to one verified shop and terminal.");
       Alert.alert("Missing shop", "Please select a vendor and terminal again.");
       return;
     }
 
     if (lines.length === 0) {
+      setNotice("Your cart is empty. Find a nearby vendor or place an order to add items first.");
       Alert.alert("Empty cart", "Please add at least one item.");
       return;
     }
 
     if (!address.trim() || !phone.trim()) {
+      setNotice("Enter delivery address and phone number before placing the order.");
       Alert.alert("Delivery details required", "Please enter address and phone.");
       return;
     }
@@ -161,6 +177,7 @@ export default function SabSewaLocalCartScreen() {
           qty: line.qty,
           price: line.price,
           price_quote_required: line.price_quote_required,
+          product_variant_id: line.product_variant_id || null,
         })),
         customer_address: address.trim(),
         customer_phone: phone.trim(),
@@ -192,6 +209,7 @@ export default function SabSewaLocalCartScreen() {
         params: { order_id: json.order?.id || json.order_id },
       });
     } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Order failed. Please try again.");
       Alert.alert("Order failed", error instanceof Error ? error.message : "Unknown error");
     } finally {
       setPlacing(false);
@@ -212,7 +230,18 @@ export default function SabSewaLocalCartScreen() {
       <Text style={styles.heading}>SabSewa Local Cart</Text>
 
       {lines.length === 0 ? (
-        <Text style={styles.muted}>Your cart is empty.</Text>
+        <View style={styles.emptyCard}>
+          <Text style={styles.emptyTitle}>Your cart is empty</Text>
+          <Text style={styles.emptyText}>
+            Select a nearby vendor and available-today products before placing an order. Customer payment remains directly between you and the vendor.
+          </Text>
+          <TouchableOpacity style={styles.findBtn} onPress={() => router.push("/customer/discover" as any)}>
+            <Text style={styles.placeText}>Find Nearby Vendors</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.aiBtn} onPress={() => router.push("/customer/GeminiOrder" as any)}>
+            <Text style={styles.placeText}>Place Your Order</Text>
+          </TouchableOpacity>
+        </View>
       ) : (
         lines.map((line) => (
           <View key={line.id} style={styles.line}>
@@ -220,6 +249,9 @@ export default function SabSewaLocalCartScreen() {
               <Text style={styles.itemName}>{line.item_name}</Text>
               <Text style={styles.price}>{line.price_quote_required ? "Ask Vendor" : `Rs ${line.total.toFixed(2)}`}</Text>
             </View>
+            <Text style={styles.muted}>
+              {[line.brand_name, line.variant_name, line.pack_size && line.pack_unit ? `${line.pack_size} ${line.pack_unit}` : ""].filter(Boolean).join(" - ") || line.generic_product_name || "Vendor listing"}
+            </Text>
             <Text style={styles.muted}>{line.price_label || `Rs ${line.price.toFixed(2)} each`}</Text>
 
             <View style={styles.qtyRow}>
@@ -251,6 +283,12 @@ export default function SabSewaLocalCartScreen() {
         </Text>
       ) : null}
 
+      {notice ? (
+        <View style={styles.noticeBox}>
+          <Text style={styles.noticeText}>{notice}</Text>
+        </View>
+      ) : null}
+
       <Text style={styles.label}>Delivery Address</Text>
       <TextInput
         style={[styles.input, styles.textArea]}
@@ -270,17 +308,17 @@ export default function SabSewaLocalCartScreen() {
       />
 
       <TouchableOpacity
-        style={[styles.placeBtn, (placing || lines.length === 0) && styles.disabled]}
+        style={[styles.placeBtn, placing && styles.disabled]}
         onPress={() => placeOrder("prepaid")}
-        disabled={placing || lines.length === 0}
+        disabled={placing}
       >
         <Text style={styles.placeText}>{placing ? "Placing..." : "Place Direct-Payment Order"}</Text>
       </TouchableOpacity>
 
       <TouchableOpacity
-        style={[styles.creditBtn, (placing || lines.length === 0) && styles.disabled]}
+        style={[styles.creditBtn, placing && styles.disabled]}
         onPress={() => placeOrder("credit")}
-        disabled={placing || lines.length === 0}
+        disabled={placing}
       >
         <Text style={styles.placeText}>Use Vendor-Approved Credit</Text>
       </TouchableOpacity>
@@ -296,6 +334,38 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 10 },
   heading: { fontSize: 26, fontWeight: "900", marginBottom: 18 },
   muted: { color: "#666" },
+  emptyCard: {
+    borderWidth: 1,
+    borderColor: "#dbeafe",
+    backgroundColor: "#eff6ff",
+    borderRadius: 10,
+    padding: 14,
+    marginBottom: 16,
+  },
+  emptyTitle: { color: "#1e3a8a", fontWeight: "900", fontSize: 18 },
+  emptyText: { color: "#1e40af", lineHeight: 20, marginTop: 6, marginBottom: 12 },
+  findBtn: {
+    backgroundColor: "#1166ff",
+    padding: 14,
+    borderRadius: 10,
+    alignItems: "center",
+  },
+  aiBtn: {
+    backgroundColor: "#0f766e",
+    padding: 14,
+    borderRadius: 10,
+    alignItems: "center",
+    marginTop: 10,
+  },
+  noticeBox: {
+    borderWidth: 1,
+    borderColor: "#fed7aa",
+    backgroundColor: "#fff7ed",
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 16,
+  },
+  noticeText: { color: "#9a3412", fontWeight: "700", lineHeight: 20 },
   line: {
     borderWidth: 1,
     borderColor: "#ddd",

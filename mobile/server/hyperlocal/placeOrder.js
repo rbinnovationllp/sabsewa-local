@@ -44,6 +44,33 @@ router.post("/place", async (req, res) => {
       });
     }
 
+    const { data: vendor, error: vendorError } = await supabase
+      .from("vendors")
+      .select("*")
+      .eq("id", vendor_id)
+      .single();
+
+    if (vendorError || !vendor) {
+      return res.status(404).json({
+        success: false,
+        message: "Selected shop was not found.",
+      });
+    }
+
+    if (vendor.status !== "approved") {
+      return res.status(409).json({
+        success: false,
+        message: "This shop is not verified or active for customer orders.",
+      });
+    }
+
+    if (vendor.verification_status && !["approved", "verified"].includes(String(vendor.verification_status))) {
+      return res.status(409).json({
+        success: false,
+        message: "This shop has not completed business verification.",
+      });
+    }
+
     await assertVendorCanReceiveOrders(vendor_id);
 
     const { data: terminal, error: terminalError } = await supabase
@@ -70,7 +97,7 @@ router.post("/place", async (req, res) => {
     const requestedItemIds = items.map((item) => item.item_id).filter(Boolean);
     const { data: availableItems, error: itemError } = await supabase
       .from("vendor_items")
-      .select("id, item_name, price, price_display_mode, price_unit_label, is_available, available_today, stock_quantity, daily_stock_quantity, stock_status")
+      .select("id, item_name, price, price_display_mode, price_unit_label, is_available, available_today, stock_quantity, daily_stock_quantity, stock_status, daily_availability_status, expected_restock_at, master_product_id, product_brand_id, product_variant_id, generic_product_name, brand_name, manufacturer, variant_name, pack_size, pack_unit, mrp, barcode, sku, ean, substitution_policy")
       .eq("vendor_id", vendor_id)
       .eq("terminal_id", terminal_id)
       .in("id", requestedItemIds);
@@ -87,10 +114,13 @@ router.post("/place", async (req, res) => {
       const stockQuantity = item?.stock_quantity == null ? null : Number(item.stock_quantity);
       const effectiveStock = dailyStock ?? stockQuantity;
 
-      if (!item || item.is_available !== true || item.available_today !== true || item.stock_status === "out_of_stock") {
+      const dailyStatus = item?.daily_availability_status || "available";
+      const orderableDailyStatus = ["available", "limited_stock", "available_on_request"].includes(dailyStatus);
+
+      if (!item || item.is_available !== true || item.available_today !== true || item.stock_status === "out_of_stock" || !orderableDailyStatus) {
         return res.status(409).json({
           success: false,
-          message: `${requested.item_name || "Requested item"} is not available from this vendor today.`,
+          message: `${requested.item_name || "Requested item"} is not available from this vendor today.${item?.expected_restock_at ? ` Expected back: ${item.expected_restock_at}.` : ""}`,
         });
       }
 
@@ -102,11 +132,31 @@ router.post("/place", async (req, res) => {
       }
 
       const price = Number(item.price);
+      if (requested.product_variant_id && item.product_variant_id !== requested.product_variant_id) {
+        return res.status(409).json({
+          success: false,
+          message: `${item.item_name} does not match the selected brand or pack-size variant.`,
+        });
+      }
+
       const priceDisplayMode = item.price_display_mode || "show_price";
-      const requiresQuote = priceDisplayMode === "hide_price" || priceDisplayMode === "market_price";
+      const requiresQuote = priceDisplayMode === "hide_price" || priceDisplayMode === "market_price" || dailyStatus === "available_on_request";
       verifiedItems.push({
         item_id: item.id,
         item_name: item.item_name,
+        generic_product_name: item.generic_product_name || item.item_name,
+        brand_name: item.brand_name || null,
+        manufacturer: item.manufacturer || null,
+        variant_name: item.variant_name || null,
+        pack_size: item.pack_size || null,
+        pack_unit: item.pack_unit || null,
+        mrp: item.mrp == null ? null : Number(item.mrp),
+        barcode: item.barcode || item.ean || item.sku || null,
+        master_product_id: item.master_product_id || null,
+        product_brand_id: item.product_brand_id || null,
+        product_variant_id: item.product_variant_id || null,
+        substitution_policy: item.substitution_policy || "customer_approval_required",
+        daily_availability_status: dailyStatus,
         qty: requestedQty,
         price: requiresQuote ? null : price,
         displayed_price_at_order: requiresQuote ? null : price,

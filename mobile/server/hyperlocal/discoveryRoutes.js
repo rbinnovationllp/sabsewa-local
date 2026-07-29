@@ -64,6 +64,17 @@ function vendorCard({ vendor, terminal, items, distanceM }) {
     available_products: items.slice(0, 6).map((item) => ({
       id: item.id,
       item_name: item.item_name,
+      generic_product_name: item.generic_product_name || item.item_name,
+      brand_name: item.brand_name || null,
+      manufacturer: item.manufacturer || null,
+      variant_name: item.variant_name || null,
+      pack_size: item.pack_size || null,
+      pack_unit: item.pack_unit || item.price_unit_label || item.unit || null,
+      mrp: item.mrp == null ? null : Number(item.mrp),
+      barcode: item.barcode || item.ean || item.sku || null,
+      stock_status: item.stock_status || "in_stock",
+      daily_availability_status: item.daily_availability_status || "available",
+      expected_restock_at: item.expected_restock_at || null,
       price: item.price_display_mode === "show_price" ? Number(item.price || 0) : null,
       price_display_mode: item.price_display_mode || "show_price",
       price_label: item.price_display_mode === "hide_price"
@@ -115,11 +126,12 @@ router.get("/vendors", async (req, res) => {
         .eq("status", "active"),
       supabase
         .from("vendor_items")
-        .select("id, vendor_id, terminal_id, item_name, item_pic, price, price_display_mode, price_unit_label, unit, is_available, available_today, stock_status")
+        .select("id, vendor_id, terminal_id, item_name, item_pic, price, price_display_mode, price_unit_label, unit, is_available, available_today, stock_status, daily_availability_status, expected_restock_at, generic_product_name, brand_name, manufacturer, variant_name, pack_size, pack_unit, mrp, barcode, sku, ean")
         .in("vendor_id", vendorIds)
         .eq("is_available", true)
         .eq("available_today", true)
-        .neq("stock_status", "out_of_stock"),
+        .neq("stock_status", "out_of_stock")
+        .not("daily_availability_status", "in", "(temporarily_unavailable,out_of_stock)"),
     ]);
 
     if (terminalError) throw terminalError;
@@ -185,6 +197,7 @@ router.post("/unserved-area-leads", async (req, res) => {
       lng,
       consent_given,
       requested_button,
+      requested_items,
     } = req.body;
 
     if (!category) {
@@ -216,6 +229,10 @@ router.post("/unserved-area-leads", async (req, res) => {
           customer_count: Number(existing.customer_count || 1) + 1,
           last_requested_at: new Date().toISOString(),
           requested_buttons: [...buttons, requested_button || "notify_me"],
+          metadata: {
+            ...(existing.metadata || {}),
+            latest_requested_items: requested_items || null,
+          },
           updated_at: new Date().toISOString(),
         })
         .eq("id", existing.id)
@@ -241,6 +258,7 @@ router.post("/unserved-area-leads", async (req, res) => {
         requested_buttons: [requested_button || "notify_me"],
         metadata: {
           privacy_note: "Exact address intentionally not stored for vendor recruitment.",
+          requested_items: requested_items || null,
         },
       })
       .select()

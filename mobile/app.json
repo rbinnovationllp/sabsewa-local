@@ -27,10 +27,11 @@
         "backgroundColor": "#ffffff"
       },
       "permissions": [
-        "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION",
-        "CAMERA",
-        "READ_MEDIA_IMAGES"
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.CAMERA",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.RECORD_AUDIO"
       ]
     },
     "plugins": [
@@ -58,7 +59,11 @@
       "typedRoutes": true
     },
     "extra": {
-      "EXPO_PUBLIC_BACKEND_URL": "https://api.sabsewa.in"
+      "EXPO_PUBLIC_BACKEND_URL": "https://api.sabsewa.in",
+      "router": {},
+      "eas": {
+        "projectId": "28211f60-a3c4-46b6-b712-04428dd195a0"
+      }
     }
   }
 }

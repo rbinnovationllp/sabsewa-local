@@ -1,6 +1,6 @@
 # SabSewa Local Project Status
 
-Updated: 2026-07-29
+Updated: 2026-07-30
 
 Scope: `C:\Users\HP\SabSewa-Local`
 
@@ -50,6 +50,26 @@ Do not rerun `RUN_ALL_MIGRATIONS_FOR_SABSEWA_LOCAL.sql` on the current database 
 Use `RUN_ALL_MIGRATIONS_FOR_SABSEWA_LOCAL.sql` only on a blank/fresh Supabase project.
 
 ## Completed In This Pass
+
+- Added functional multilingual-support foundation using the supplied Gemini Flash instruction:
+  - Homepage and core entry-point strings now use translation keys instead of hardcoded screen text.
+  - Reviewed bundled strings are stored in structured locale files:
+    - `mobile/locales/en/common.ts`
+    - `mobile/locales/hi/common.ts`
+  - `mobile/providers/LanguageProvider.tsx` now restores the selected language from secure device storage on mobile and local storage on web, updates the web document language, and falls back to English for missing keys.
+  - `mobile/components/LanguageSelector.tsx` now enables only quality-tested languages and disables incomplete languages with a visible `Coming Soon` label.
+  - English and Hindi are currently functional; the remaining Eighth Schedule languages remain listed but disabled until reviewed translations or validated language packs are available.
+  - `mobile/lib/translate.ts` now calls the backend dynamic translation endpoint instead of returning placeholder text.
+  - Backend Gemini translation model is configurable through `GEMINI_TRANSLATION_MODEL`.
+  - Added backend route `POST /api/gemini/translation/dynamic` in `mobile/server/gemini/geminiRoutes.js` for Gemini Flash dynamic translation of marketplace text only.
+  - Dynamic translation route normalises and hashes text, redacts phone/PIN/email/payment-like sensitive content, checks cache first, validates protected commerce values, records usage telemetry and writes privacy-safe Gemini audit evidence.
+  - Added Supabase migration and SQL runner for translation cache and usage reporting:
+    - `supabase/migrations/202607300001_gemini_translation_cache_usage.sql`
+    - `supabase/RUN_ONLY_GEMINI_TRANSLATION_CACHE_USAGE.sql`
+  - Added backend `.env.example` keys for Gemini translation model, version, input/output limits and estimated INR cost.
+  - Verified with `npx.cmd tsc --noEmit --pretty false`.
+  - Verified backend syntax with `node --check gemini\geminiRoutes.js`, `node --check gemini\geminiClient.js` and `node --check index.js`.
+  - Not yet complete: full translated coverage for every customer/vendor/rider/company screen, downloadable language packs, Company CRM translation-cost dashboard, Supabase live migration run and live Gemini translation call evidence.
 
 - Removed customer-facing raw Vendor ID and Terminal ID entry from Gemini Conversational Ordering:
   - Updated `mobile/app/customer/GeminiOrder.tsx` to require customer-friendly shop discovery and selection before creating a Gemini cart draft.
@@ -355,6 +375,14 @@ Passed:
 - Test vendor dispute creation and admin reversal approval.
 - Test six-month recovery route with archived sample records.
 - Verify generated public Vendor IDs and terminal IDs after running migration `202607260009_location_based_vendor_ids.sql`.
+- Run and verify `supabase/RUN_ONLY_GEMINI_TRANSLATION_CACHE_USAGE.sql` in the SabSewa Local Supabase project.
+- Add Gemini translation environment variables to the EC2 backend `.env`, then restart PM2 with `--update-env`.
+- Test `POST /api/gemini/translation/dynamic` through `https://api.sabsewa.in` with redacted dynamic text and confirm rows appear in `gemini_translation_cache`, `gemini_translation_usage` and `gemini_agent_logs`.
+- Build and upload the refreshed Hostinger web bundle so the homepage language selector changes are visible at `https://www.sabsewa.in`.
+- Rebuild Android after the latest changes so the installed APK receives the corrected multilingual and Android startup configuration.
+- Expand reviewed bundled translations beyond the homepage before marking Hindi or any other language complete across the whole product.
+- Implement downloadable language-pack validation, checksum checking and removal controls before enabling more languages.
+- Add the Company CRM Gemini translation usage dashboard and budget alerts before production launch.
 - Verify customer discovery after running migration `202607260010_customer_discovery_unserved_area_leads.sql`.
 - Verify vendor-controlled pricing after running migration `202607270001_vendor_controlled_product_pricing.sql`.
 - Run and verify `RUN_ONLY_BRAND_VARIANT_VENDOR_LISTING_WORKFLOW.sql`.

@@ -20,7 +20,8 @@ SabSewa Local uses Gemini as the AI operating layer for small local vendors:
 
 1. **Multimodal vendor inventory capture:** Gemini reads shelf photos, invoices and handwritten product lists, then returns structured catalogue drafts for vendor review.
 2. **Multilingual customer ordering:** Gemini parses English, Hindi, Hinglish and local-language order requests into structured carts.
-3. **Human-in-the-loop audit logging:** Gemini outputs are validated by the app workflow and logged in Supabase `gemini_agent_logs` for transparency and submission evidence.
+3. **Gemini Flash dynamic translation:** Dynamic vendor/customer text is translated only through the secure backend with privacy redaction, cache reuse and cost telemetry.
+4. **Human-in-the-loop audit logging:** Gemini outputs are validated by the app workflow and logged in Supabase `gemini_agent_logs` for transparency and submission evidence.
 
 ## Hackathon Positioning
 
@@ -62,6 +63,12 @@ For final AI handover, use [`docs/GEMINI_HANDOVER_PROMPT.md`](docs/GEMINI_HANDOV
 - Secure image and document storage
 - Razorpay integration for Rs 5,500 first vendor activation and Rs 5,000 later wallet top-ups
 - Gemini-powered product and ordering assistance
+
+## Multilingual Support
+
+English is the default offline fallback. Hindi is enabled as the first reviewed bundled language for the homepage and core discovery entry points. Other Eighth Schedule Indian languages are listed as phased languages and shown as `Coming Soon` until reviewed translations or validated downloadable language packs are available.
+
+Dynamic marketplace text such as customer notes, vendor responses, product descriptions and support messages is routed to Gemini Flash through the backend only. Gemini API keys are never included in the mobile app, Android build or browser bundle.
 
 ## Project Structure
 

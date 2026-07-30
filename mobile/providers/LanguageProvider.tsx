@@ -1,48 +1,86 @@
-import React, { createContext, useContext, useMemo, useState } from "react";
-import { DEFAULT_LANGUAGE, type SabSewaLanguageCode } from "@/constants/languages";
+import * as SecureStore from "expo-secure-store";
+import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { Platform } from "react-native";
+import {
+  DEFAULT_LANGUAGE,
+  FUNCTIONAL_LANGUAGES,
+  type SabSewaLanguageCode,
+} from "@/constants/languages";
+import { enCommon, type CommonTranslationKey } from "@/locales/en/common";
+import { hiCommon } from "@/locales/hi/common";
 
 type LanguageContextType = {
   language: SabSewaLanguageCode;
   setLanguage: (language: SabSewaLanguageCode) => void;
-  t: (text: string, replacements?: Record<string, string | number>) => string;
+  isLanguageAvailable: (language: SabSewaLanguageCode) => boolean;
+  t: (key: CommonTranslationKey | string, replacements?: Record<string, string | number>) => string;
 };
 
+const STORAGE_KEY = "sabsewa_local_language";
 const LanguageContext = createContext<LanguageContextType | null>(null);
 
+const BUNDLED_TRANSLATIONS: Partial<Record<SabSewaLanguageCode, Record<string, string>>> = {
+  en: enCommon,
+  hi: hiCommon,
+};
+
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
-  const [language, setLanguage] = useState<SabSewaLanguageCode>(DEFAULT_LANGUAGE);
+  const [language, setLanguageState] = useState<SabSewaLanguageCode>(DEFAULT_LANGUAGE);
+
+  useEffect(() => {
+    restoreLanguage();
+  }, []);
+
+  useEffect(() => {
+    if (Platform.OS === "web" && typeof document !== "undefined") {
+      document.documentElement.lang = language;
+      document.documentElement.dir = language === "ur" ? "rtl" : "ltr";
+    }
+  }, [language]);
+
+  async function restoreLanguage() {
+    try {
+      const saved =
+        Platform.OS === "web"
+          ? globalThis.localStorage?.getItem(STORAGE_KEY)
+          : await SecureStore.getItemAsync(STORAGE_KEY);
+      if (saved && FUNCTIONAL_LANGUAGES.includes(saved as SabSewaLanguageCode)) {
+        setLanguageState(saved as SabSewaLanguageCode);
+      }
+    } catch {
+      setLanguageState(DEFAULT_LANGUAGE);
+    }
+  }
+
+  function persistLanguage(nextLanguage: SabSewaLanguageCode) {
+    if (!FUNCTIONAL_LANGUAGES.includes(nextLanguage)) return;
+    setLanguageState(nextLanguage);
+    if (Platform.OS === "web") {
+      globalThis.localStorage?.setItem(STORAGE_KEY, nextLanguage);
+      return;
+    }
+    SecureStore.setItemAsync(STORAGE_KEY, nextLanguage).catch(() => {});
+  }
+
   const value = useMemo(
     () => ({
       language,
-      setLanguage,
-      t: (text: string, replacements?: Record<string, string | number>) => {
-        let translated = text;
-        if (language === "hi") {
-          translated = HI_TRANSLATIONS[text] || text;
-        }
-        Object.entries(replacements || {}).forEach(([key, value]) => {
-          translated = translated.replace(new RegExp(`{${key}}`, "g"), String(value));
+      setLanguage: persistLanguage,
+      isLanguageAvailable: (code: SabSewaLanguageCode) => FUNCTIONAL_LANGUAGES.includes(code),
+      t: (key: CommonTranslationKey | string, replacements?: Record<string, string | number>) => {
+        const dictionary = BUNDLED_TRANSLATIONS[language] || enCommon;
+        let translated = dictionary[key] || enCommon[key as CommonTranslationKey] || key;
+        Object.entries(replacements || {}).forEach(([name, value]) => {
+          translated = translated.replace(new RegExp(`{${name}}`, "g"), String(value));
         });
         return translated;
-      }
+      },
     }),
     [language]
   );
 
   return <LanguageContext.Provider value={value}>{children}</LanguageContext.Provider>;
 }
-
-const HI_TRANSLATIONS: Record<string, string> = {
-  "Language": "भाषा",
-  "Choose Language": "भाषा चुनें",
-  "English is the default language. More Indian languages will be quality-tested and released in phases.": "अंग्रेजी डिफ़ॉल्ट भाषा है। अन्य भारतीय भाषाएँ चरणों में जाँच के बाद जारी की जाएँगी।",
-  "Vendor Advance Balance": "विक्रेता अग्रिम शेष",
-  "Orders": "ऑर्डर",
-  "Exit & Refund": "बाहर निकलें और रिफंड",
-  "Customer": "ग्राहक",
-  "Vendor": "विक्रेता",
-  "Rider": "राइडर",
-};
 
 export function useLanguage() {
   const context = useContext(LanguageContext);

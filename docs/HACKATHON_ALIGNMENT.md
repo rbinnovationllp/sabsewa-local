@@ -39,6 +39,7 @@ Gemini must operate meaningful live workflows, not only a help chatbot. The mini
 - Product-name, unit and quantity normalisation across Indian languages.
 - Vendor fulfilment support for unavailable, substituted or partially accepted items.
 - Customer-friendly shortage, rejection and substitution messages.
+- Privacy-redacted Gemini Flash dynamic translation for vendor/customer messages and regional marketplace terms.
 - Unserved-locality and category demand analysis for vendor recruitment.
 - AI-assisted vendor onboarding and catalogue creation.
 
@@ -65,6 +66,7 @@ Every production Gemini workflow should create an audit record containing:
 - Human approval, rejection or override.
 - Processing time.
 - Error status, if any.
+- Translation cache hit/miss, estimated cost and validation result for dynamic translation workflows.
 
 Do not send or store passwords, complete customer addresses, full phone numbers, payment credentials or unnecessary personal data in Gemini prompts or logs.
 

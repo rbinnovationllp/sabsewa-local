@@ -13,6 +13,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/AuthProvider";
 import { apiUrl } from "@/lib/backend";
+import { useLanguage } from "@/providers/LanguageProvider";
 
 type VendorItem = {
   id: string;
@@ -45,6 +46,7 @@ export default function SabSewaLocalCartScreen() {
   const params: any = useLocalSearchParams();
   const router = useRouter();
   const { user } = useAuth();
+  const { t } = useLanguage();
 
   const vendorId = String(params.vendor || "");
   const terminalId = String(params.terminal || "");
@@ -56,16 +58,39 @@ export default function SabSewaLocalCartScreen() {
   const [loading, setLoading] = useState(true);
   const [placing, setPlacing] = useState(false);
   const [notice, setNotice] = useState("");
+  const [deliverySettings, setDeliverySettings] = useState<any>(null);
 
   const total = useMemo(
     () => lines.reduce((sum, line) => sum + (line.price_quote_required ? 0 : line.total), 0),
     [lines]
   );
   const hasQuoteItems = lines.some((line) => line.price_quote_required);
+  const freeDeliveryMin = Number(deliverySettings?.free_delivery_min_order ?? 0);
+  const deliveryFee = deliverySettings?.delivery_available === false
+    ? 0
+    : total >= freeDeliveryMin
+      ? 0
+      : Number(deliverySettings?.delivery_fee_below_min ?? 0);
+  const amountForFreeDelivery = Math.max(0, freeDeliveryMin - total);
+  const totalPayable = total + deliveryFee;
+  const deliveryWindow = deliverySettings
+    ? `${deliverySettings.estimated_delivery_min_minutes ?? 30}-${deliverySettings.estimated_delivery_max_minutes ?? 60} minutes`
+    : "Vendor estimate pending";
 
   useEffect(() => {
     loadCartItems();
+    loadDeliverySettings();
   }, [rawCartData]);
+
+  async function loadDeliverySettings() {
+    if (!terminalId) return;
+    const { data } = await supabase
+      .from("vendor_terminals")
+      .select("free_delivery_min_order, delivery_fee_below_min, estimated_delivery_min_minutes, estimated_delivery_max_minutes, delivery_available, pickup_available, delivery_provider_type")
+      .eq("id", terminalId)
+      .maybeSingle();
+    setDeliverySettings(data || null);
+  }
 
   async function loadCartItems() {
     setLoading(true);
@@ -182,6 +207,10 @@ export default function SabSewaLocalCartScreen() {
         customer_address: address.trim(),
         customer_phone: phone.trim(),
         payment_method: paymentMethod,
+        delivery_charge: deliveryFee,
+        free_delivery_min_order: freeDeliveryMin,
+        estimated_delivery_window: deliveryWindow,
+        delivery_provider_type: deliverySettings?.delivery_provider_type || "vendor",
       };
 
       const response = await fetch(apiUrl("/api/order/place"), {
@@ -276,6 +305,36 @@ export default function SabSewaLocalCartScreen() {
       <View style={styles.summary}>
         <Text style={styles.summaryLabel}>Order Total</Text>
         <Text style={styles.summaryTotal}>{hasQuoteItems ? `Known: Rs ${total.toFixed(2)}` : `Rs ${total.toFixed(2)}`}</Text>
+      </View>
+      <View style={styles.deliveryBox}>
+        <View style={styles.deliveryRow}>
+          <Text style={styles.deliveryLabel}>{t("delivery.itemSubtotal")}</Text>
+          <Text style={styles.deliveryValue}>Rs {total.toFixed(2)}</Text>
+        </View>
+        <View style={styles.deliveryRow}>
+          <Text style={styles.deliveryLabel}>{t("delivery.charge")}</Text>
+          <Text style={styles.deliveryValue}>Rs {deliveryFee.toFixed(2)}</Text>
+        </View>
+        <View style={styles.deliveryRow}>
+          <Text style={styles.deliveryLabel}>{t("delivery.freeThreshold")}</Text>
+          <Text style={styles.deliveryValue}>Rs {freeDeliveryMin.toFixed(2)}</Text>
+        </View>
+        {amountForFreeDelivery > 0 ? (
+          <Text style={styles.freeHint}>{t("delivery.amountForFree", { amount: `Rs ${amountForFreeDelivery.toFixed(2)}` })}</Text>
+        ) : null}
+        <View style={styles.deliveryRow}>
+          <Text style={styles.deliveryLabel}>{t("delivery.estimatedWindow")}</Text>
+          <Text style={styles.deliveryValue}>{deliveryWindow}</Text>
+        </View>
+        <View style={styles.deliveryRow}>
+          <Text style={styles.deliveryLabel}>{t("delivery.provider")}</Text>
+          <Text style={styles.deliveryValue}>{deliverySettings?.delivery_provider_type === "authorised_provider" ? "Authorised provider" : t("delivery.vendorProvider")}</Text>
+        </View>
+        <View style={styles.deliveryRow}>
+          <Text style={styles.deliveryLabel}>{t("delivery.totalPayable")}</Text>
+          <Text style={styles.deliveryTotal}>Rs {totalPayable.toFixed(2)}</Text>
+        </View>
+        <Text style={styles.safetyText}>{t("delivery.safetyStatement")}</Text>
       </View>
       {hasQuoteItems ? (
         <Text style={styles.quoteNote}>
@@ -423,6 +482,13 @@ const styles = StyleSheet.create({
   },
   creditNote: { color: "#555", fontSize: 12, marginTop: 10, lineHeight: 18 },
   quoteNote: { color: "#9a3412", fontSize: 12, marginBottom: 16, lineHeight: 18 },
+  deliveryBox: { borderWidth: 1, borderColor: "#bfdbfe", backgroundColor: "#eff6ff", borderRadius: 10, padding: 12, marginBottom: 16 },
+  deliveryRow: { flexDirection: "row", justifyContent: "space-between", gap: 12, marginBottom: 7 },
+  deliveryLabel: { color: "#1e3a8a", fontWeight: "800", flex: 1 },
+  deliveryValue: { color: "#111827", fontWeight: "700", textAlign: "right" },
+  deliveryTotal: { color: "#0f766e", fontWeight: "900", textAlign: "right" },
+  freeHint: { color: "#1d4ed8", fontWeight: "800", marginBottom: 7 },
+  safetyText: { color: "#7c2d12", backgroundColor: "#fff7ed", borderRadius: 8, padding: 10, lineHeight: 18, fontSize: 12, marginTop: 6 },
   disabled: { opacity: 0.55 },
   placeText: { color: "#fff", fontWeight: "900", fontSize: 16 },
 });

@@ -1,6 +1,6 @@
 # SabSewa Local Project Status
 
-Updated: 2026-07-30
+Updated: 2026-07-31
 
 Scope: `C:\Users\HP\SabSewa-Local`
 
@@ -22,6 +22,16 @@ Gemini handover instructions have been prepared in:
 
 `C:\Users\HP\SabSewa-Local\docs\GEMINI_HANDOVER_PROMPT.md`
 
+Deadline gap and readiness report:
+
+`C:\Users\HP\SabSewa-Local\docs\DEADLINE_GAP_AND_READINESS_REPORT_2026-07-31.md`
+
+Official rule check completed on 2026-07-31:
+
+- Build with Gemini XPRIZE submission deadline is August 17, 2026 at 1:00 PM PDT.
+- Submissions require repository access, text description, under-three-minute demo video, product-running evidence, Gemini/API usage evidence, user evidence, revenue/expense evidence and required disclosures.
+- If the Google Play developer account is a new personal account created after November 13, 2023, Google requires closed testing with at least 12 opted-in testers for 14 continuous days before applying for production access. The owner must confirm the exact Play Console requirement shown for this account.
+
 Confirmed project direction:
 
 - AWS S3 may remain the file and image storage layer.
@@ -38,6 +48,154 @@ Current compliance status:
 - Hostinger web export command is configured through `mobile/package.json` as `npm run export:web:hostinger`; it exports Expo Web and copies `.htaccess` into `mobile/dist`.
 - Still requires live proof: Gemini API key configuration, real Gemini calls, usage dashboard screenshots, redacted logs and a recorded demo showing live AI outputs.
 - Eligibility risk: the older combined SabSewa project must be disclosed as prototype/reference work. The standalone SabSewa Local business and repository must be presented honestly as hackathon-period work where applicable.
+
+## Deadline-Focused Production Readiness Classification
+
+Current go/no-go recommendation: **not ready for unrestricted production launch today**.
+
+Recommended path before August 17, 2026: **controlled Bengaluru pilot through the PWA after P0 checks pass, with Android internal/closed testing running in parallel**.
+
+## Society Pilot Launch Direction
+
+The owner has decided to launch first as a production-oriented mobile-friendly web/PWA pilot inside the owner's housing society, initially onboarding:
+
+- One local vegetable and fruit vendor.
+- One local kirana/general-store vendor.
+
+Pilot objective:
+
+- Allow consenting residents to order groceries, vegetables, fruits and essentials from verified nearby shops.
+- Use real vendors, real customers, real orders and truthful revenue/usage records only.
+- Use the PWA at `https://www.sabsewa.in` as the primary launch surface while Android Play testing continues.
+
+Pilot operations documents added:
+
+- `C:\Users\HP\SabSewa-Local\docs\SOCIETY_PILOT_LAUNCH_RUNBOOK.md`
+- `C:\Users\HP\SabSewa-Local\docs\PILOT_FEEDBACK_FORM.md`
+- `C:\Users\HP\SabSewa-Local\docs\PILOT_DAILY_MONITORING_REPORT.md`
+- `C:\Users\HP\SabSewa-Local\docs\PILOT_REVENUE_AND_ORDER_LOG_TEMPLATE.csv`
+
+Pilot go/no-go rule:
+
+- Do not invite residents or accept real vendor money until live Supabase migrations, RLS, registration, vendor activation, Razorpay, order placement, Rs 15 deduction, customer-detail protection, Gemini logs, S3 upload and PWA installability have been verified with evidence.
+
+Market launch recommendation:
+
+- Start only with a controlled society pilot after P0 checks pass.
+- Do not expand to another society until at least 20 successful pilot orders complete without P0 privacy, payment, wallet or order-flow defects.
+
+Fully implemented and locally verified:
+
+- TypeScript compile checks for the mobile/web codebase.
+- Backend syntax checks for changed order, delivery-settings and server entry files.
+- Hostinger web export with `.htaccess`, PWA manifest, service worker, offline shell and icons.
+- Static `mobile/dist` scan for server-only secret names and localhost backend URL.
+- Localization foundation smoke test for English, Hindi and Kannada.
+
+Implemented but not end-to-end production verified:
+
+- Customer OTP registration and profile/address/policy persistence.
+- Vendor registration, verification and terminal activation.
+- Razorpay vendor activation/top-up order creation and signature verification.
+- Rs 15 vendor-wallet deduction on valid vendor acceptance.
+- Customer information lock before vendor acceptance.
+- Customer discovery within 500 metres expanding to 1 kilometre.
+- Vendor catalogue, brand/variant and daily availability flows.
+- Full/partial order acceptance and quote approval.
+- Wallet dispute evidence and admin reversal workflow.
+- AWS S3 upload limits, private access and quota accounting.
+- Gemini live inventory, ordering, smart rejection/support and translation usage.
+- PWA installation on Android/iOS/desktop browsers after Hostinger upload.
+- Android APK/AAB real-device testing after the latest code changes.
+
+Partially implemented:
+
+- Hindi and Kannada coverage exists for the foundation/core strings, but not every customer, vendor, rider, company CRM, wallet and legal sentence is legally reviewed in all three languages.
+- Web persistent login avoids server-only keys but does not yet use a backend HttpOnly-cookie auth proxy; production web auth should be hardened before broad release.
+- Monitoring, backup, incident response and recovery runbooks exist only partially through documentation and migration structure.
+
+Blocked by owner/external services:
+
+- Supabase SQL execution and live RLS verification.
+- Razorpay test/live merchant credentials and webhook configuration.
+- AWS IAM/S3 credential policy verification.
+- Gemini API key, billing and usage evidence.
+- Google Play Console account-specific testing requirement, Data Safety form and closed-test timeline.
+- Legal/accounting review for Terms, GST treatment, refunds, retention and vendor agreements.
+- Real pilot vendor/customer consent, revenue and testimonial evidence.
+
+Critical P0 target completion before pilot revenue:
+
+- Apply live Supabase migrations and capture success evidence.
+- Verify RLS with separate customer, vendor, rider and admin accounts.
+- Verify customer registration, vendor onboarding, Razorpay activation payment, order placement, vendor acceptance, Rs 15 deduction, detail unlock and order completion with real test accounts.
+- Verify Gemini API calls write `gemini_agent_logs`.
+- Verify S3 image upload controls.
+- Upload refreshed PWA to Hostinger and test deep links/installability.
+
+Business impact if not completed:
+
+- Taking real money before payment, wallet and RLS verification creates financial, privacy and legal risk.
+- Submitting without Gemini logs, user evidence, revenue/expense evidence and demo video weakens or may fail hackathon evaluation.
+- Delaying Play closed testing may prevent public Play Store launch before the hackathon deadline, so PWA must be the practical public access route.
+
+## 2026-07-31 Bengaluru Language, Registration, PWA And Delivery-Safety Update
+
+Implemented in this pass:
+
+- Enabled Bengaluru launch languages as functional languages: English, Hindi and Kannada.
+- Added Kannada bundled translations and wired `knCommon` into the language provider.
+- Added registration and delivery-safety translation keys across English, Hindi and Kannada.
+- Fixed customer registration completion flow so the app does not show success until profile, policy acceptance and customer address persistence are attempted and checked after OTP verification.
+- Added duplicate-submission protection to the registration screen.
+- Added delivery settings route and vendor screen for free-delivery threshold, delivery charge, service radius, delivery window, delivery availability and pickup availability.
+- Added cart/order delivery snapshots for delivery charge, free-delivery threshold, delivery provider and estimated delivery window.
+- Added delivery estimate and safety messaging to checkout and customer tracking.
+- Added PWA export support: `manifest.webmanifest`, service worker, offline shell and PWA icons are generated into `mobile/dist` by `mobile/scripts/copy-hostinger-htaccess.js`.
+- Replaced the remaining customer-facing `Gemini Conversational Ordering` title in the legacy screen with `Place Your Order`.
+- Updated Terms, Customer Terms and Vendor Terms with delivery-estimate, delivery-charge and delivery-safety clauses.
+- Updated Terms and Vendor Terms to state that once a vendor formally accepts an order and the Rs 15 platform facilitation fee is deducted, the company will not refund, reverse or adjust the Rs 15 merely because the vendor later claims cancellation, non-completion, private settlement or outside-platform handling. Corrections remain possible only for company-confirmed duplicate deduction, technical error, unauthorised transaction or legal requirement.
+
+Database migration added:
+
+- `C:\Users\HP\SabSewa-Local\supabase\migrations\202607310001_bengaluru_languages_registration_delivery_pwa.sql`
+- SQL Editor runner: `C:\Users\HP\SabSewa-Local\supabase\RUN_ONLY_BENGALURU_LANGUAGES_REGISTRATION_DELIVERY_PWA.sql`
+
+RLS policies added/amended:
+
+- New `vendor_delivery_settings_audit` table has RLS enabled.
+- Vendors can read their own terminal delivery-settings audit records.
+- Company admins can read delivery-settings audit records.
+
+Root cause found for customer-profile saving failure:
+
+- Customer registration sent OTP first and relied on auth metadata, while customer profile/address/policy rows were only created later during OTP verification.
+- The OTP completion flow did not strictly fail when profile, address or policy persistence failed, so the user could see an apparent registration flow without reliable database evidence.
+- The updated OTP completion flow now checks these Supabase write results and reports a localized retryable error instead of silently continuing.
+
+Session-storage method:
+
+- Mobile uses Supabase refresh sessions with secure device storage via the existing secure session storage adapter, backed by operating-system secure storage where available.
+- Static web currently avoids server-only keys but does not yet provide a full HttpOnly-cookie auth proxy. For final production web security, implement backend-managed HttpOnly, Secure, SameSite session cookies or a Supabase-supported SSR/auth helper layer before declaring web persistent login fully complete.
+
+PWA installation status:
+
+- Source-side PWA manifest/service-worker/offline-shell generation is implemented.
+- The latest web export must be rebuilt and uploaded to Hostinger `public_html` before `https://www.sabsewa.in` can be verified as installable.
+
+Local tests added:
+
+- `mobile/scripts/verify-multilingual-foundation.mjs`
+- `mobile/package.json` script: `npm run test:localization`
+
+Still not verified end-to-end:
+
+- The new SQL runner must be executed in the live SabSewa Local Supabase project.
+- Customer registration must be tested with a real OTP/customer account after the SQL migration is applied.
+- Vendor delivery settings must be tested with a real vendor/terminal and verified in `vendor_delivery_settings_audit`.
+- Checkout and tracking delivery snapshots must be verified against live order rows.
+- PWA installability must be checked in Chrome/Android and Safari/iOS after uploading the refreshed `mobile/dist`.
+- Full Terms in Hindi and Kannada still require legal-language review by a qualified Indian lawyer before production reliance.
 
 ## Important Supabase Note
 

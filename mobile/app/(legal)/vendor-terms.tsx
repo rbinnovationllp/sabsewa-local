@@ -21,6 +21,14 @@ export default function VendorTermsScreen() {
           body: "SabSewa Local deducts Rs 15 as a platform facilitation fee for each successfully accepted and confirmed real-world order. The deduction is linked to the order ID, acceptance event, timestamp and wallet balance before and after deduction, and is shown in the vendor wallet history and downloadable statements.",
         },
         {
+          title: "No reversal after vendor acceptance",
+          body: "Once the vendor formally accepts an order through SabSewa Local and the Rs 15 platform facilitation fee is deducted, the company will not refund, reverse or adjust this Rs 15 charge merely because the vendor later claims that the order was cancelled, not completed, settled privately or handled outside the platform. Reversal may be considered only for a company-confirmed duplicate deduction, technical error, unauthorised transaction or any correction required by applicable law.",
+        },
+        {
+          title: "Delivery estimates and safe fulfilment",
+          body: "Vendors must provide reasonable estimated delivery windows and may configure delivery charge, free-delivery threshold, service radius, delivery availability and pickup availability for each terminal. SabSewa Local does not permit guaranteed ultra-fast countdown promises, speed pressure or unsafe delivery practices. Vendors and delivery personnel must follow traffic laws and safe working practices.",
+        },
+        {
           title: "Customer data protection",
           body: "Customer phone number, complete address and invoice details remain hidden before formal order acceptance. After acceptance, the vendor may use customer information only for fulfilment, complaint resolution and lawful business purposes connected with that order.",
         },

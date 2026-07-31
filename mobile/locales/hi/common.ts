@@ -1,4 +1,4 @@
-import type { CommonTranslationKey } from "../en/common";
+﻿import type { CommonTranslationKey } from "../en/common";
 
 export const hiCommon: Record<CommonTranslationKey, string> = {
   "language.choose": "\u092d\u093e\u0937\u093e \u091a\u0941\u0928\u0947\u0902",
@@ -45,4 +45,36 @@ export const hiCommon: Record<CommonTranslationKey, string> = {
   "wallet.vendorAdvanceBalance": "\u0935\u093f\u0915\u094d\u0930\u0947\u0924\u093e \u0905\u0917\u094d\u0930\u093f\u092e \u092c\u0948\u0932\u0947\u0902\u0938",
   "orders.title": "\u0911\u0930\u094d\u0921\u0930",
   "refund.exit": "\u092c\u093e\u0939\u0930 \u0928\u093f\u0915\u0932\u0947\u0902 \u0914\u0930 \u0930\u093f\u092b\u0902\u0921",
+  "auth.registerTitle": "{role} ke roop mein panjikaran",
+  "auth.registerSubtitle": "Khata banane ke liye vivaran bharein",
+  "auth.fullName": "Pura naam",
+  "auth.enterFullName": "Apna pura naam darj karein",
+  "auth.mobileNumber": "Mobile number",
+  "auth.enterMobile": "10 ankon ka number darj karein",
+  "auth.city": "Shahar",
+  "auth.enterCity": "Apna shahar darj karein",
+  "auth.customerAddress": "Mukhya delivery pata",
+  "auth.shopAddress": "Dukaan ka pata",
+  "auth.useCurrentLocation": "Vartaman location ka upyog karein",
+  "auth.locationAdded": "Location jod di gayi",
+  "auth.acceptAndRegister": "Sweekar karein aur panjikaran karein",
+  "auth.registrationSuccessCustomer": "Badhai! Aap ab SabSewa Local customer ke roop mein registered hain. Aap apne ilake ki trusted shops se online shopping shuru kar sakte hain.",
+  "auth.registrationSaveFailed": "Profile save na hone ke karan registration poora nahi ho saka. Kripya phir koshish karein.",
+  "auth.retry": "Phir koshish karein",
+  "auth.errorFullName": "Apna pura naam darj karein",
+  "auth.errorMobile": "Valid 10-digit mobile number darj karein",
+  "auth.errorCity": "Apna shahar darj karein",
+  "auth.errorCustomerAddress": "Apna mukhya delivery address darj karein",
+  "auth.errorPolicies": "Registration se pehle Terms aur Privacy Notice acceptance tick karein.",
+  "delivery.itemSubtotal": "Item subtotal",
+  "delivery.charge": "Delivery charge",
+  "delivery.freeThreshold": "Free-delivery limit",
+  "delivery.amountForFree": "Free delivery ke liye {amount} aur jodein",
+  "delivery.estimatedWindow": "Estimated delivery window",
+  "delivery.totalPayable": "Total payable amount",
+  "delivery.provider": "Delivery provider",
+  "delivery.vendorProvider": "Vendor delivery",
+  "delivery.safetyStatement": "Dikhaya gaya delivery time vendor dwara diya gaya estimate hai, guaranteed deadline nahi. SabSewa Local unsafe ya unrealistic delivery commitments ko support nahi karta. Actual delivery time badal sakta hai, aur road safety hamesha speed se pehle hai.",
 };
+
+

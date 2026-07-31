@@ -37,11 +37,13 @@ Codex is used for project scaffolding, user-interface development, database stru
 
 AWS S3 is used only for secure file and image storage. This is acceptable under the supplied hackathon guidance because SabSewa Local still uses Gemini / Google Cloud for its required AI-operated business workflows.
 
-See [`docs/HACKATHON_ALIGNMENT.md`](docs/HACKATHON_ALIGNMENT.md) for the detailed eligibility checklist, evidence requirements, reused-code disclosure risk and demo acceptance criteria.
+See [`docs/HACKATHON_ALIGNMENT.md`](docs/HACKATHON_ALIGNMENT.md) and [`docs/DEADLINE_GAP_AND_READINESS_REPORT_2026-07-31.md`](docs/DEADLINE_GAP_AND_READINESS_REPORT_2026-07-31.md) for the detailed eligibility checklist, deadline gap report, evidence requirements, reused-code disclosure risk and demo acceptance criteria.
 
 Use [`docs/DEVPOST_SUBMISSION_CHECKLIST.md`](docs/DEVPOST_SUBMISSION_CHECKLIST.md) for the final upload, live Gemini evidence, demo video and Devpost steps.
 
 For final AI handover, use [`docs/GEMINI_HANDOVER_PROMPT.md`](docs/GEMINI_HANDOVER_PROMPT.md).
+
+For the first controlled housing-society pilot, use [`docs/SOCIETY_PILOT_LAUNCH_RUNBOOK.md`](docs/SOCIETY_PILOT_LAUNCH_RUNBOOK.md), [`docs/PILOT_FEEDBACK_FORM.md`](docs/PILOT_FEEDBACK_FORM.md), [`docs/PILOT_DAILY_MONITORING_REPORT.md`](docs/PILOT_DAILY_MONITORING_REPORT.md) and [`docs/PILOT_REVENUE_AND_ORDER_LOG_TEMPLATE.csv`](docs/PILOT_REVENUE_AND_ORDER_LOG_TEMPLATE.csv).
 
 ## Core Features
 
@@ -66,7 +68,7 @@ For final AI handover, use [`docs/GEMINI_HANDOVER_PROMPT.md`](docs/GEMINI_HANDOV
 
 ## Multilingual Support
 
-English is the default offline fallback. Hindi is enabled as the first reviewed bundled language for the homepage and core discovery entry points. Other Eighth Schedule Indian languages are listed as phased languages and shown as `Coming Soon` until reviewed translations or validated downloadable language packs are available.
+English is the default offline fallback. English, Hindi and Kannada are enabled as the Bengaluru launch-language foundation for core onboarding, registration, discovery and delivery-safety flows. Other Eighth Schedule Indian languages are listed as phased languages and shown as `Coming Soon` until reviewed translations or validated downloadable language packs are available.
 
 Dynamic marketplace text such as customer notes, vendor responses, product descriptions and support messages is routed to Gemini Flash through the backend only. Gemini API keys are never included in the mobile app, Android build or browser bundle.
 

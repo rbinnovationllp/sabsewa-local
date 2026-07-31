@@ -91,6 +91,12 @@ export default function VendorDashboard() {
       route: vendorLoaded ? `/vendor/Orders?vendor=${vendor.id}` : "",
     },
     {
+      title: "Delivery Settings",
+      description: "Set free-delivery threshold, delivery fee, service radius, pickup and estimated delivery window.",
+      color: "#0ea5e9",
+      route: vendorLoaded && terminals[0]?.id ? `/vendor/DeliverySettings?vendor=${vendor.id}&terminal=${terminals[0].id}` : "",
+    },
+    {
       title: "Exit & Refund",
       description: "Preview voluntary closure, refundable balance and final statement.",
       color: "#b91c1c",

@@ -1,4 +1,4 @@
-export const enCommon = {
+﻿export const enCommon = {
   "language.choose": "Choose Language",
   "language.note": "English and Hindi are available now. Other Indian languages will be quality-tested and released in phases.",
   "language.comingSoon": "Coming Soon",
@@ -43,6 +43,38 @@ export const enCommon = {
   "wallet.vendorAdvanceBalance": "Vendor Advance Balance",
   "orders.title": "Orders",
   "refund.exit": "Exit & Refund",
-} as const;
+  "auth.registerTitle": "Register as {role}",
+  "auth.registerSubtitle": "Fill the details to create account",
+  "auth.fullName": "Full Name",
+  "auth.enterFullName": "Enter your full name",
+  "auth.mobileNumber": "Mobile Number",
+  "auth.enterMobile": "Enter 10-digit number",
+  "auth.city": "City",
+  "auth.enterCity": "Enter your city",
+  "auth.customerAddress": "Primary Delivery Address",
+  "auth.shopAddress": "Shop Address",
+  "auth.useCurrentLocation": "Use Current Location",
+  "auth.locationAdded": "Location Added",
+  "auth.acceptAndRegister": "Accept and Register",
+  "auth.registrationSuccessCustomer": "Congratulations! You are now registered as a SabSewa Local customer. You can start shopping online from trusted shops in your locality.",
+  "auth.registrationSaveFailed": "Registration could not be completed because your profile was not saved. Please try again.",
+  "auth.retry": "Retry",
+  "auth.errorFullName": "Enter your full name",
+  "auth.errorMobile": "Enter a valid 10-digit mobile number",
+  "auth.errorCity": "Enter your city name",
+  "auth.errorCustomerAddress": "Enter your primary delivery address",
+  "auth.errorPolicies": "Please tick the Terms of Use and Privacy Notice acceptance before registration.",
+  "delivery.itemSubtotal": "Item subtotal",
+  "delivery.charge": "Delivery charge",
+  "delivery.freeThreshold": "Free-delivery threshold",
+  "delivery.amountForFree": "Add {amount} more to qualify for free delivery",
+  "delivery.estimatedWindow": "Estimated delivery window",
+  "delivery.totalPayable": "Total payable amount",
+  "delivery.provider": "Delivery provider",
+  "delivery.vendorProvider": "Vendor delivery",
+  "delivery.safetyStatement": "The delivery time shown is an estimate provided by the vendor and is not a guaranteed deadline. SabSewa Local does not support unsafe or unrealistic delivery commitments. Actual delivery time may vary, and road safety will always take priority over speed.",} as const;
 
 export type CommonTranslationKey = keyof typeof enCommon;
+
+
+

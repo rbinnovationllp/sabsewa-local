@@ -1,4 +1,4 @@
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from "react-native";
+﻿import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
@@ -47,35 +47,42 @@ export default function TerminalSelector() {
         style={[styles.actionBtn, { backgroundColor: "#007bff" }]}
         onPress={() => router.push(`/vendor/AddItem?terminal=${terminalId}&vendor=${terminal.vendor_id}`)}
       >
-        <Text style={styles.btnText}>📦 Add New Item</Text>
+        <Text style={styles.btnText}>ðŸ“¦ Add New Item</Text>
       </TouchableOpacity>
 
       <TouchableOpacity
         style={[styles.actionBtn, { backgroundColor: "#28a745" }]}
         onPress={() => router.push(`/vendor/EditItem?terminal=${terminalId}&vendor=${terminal.vendor_id}`)}
       >
-        <Text style={styles.btnText}>✏️ Manage Items & Prices</Text>
+        <Text style={styles.btnText}>âœï¸ Manage Items & Prices</Text>
       </TouchableOpacity>
 
       <TouchableOpacity
         style={[styles.actionBtn, { backgroundColor: "#ff8800" }]}
         onPress={() => router.push(`/vendor/CreditList?terminal=${terminalId}&vendor=${terminal.vendor_id}`)}
       >
-        <Text style={styles.btnText}>💳 Customer Credits</Text>
+        <Text style={styles.btnText}>ðŸ’³ Customer Credits</Text>
       </TouchableOpacity>
 
       <TouchableOpacity
         style={[styles.actionBtn, { backgroundColor: "#6f42c1" }]}
         onPress={() => router.push(`/vendor/Orders?terminal=${terminalId}&vendor=${terminal.vendor_id}`)}
       >
-        <Text style={styles.btnText}>📜 Order Settlements</Text>
+        <Text style={styles.btnText}>ðŸ“œ Order Settlements</Text>
       </TouchableOpacity>
 
       <TouchableOpacity
         style={[styles.actionBtn, { backgroundColor: "#e63946" }]}
         onPress={() => router.push(`/vendor/TodayAvailability?terminal=${terminalId}&vendor=${terminal.vendor_id}` as any)}
       >
-        <Text style={styles.btnText}>📊 Update Stock</Text>
+        <Text style={styles.btnText}>ðŸ“Š Update Stock</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={[styles.actionBtn, { backgroundColor: "#0ea5e9" }]}
+        onPress={() => router.push(`/vendor/DeliverySettings?terminal=${terminalId}&vendor=${terminal.vendor_id}` as any)}
+      >
+        <Text style={styles.btnText}>Delivery Settings</Text>
       </TouchableOpacity>
     </ScrollView>
   );

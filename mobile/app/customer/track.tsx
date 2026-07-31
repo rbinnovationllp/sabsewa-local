@@ -5,11 +5,13 @@ import { useLocalSearchParams } from "expo-router";
 import CrossPlatformMap from "@/components/CrossPlatformMap";
 import { apiUrl } from "@/lib/backend";
 import { useAuth } from "@/providers/AuthProvider";
+import { useLanguage } from "@/providers/LanguageProvider";
 
 export default function CustomerTrackScreen() {
   const params: any = useLocalSearchParams();
   const orderId = params.order_id as string;
   const { user } = useAuth();
+  const { t } = useLanguage();
 
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -64,6 +66,11 @@ export default function CustomerTrackScreen() {
   const { assignment, order } = data;
   const riderLat = assignment.rider_lat;
   const riderLng = assignment.rider_lng;
+  const estimatedWindow = order.estimated_delivery_window || "Vendor estimate pending";
+  const deliveryProvider =
+    order.delivery_provider_type === "authorised_provider"
+      ? "Authorised delivery provider"
+      : "Vendor delivery";
 
   return (
     <View style={{ flex: 1 }}>
@@ -72,6 +79,15 @@ export default function CustomerTrackScreen() {
           Status: {assignment.status?.toUpperCase()}
         </Text>
         <Text style={styles.subText}>{order.delivery_address}</Text>
+        <Text style={styles.deliveryLine}>
+          {t("delivery.estimatedWindow")}: {estimatedWindow}
+        </Text>
+        <Text style={styles.deliveryLine}>
+          {t("delivery.provider")}: {deliveryProvider}
+        </Text>
+        <Text style={styles.safetyText}>
+          {order.delivery_safety_notice || t("delivery.safetyStatement")}
+        </Text>
       </View>
 
       {order.price_quote_status === "pending_customer_approval" ? (
@@ -136,6 +152,8 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   subText: { color: "#d1d5db", marginTop: 4 },
+  deliveryLine: { color: "#e5e7eb", marginTop: 4, fontWeight: "700" },
+  safetyText: { color: "#bfdbfe", marginTop: 6, lineHeight: 18 },
   quotePanel: { padding: 12, backgroundColor: "#fff7ed", borderBottomWidth: 1, borderBottomColor: "#fed7aa" },
   quoteTitle: { fontWeight: "900", color: "#9a3412", marginBottom: 6 },
   quoteLine: { color: "#7c2d12", marginTop: 3 },

@@ -10,7 +10,8 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "export:web": "expo export --platform web",
-    "export:web:hostinger": "expo export --platform web && node ./scripts/copy-hostinger-htaccess.js"
+    "export:web:hostinger": "expo export --platform web && node ./scripts/copy-hostinger-htaccess.js",
+    "test:localization": "node ./scripts/verify-multilingual-foundation.mjs"
   },
   "dependencies": {
     "@expo/cli": "^54.0.19",

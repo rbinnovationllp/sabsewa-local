@@ -18,6 +18,17 @@ The hackathon-facing AI workflows must be powered by Gemini / Google Cloud:
 
 These Gemini workflows must be visible in the demo video and backed by logs, screenshots, or database audit records.
 
+## 2.1 Bengaluru Launch Language Scope
+
+SabSewa Local will launch first in Bengaluru, Karnataka with functional support for English, Hindi and Kannada.
+
+- English remains the fallback language.
+- Hindi and Kannada must use reviewed local translation files for essential customer, vendor, registration, cart, delivery, wallet and legal workflows.
+- Gemini Flash may assist only with permitted dynamic marketplace text that is not covered by local files.
+- Passwords, OTPs, payment data, phone numbers, precise addresses and other sensitive personal data must never be sent to Gemini for translation.
+- Registration, ordering, wallet top-up and payment flows must not depend on Gemini translation availability.
+- User language preference must be saved locally and, for registered users, in the user profile.
+
 ## 3. Target Users
 
 ### Customer
@@ -128,9 +139,18 @@ Required output format:
 ### 4.5.0 Registration And Trusted Device Login
 - Customer registration collects only necessary service data: name, OTP-verified mobile number, preferred language, delivery address, optional location coordinates and current Terms/Privacy acceptance.
 - Vendor registration collects owner/entity name, shop/trade name, category, shop address/geolocation, OTP-verified mobile number, KYC/business information placeholder, terms/privacy acceptance, verification status and activation/payment status.
+- Customer profile, primary address and Terms/Privacy acceptance must be persisted before the app displays a registration-success confirmation.
+- The customer success message must be localized: `Congratulations! You are now registered as a SabSewa Local customer. You can start shopping online from trusted shops in your locality.`
+- Registration submission must be idempotent and must prevent repeated taps from creating duplicate profiles, duplicate addresses or duplicate policy-acceptance records.
 - Do not implement literal permanent login. Use Supabase refresh sessions, secure device storage, server-side device-session records, logout and device revocation.
 - The login screen must offer `Trust this device`. A trusted-device record is created only after OTP verification and user confirmation.
 - New vendor device/terminal activation must require OTP verification, terminal ownership validation, active/verified vendor status, device limits and audit logging.
+
+### 4.5.0A Installable Web/PWA Requirements
+- The responsive web application at `https://www.sabsewa.in` must include a valid web app manifest, app icons, theme/background colours, standalone display mode, service worker, offline shell and deep-link support.
+- PWA installation must be optional and user-controlled; the application must not claim or attempt forced permanent installation.
+- The PWA and native mobile application must use the same authorised Supabase project, AWS S3 storage and backend business rules.
+- The static web application must not expose server-only keys. Final production web persistent login should use secure, HttpOnly, SameSite cookies where supported by the architecture.
 
 ### 4.5.1 Daily Product Availability
 - Vendor Dashboard must provide a clearly visible `Today's Availability` screen.
@@ -195,6 +215,10 @@ When vendor rejects an order:
 - Rider views assigned order.
 - Rider updates order status.
 - Customer/vendor can see live tracking while order is out for delivery.
+- Delivery screens must show only a reasonable estimated delivery window, not guaranteed countdown promises.
+- Customer-facing delivery copy must state: `The delivery time shown is an estimate provided by the vendor and is not a guaranteed deadline. SabSewa Local does not support unsafe or unrealistic delivery commitments. Actual delivery time may vary, and road safety will always take priority over speed.`
+- The application must not display 7-minute, 10-minute or similar fixed ultra-fast delivery promises, rank delivery personnel by speed, encourage unsafe fulfilment or penalise riders solely for missing an unrealistic deadline.
+- Delivery estimates may vary because of stock availability, preparation time, traffic, weather, distance, safety considerations and other operational conditions.
 
 ### 4.10 Credit Ledger
 - Vendor can view customer-wise credit balances.
@@ -210,8 +234,16 @@ When vendor rejects an order:
 - The initial payment is split into a one-time non-refundable Rs 500 setup, activation and platform-service charge plus Rs 5,000 credited to the refundable vendor advance wallet.
 - Subsequent standard top-ups are Rs 5,000 and do not include another activation/service charge.
 - SabSewa Local deducts a fixed Rs 15 platform facilitation fee from the vendor advance balance only when the vendor securely confirms and accepts a real-world order, before customer contact and full delivery details are unlocked.
+- Once the vendor formally accepts the order and the Rs 15 platform facilitation fee is deducted, the company will not refund, reverse or adjust the Rs 15 merely because the vendor later claims that the order was cancelled, not completed, settled privately or handled outside the platform.
+- Reversal or correction may be considered only for a company-confirmed duplicate deduction, technical error, unauthorised transaction or correction required under applicable law.
 - New orders automatically stop when the available advance balance falls below Rs 515. Existing accepted orders must still be completed and applicable Rs 15 charges must still be recorded.
 - If a vendor voluntarily closes the account, the refund preview must show current balance, the Rs 500 activation/service charge already collected and not deducted again, unpaid completed-order fees, authorised adjustments, and estimated eligible refund before submission.
+
+### 4.13 Vendor Delivery Settings
+- Vendors or terminal operators may configure minimum order value for free delivery, delivery fee below that value, service radius, estimated delivery window, delivery availability and optional pickup facility.
+- These settings must be validated on the backend and recorded in an audit table.
+- Before the customer confirms an order, the cart must display item subtotal, delivery charge, free-delivery threshold, amount still required for free delivery where applicable, estimated delivery window, total payable amount and whether delivery is by the vendor or another authorised provider.
+- The confirmed order must store a snapshot of the applicable threshold, delivery charge, provider type and estimated delivery window. A vendor must not change the confirmed order delivery charge without explicit customer consent.
 
 ### 4.12 Vendor Product Responsibility And Verification
 - Vendors are responsible for the accuracy, legality, safety, quality, quantity, price, packaging and description of products supplied through SabSewa Local.

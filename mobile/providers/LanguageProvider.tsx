@@ -8,6 +8,7 @@ import {
 } from "@/constants/languages";
 import { enCommon, type CommonTranslationKey } from "@/locales/en/common";
 import { hiCommon } from "@/locales/hi/common";
+import { knCommon } from "@/locales/kn/common";
 
 type LanguageContextType = {
   language: SabSewaLanguageCode;
@@ -22,6 +23,7 @@ const LanguageContext = createContext<LanguageContextType | null>(null);
 const BUNDLED_TRANSLATIONS: Partial<Record<SabSewaLanguageCode, Record<string, string>>> = {
   en: enCommon,
   hi: hiCommon,
+  kn: knCommon,
 };
 
 export function LanguageProvider({ children }: { children: React.ReactNode }) {

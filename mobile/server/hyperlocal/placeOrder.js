@@ -31,6 +31,10 @@ router.post("/place", async (req, res) => {
       customer_phone,
       payment_method = "prepaid",
       requested_delivery_time = null,
+      delivery_charge = null,
+      free_delivery_min_order = null,
+      estimated_delivery_window = null,
+      delivery_provider_type = "vendor",
       order_instructions = null,
       safe_order_instructions = null,
       general_delivery_area = null,
@@ -75,7 +79,7 @@ router.post("/place", async (req, res) => {
 
     const { data: terminal, error: terminalError } = await supabase
       .from("vendor_terminals")
-      .select("id, vendor_id, status, is_open_today")
+      .select("id, vendor_id, status, is_open_today, delivery_available, free_delivery_min_order, delivery_fee_below_min, estimated_delivery_min_minutes, estimated_delivery_max_minutes, delivery_provider_type")
       .eq("id", terminal_id)
       .eq("vendor_id", vendor_id)
       .single();
@@ -91,6 +95,12 @@ router.post("/place", async (req, res) => {
       return res.status(409).json({
         success: false,
         message: "This shop is not accepting orders right now.",
+      });
+    }
+    if (terminal.delivery_available === false) {
+      return res.status(409).json({
+        success: false,
+        message: "This shop is not accepting delivery orders right now. Pickup may be available if enabled by the vendor.",
       });
     }
 
@@ -174,6 +184,14 @@ router.post("/place", async (req, res) => {
 
     const quoteRequired = verifiedItems.some((item) => item.price_quote_required);
     const total_amount = verifiedItems.reduce((sum, item) => sum + Number(item.line_total || 0), 0);
+    const deliveryThresholdSnapshot = Number(free_delivery_min_order ?? terminal.free_delivery_min_order ?? 0);
+    const deliveryChargeSnapshot = delivery_charge == null
+      ? (total_amount >= deliveryThresholdSnapshot ? 0 : Number(terminal.delivery_fee_below_min || 0))
+      : Number(delivery_charge);
+    const estimatedDeliveryWindowSnapshot =
+      estimated_delivery_window ||
+      `${terminal.estimated_delivery_min_minutes || 30}-${terminal.estimated_delivery_max_minutes || 60} minutes`;
+    const deliveryProviderSnapshot = delivery_provider_type || terminal.delivery_provider_type || "vendor";
 
     if (payment_method === "credit") {
       await assertCreditOrderAllowed({
@@ -198,6 +216,10 @@ router.post("/place", async (req, res) => {
           vendor_id,
           items: verifiedItems,
           total_amount,
+          delivery_charge: deliveryChargeSnapshot,
+          free_delivery_min_order: deliveryThresholdSnapshot,
+          estimated_delivery_window: estimatedDeliveryWindowSnapshot,
+          delivery_provider_type: deliveryProviderSnapshot,
           customer_address,
           customer_phone,
           payment_method,

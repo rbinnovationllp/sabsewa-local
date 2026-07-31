@@ -32,6 +32,14 @@ export default function CustomerTermsScreen() {
           title: "Vendor responsibility",
           body: "Complaints about product quality, quantity, substitution, price, refund or replacement should initially be resolved between the customer and the concerned vendor. SabSewa Local may provide transaction evidence and a complaint channel, but it does not manufacture, own or independently inspect every product. Nothing in these terms removes statutory consumer rights or responsibilities that cannot lawfully be excluded.",
         },
+        {
+          title: "Delivery estimate and charges",
+          body: "Any delivery time shown is an estimate provided or confirmed by the vendor and is not a guaranteed deadline. Delivery charges, free-delivery thresholds and total payable amounts are displayed before order confirmation and may differ between vendors. Actual delivery time may vary because of stock availability, preparation time, distance, traffic, weather, safety conditions and other operational circumstances.",
+        },
+        {
+          title: "Delivery safety",
+          body: "SabSewa Local does not support unsafe or unrealistic delivery commitments. Vendors and delivery personnel must comply with applicable traffic and safety requirements. Road safety will always take priority over speed.",
+        },
       ]}
     />
   );

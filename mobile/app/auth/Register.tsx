@@ -36,7 +36,8 @@ export default function RegisterScreen() {
   const [acceptedPolicies, setAcceptedPolicies] = useState(false);
   const [marketingConsent, setMarketingConsent] = useState(false);
   const [error, setError] = useState("");
-  const { language } = useLanguage();
+  const [submitting, setSubmitting] = useState(false);
+  const { language, t } = useLanguage();
 
   const roleTitle =
     role === "customer"
@@ -46,56 +47,61 @@ export default function RegisterScreen() {
       : "Rider";
 
   const handleRegister = async () => {
-    if (!fullname) return setError("Enter your full name");
+    if (submitting) return;
+    if (!fullname) return setError(t("auth.errorFullName"));
     if (!phone || phone.length !== 10)
-      return setError("Enter a valid 10-digit mobile number");
-    if (!city) return setError("Enter your city name");
-    if (role === "customer" && !address.trim()) return setError("Enter your primary delivery address");
+      return setError(t("auth.errorMobile"));
+    if (!city) return setError(t("auth.errorCity"));
+    if (role === "customer" && !address.trim()) return setError(t("auth.errorCustomerAddress"));
     if (role === "vendor" && !shopName.trim()) return setError("Enter your shop or trade name");
     if (role === "vendor" && !address.trim()) return setError("Enter your shop address");
-    if (!acceptedPolicies) return setError("Please tick the Terms of Use and Privacy Notice acceptance before registration.");
+    if (!acceptedPolicies) return setError(t("auth.errorPolicies"));
 
     if ((role === "vendor" || role === "rider") && !extra)
       return setError("Please fill all required fields");
 
     setError("");
 
-    const formattedPhone = phone.startsWith("+") ? phone : `+91${phone}`;
-    const deviceMetadata = await getDeviceMetadata();
-    const { error: otpError } = await supabase.auth.signInWithOtp({
-      phone: formattedPhone,
-      options: {
-        data: {
-          role,
-          full_name: fullname,
-          city,
-          primary_address: address,
-          shop_name: shopName,
-          location_coordinates: locationCoords,
-          preferred_language: language,
-          service_type_or_area: extra,
-          accepted_policies: true,
-          terms_version: SABSEWA_TERMS_VERSION,
-          privacy_version: SABSEWA_PRIVACY_VERSION,
-          policy_bundle_version: SABSEWA_POLICY_BUNDLE_VERSION,
-          accepted_document_versions: SABSEWA_ACCEPTED_DOCUMENT_VERSIONS,
-          policy_acceptance_statement: SABSEWA_ACCEPTANCE_STATEMENT,
-          policy_acceptance_language: language,
-          policy_acceptance_device: deviceMetadata,
-          marketing_consent: marketingConsent,
+    setSubmitting(true);
+    try {
+      const formattedPhone = phone.startsWith("+") ? phone : `+91${phone}`;
+      const deviceMetadata = await getDeviceMetadata();
+      const { error: otpError } = await supabase.auth.signInWithOtp({
+        phone: formattedPhone,
+        options: {
+          data: {
+            role,
+            full_name: fullname,
+            city,
+            primary_address: address,
+            shop_name: shopName,
+            location_coordinates: locationCoords,
+            preferred_language: language,
+            service_type_or_area: extra,
+            accepted_policies: true,
+            terms_version: SABSEWA_TERMS_VERSION,
+            privacy_version: SABSEWA_PRIVACY_VERSION,
+            policy_bundle_version: SABSEWA_POLICY_BUNDLE_VERSION,
+            accepted_document_versions: SABSEWA_ACCEPTED_DOCUMENT_VERSIONS,
+            policy_acceptance_statement: SABSEWA_ACCEPTANCE_STATEMENT,
+            policy_acceptance_language: language,
+            policy_acceptance_device: deviceMetadata,
+            marketing_consent: marketingConsent,
+          },
         },
-      },
-    });
+      });
 
-    if (otpError) {
-      setError(otpError.message);
-      return;
+      if (otpError) throw otpError;
+
+      router.push({
+        pathname: "/auth/Login",
+        params: { phone: formattedPhone, registering: "1", role: String(role || "customer") },
+      });
+    } catch (err: any) {
+      setError(err.message || t("auth.registrationSaveFailed"));
+    } finally {
+      setSubmitting(false);
     }
-
-    router.push({
-      pathname: "/auth/Login",
-      params: { phone: formattedPhone },
-    });
   };
 
   async function captureLocation() {
@@ -112,15 +118,15 @@ export default function RegisterScreen() {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.wrapper}>
       {/* HEADER */}
-      <Text style={styles.heading}>Register as {roleTitle}</Text>
-      <Text style={styles.subheading}>Fill the details to create account</Text>
+      <Text style={styles.heading}>{t("auth.registerTitle", { role: roleTitle })}</Text>
+      <Text style={styles.subheading}>{t("auth.registerSubtitle")}</Text>
 
       {/* NAME */}
       <View style={styles.inputBlock}>
-        <Text style={styles.label}>Full Name</Text>
+        <Text style={styles.label}>{t("auth.fullName")}</Text>
         <TextInput
           style={styles.input}
-          placeholder="Enter your name"
+          placeholder={t("auth.enterFullName")}
           value={fullname}
           onChangeText={(t) => {
             setFullname(t);
@@ -131,10 +137,10 @@ export default function RegisterScreen() {
 
       {/* MOBILE */}
       <View style={styles.inputBlock}>
-        <Text style={styles.label}>Mobile Number</Text>
+        <Text style={styles.label}>{t("auth.mobileNumber")}</Text>
         <TextInput
           style={styles.input}
-          placeholder="Enter 10-digit number"
+          placeholder={t("auth.enterMobile")}
           keyboardType="number-pad"
           maxLength={10}
           value={phone}
@@ -147,10 +153,10 @@ export default function RegisterScreen() {
 
       {/* CITY */}
       <View style={styles.inputBlock}>
-        <Text style={styles.label}>City</Text>
+        <Text style={styles.label}>{t("auth.city")}</Text>
         <TextInput
           style={styles.input}
-          placeholder="Enter your city"
+          placeholder={t("auth.enterCity")}
           value={city}
           onChangeText={(t) => {
             setCity(t);
@@ -161,7 +167,7 @@ export default function RegisterScreen() {
 
       {(role === "customer" || role === "vendor") && (
         <View style={styles.inputBlock}>
-          <Text style={styles.label}>{role === "vendor" ? "Shop Address" : "Primary Delivery Address"}</Text>
+          <Text style={styles.label}>{role === "vendor" ? t("auth.shopAddress") : t("auth.customerAddress")}</Text>
           <TextInput
             style={[styles.input, styles.textArea]}
             multiline
@@ -173,7 +179,7 @@ export default function RegisterScreen() {
             }}
           />
           <TouchableOpacity style={styles.locationBtn} onPress={captureLocation}>
-            <Text style={styles.locationText}>{locationCoords ? "Location Added" : "Use Current Location"}</Text>
+            <Text style={styles.locationText}>{locationCoords ? t("auth.locationAdded") : t("auth.useCurrentLocation")}</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -274,8 +280,8 @@ export default function RegisterScreen() {
       </TouchableOpacity>
 
       {/* SUBMIT */}
-      <TouchableOpacity style={[styles.registerBtn, !acceptedPolicies && styles.registerBtnDisabled]} onPress={handleRegister}>
-        <Text style={styles.registerBtnText}>Accept and Register</Text>
+      <TouchableOpacity style={[styles.registerBtn, (!acceptedPolicies || submitting) && styles.registerBtnDisabled]} onPress={handleRegister} disabled={submitting}>
+        <Text style={styles.registerBtnText}>{submitting ? "Sending OTP..." : t("auth.acceptAndRegister")}</Text>
       </TouchableOpacity>
 
       {/* BACK */}

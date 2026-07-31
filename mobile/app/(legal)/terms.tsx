@@ -29,6 +29,18 @@ export default function TermsScreen() {
           body: "Every vendor must pay Rs 5,500 at initial activation. Rs 500 is a one-time, non-refundable setup, activation and platform-service charge. Rs 5,000 is credited to the vendor's refundable advance wallet for Rs 15 order-fee deductions. Later standard top-ups are Rs 5,000 and no second activation charge is deducted at voluntary closure.",
         },
         {
+          title: "Platform facilitation fee after acceptance",
+          body: "The Rs 15 platform facilitation fee is charged when the vendor formally accepts an order through SabSewa Local. Once the vendor has accepted the order and the fee has been deducted, the company will not refund, reverse or adjust this Rs 15 charge merely because the vendor later claims that the order was cancelled, not completed, settled privately or handled outside the platform. This does not prevent correction of a company-confirmed duplicate deduction, technical error, unauthorised transaction or correction required by applicable law.",
+        },
+        {
+          title: "Delivery estimate and safety",
+          body: "Any delivery time shown in SabSewa Local is an estimated window provided or confirmed by the vendor and is not a guaranteed delivery deadline. Actual delivery time may vary because of stock availability, preparation time, distance, traffic, weather, safety conditions or other operational circumstances. SabSewa Local does not support unsafe or unrealistic delivery commitments, speed-based pressure, countdown delivery promises or penalties based solely on missing unrealistic delivery deadlines.",
+        },
+        {
+          title: "Delivery charges",
+          body: "Each vendor may set a minimum order value for free delivery and may charge a delivery fee for orders below that value. The applicable minimum order value, delivery fee, estimated delivery window and total payable amount must be displayed before the customer confirms the order. These settings may differ between vendors and terminals and must be preserved as an order snapshot after confirmation.",
+        },
+        {
           title: "Credit records",
           body: "Any customer credit facility is offered solely by the concerned vendor. SabSewa Local does not approve, finance, guarantee, collect or recover credit. The platform only maintains vendor-wise records for transparency.",
         },

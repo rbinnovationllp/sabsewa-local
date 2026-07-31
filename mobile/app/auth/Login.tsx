@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   StyleSheet,
+  Alert,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useAuth } from "@/providers/AuthProvider";
@@ -13,6 +14,7 @@ import { routeUser } from "@/src/utils/roleRouter";
 import { supabase } from "@/lib/supabase";
 import { apiUrl } from "@/lib/backend";
 import { getDeviceMetadata } from "@/lib/deviceIdentity";
+import { useLanguage } from "@/providers/LanguageProvider";
 import {
   SABSEWA_ACCEPTANCE_STATEMENT,
   SABSEWA_ACCEPTED_DOCUMENT_VERSIONS,
@@ -25,6 +27,7 @@ export default function LoginScreen() {
   const router = useRouter();
   const params: any = useLocalSearchParams();
   const { signInWithOtp, verifyOtp, loading } = useAuth();
+  const { t } = useLanguage();
 
   const [phone, setPhone] = useState(params.phone ? String(params.phone) : "");
   const [otpSent, setOtpSent] = useState(false);
@@ -63,7 +66,7 @@ export default function LoginScreen() {
       const user = data.user;
       const metadata = user?.user_metadata || {};
       if (user?.id && metadata.role) {
-        await supabase.from("user_profiles").upsert({
+        const { error: profileError } = await supabase.from("user_profiles").upsert({
           user_id: user.id,
           role: metadata.role,
           full_name: metadata.full_name || "",
@@ -75,10 +78,11 @@ export default function LoginScreen() {
           policies_accepted_at: new Date().toISOString(),
           policies_accepted_language: metadata.policy_acceptance_language || metadata.preferred_language || "en",
         }, { onConflict: "user_id" });
+        if (profileError) throw new Error(profileError.message || t("auth.registrationSaveFailed"));
 
         if (metadata.accepted_policies) {
           const device = metadata.policy_acceptance_device || {};
-          await supabase.from("user_policy_acceptances").insert({
+          const { error: policyError } = await supabase.from("user_policy_acceptances").upsert({
             user_id: user.id,
             role: metadata.role,
             terms_version: metadata.terms_version || SABSEWA_TERMS_VERSION,
@@ -94,17 +98,19 @@ export default function LoginScreen() {
             session_id: data.session?.access_token ? data.session.access_token.slice(0, 16) : null,
             otp_verified: true,
             marketing_consent: Boolean(metadata.marketing_consent),
-          });
+          }, { onConflict: "user_id,terms_version,privacy_version,policy_bundle_version,displayed_language" });
+          if (policyError) throw new Error(policyError.message || t("auth.registrationSaveFailed"));
         }
 
         if (metadata.role === "customer" && metadata.primary_address) {
-          await supabase.from("customer_addresses").insert({
+          const { error: addressError } = await supabase.from("customer_addresses").upsert({
             customer_id: user.id,
             label: "Primary",
             full_address: metadata.primary_address,
             city: metadata.city || "",
             is_primary: true,
-          });
+          }, { onConflict: "customer_id,label" });
+          if (addressError) throw new Error(addressError.message || t("auth.registrationSaveFailed"));
         }
       }
 
@@ -137,6 +143,13 @@ export default function LoginScreen() {
             app_version: device.app_version,
           }),
         });
+      }
+
+      if (params.registering === "1" && role === "customer") {
+        Alert.alert("SabSewa Local", t("auth.registrationSuccessCustomer"), [
+          { text: "OK", onPress: () => router.replace("/customer/discover" as any) },
+        ]);
+        return;
       }
 
       // ðŸŽ¯ Redirect user based on role

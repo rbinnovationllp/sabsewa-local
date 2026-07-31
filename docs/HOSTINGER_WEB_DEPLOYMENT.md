@@ -31,7 +31,7 @@ Before export, set the public backend URL to the production API endpoint, for ex
 cd C:\Users\HP\SabSewa-Local\mobile
 $env:EXPO_PUBLIC_BACKEND_URL="https://api.sabsewa.in"
 $env:EXPO_NO_DEPENDENCY_VALIDATION="1"
-npx.cmd expo export --platform web
+npm.cmd run export:web:hostinger
 ```
 
 For local development only, you may temporarily override the backend URL:
@@ -48,7 +48,7 @@ Do not use `localhost` in the production Hostinger export.
 cd C:\Users\HP\SabSewa-Local\mobile
 $env:EXPO_PUBLIC_BACKEND_URL="https://api.sabsewa.in"
 $env:EXPO_NO_DEPENDENCY_VALIDATION="1"
-npx.cmd expo export --platform web
+npm.cmd run export:web:hostinger
 ```
 
 The static output is created in:
@@ -62,6 +62,16 @@ C:\Users\HP\SabSewa-Local\mobile\dist
 Upload the contents of `mobile/dist` directly into Hostinger `public_html`.
 
 Make sure `.htaccess` is included. It is required so routes such as `/vendor`, `/customer`, and `/company` load `index.html` instead of returning a Hostinger 404.
+
+The Hostinger export script also creates:
+
+- `manifest.webmanifest`
+- `service-worker.js`
+- `offline.html`
+- `pwa-icons/icon-192.png`
+- `pwa-icons/icon-512.png`
+
+Upload these files and folders with the rest of `dist` so the web application can be installed as a PWA on supported browsers.
 
 ## Local Static Test
 

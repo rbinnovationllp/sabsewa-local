@@ -22,9 +22,9 @@ export default function ConversationalOrderScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>Gemini Conversational Ordering</Text>
+      <Text style={styles.title}>Place Your Order</Text>
       <Text style={styles.subtitle}>
-        Customer types or speaks in local language. Gemini converts it into cart JSON.
+        Select a nearby shop and type or speak what you need. We will prepare a cart for your review before placing the order.
       </Text>
 
       <TextInput
@@ -36,7 +36,7 @@ export default function ConversationalOrderScreen() {
       />
 
       <TouchableOpacity style={styles.button} onPress={parseOrder} disabled={loading}>
-        <Text style={styles.buttonText}>{loading ? "Calling Gemini..." : "Create Cart Draft"}</Text>
+        <Text style={styles.buttonText}>{loading ? "Preparing..." : "Create Cart for Review"}</Text>
       </TouchableOpacity>
 
       {loading && <ActivityIndicator style={styles.loader} />}
@@ -63,4 +63,3 @@ const styles = StyleSheet.create({
   outputTitle: { fontWeight: "700", marginBottom: 8 },
   code: { fontFamily: "monospace", fontSize: 12 }
 });
-

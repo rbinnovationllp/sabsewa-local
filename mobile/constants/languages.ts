@@ -25,7 +25,7 @@ export type SabSewaLanguageCode =
 
 export const DEFAULT_LANGUAGE: SabSewaLanguageCode = "en";
 
-export const FUNCTIONAL_LANGUAGES: SabSewaLanguageCode[] = ["en", "hi"];
+export const FUNCTIONAL_LANGUAGES: SabSewaLanguageCode[] = ["en", "hi", "kn"];
 
 export const SABSEWA_LANGUAGES: Array<{
   code: SabSewaLanguageCode;
@@ -41,7 +41,7 @@ export const SABSEWA_LANGUAGES: Array<{
   { code: "ta", englishName: "Tamil", nativeName: "\u0ba4\u0bae\u0bbf\u0bb4\u0bcd", phase: "phase_1", status: "coming_soon" },
   { code: "te", englishName: "Telugu", nativeName: "\u0c24\u0c46\u0c32\u0c41\u0c17\u0c41", phase: "phase_1", status: "coming_soon" },
   { code: "gu", englishName: "Gujarati", nativeName: "\u0a97\u0ac1\u0a9c\u0ab0\u0abe\u0aa4\u0ac0", phase: "phase_2", status: "coming_soon" },
-  { code: "kn", englishName: "Kannada", nativeName: "\u0c95\u0ca8\u0ccd\u0ca8\u0ca1", phase: "phase_2", status: "coming_soon" },
+  { code: "kn", englishName: "Kannada", nativeName: "\u0c95\u0ca8\u0ccd\u0ca8\u0ca1", phase: "phase_1", status: "available" },
   { code: "ml", englishName: "Malayalam", nativeName: "\u0d2e\u0d32\u0d2f\u0d3e\u0d33\u0d02", phase: "phase_2", status: "coming_soon" },
   { code: "pa", englishName: "Punjabi", nativeName: "\u0a2a\u0a70\u0a1c\u0a3e\u0a2c\u0a40", phase: "phase_2", status: "coming_soon" },
   { code: "or", englishName: "Odia", nativeName: "\u0b13\u0b21\u0b3c\u0b3f\u0b06", phase: "phase_2", status: "coming_soon" },

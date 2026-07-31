@@ -174,9 +174,7 @@ router.post("/place", async (req, res) => {
         price_unit_label: item.price_unit_label || null,
         price_quote_required: requiresQuote,
         price_label: requiresQuote
-          ? priceDisplayMode === "market_price"
-            ? "Market Price"
-            : "Price on Request"
+          ? "Price confirmation required from vendor"
           : `Rs ${price.toFixed(2)}${item.price_unit_label ? `/${item.price_unit_label}` : ""}`,
         line_total: requiresQuote ? null : price * requestedQty,
       });

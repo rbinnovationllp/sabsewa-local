@@ -55,6 +55,7 @@ For Razorpay live-payment readiness, use [`docs/RAZORPAY_LIVE_MODE_READINESS.md`
 - Company Master CRM
 - Individual Vendor CRM
 - Daily product availability and vendor-controlled pricing
+- Vendor catalogue setup after registration with searchable multi-select master catalogue and pending-review flow for missing products
 - Vendor-contributed reusable product-image catalogue
 - Full or partial order acceptance
 - Customer information hidden until order acceptance

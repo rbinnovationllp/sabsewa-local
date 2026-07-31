@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -12,6 +12,7 @@ import {
 import * as Location from "expo-location";
 import { useRouter } from "expo-router";
 import { apiUrl } from "@/lib/backend";
+import ProductGrid from "@/components/ProductGrid";
 import { useAuth } from "@/providers/AuthProvider";
 
 const CATEGORIES = [
@@ -35,6 +36,8 @@ export default function CustomerVendorDiscoveryScreen() {
   const [locality, setLocality] = useState("");
   const [city, setCity] = useState("");
   const [vendors, setVendors] = useState<any[]>([]);
+  const [productSearch, setProductSearch] = useState("");
+  const [cartByShop, setCartByShop] = useState<Record<string, Record<string, number>>>({});
   const [searchRadius, setSearchRadius] = useState<number | null>(null);
   const [expanded, setExpanded] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -147,10 +150,57 @@ export default function CustomerVendorDiscoveryScreen() {
     }
   }
 
+  const filteredVendors = useMemo(() => {
+    const term = productSearch.trim().toLowerCase();
+    if (!term) return vendors;
+    return vendors
+      .map((vendor) => ({
+        ...vendor,
+        available_products: (vendor.available_products || []).filter((product: any) => {
+          const text = [
+            product.item_name,
+            product.generic_product_name,
+            product.local_name,
+            product.local_language_name,
+            product.hindi_name,
+            product.kannada_name,
+            product.brand_name,
+            product.variant_name,
+            product.pack_size,
+            product.pack_unit,
+            product.unit,
+            product.category,
+          ]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase();
+          return text.includes(term);
+        }),
+      }))
+      .filter((vendor) => (vendor.available_products || []).length > 0);
+  }, [productSearch, vendors]);
+
+  function shopKey(vendor: any) {
+    return `${vendor.id}:${vendor.terminal_id}`;
+  }
+
+  function setProductQty(vendor: any, productId: string, nextQty: number) {
+    const boundedQty = Math.max(0, Math.min(99, Math.floor(Number(nextQty) || 0)));
+    setCartByShop((current) => {
+      const key = shopKey(vendor);
+      const shopCart = { ...(current[key] || {}) };
+      if (boundedQty <= 0) delete shopCart[productId];
+      else shopCart[productId] = boundedQty;
+      return { ...current, [key]: shopCart };
+    });
+  }
+
   function openCart(vendor: any) {
-    const cartData: Record<string, number> = {};
-    const firstProduct = vendor.available_products?.[0];
-    if (firstProduct?.id) cartData[firstProduct.id] = 1;
+    const cartData = cartByShop[shopKey(vendor)] || {};
+    if (Object.keys(cartData).length === 0) {
+      Alert.alert("Select products", "Add at least one available product from this shop before opening the cart.");
+      return;
+    }
 
     router.push({
       pathname: "/hyperlocal/cart" as any,
@@ -158,6 +208,7 @@ export default function CustomerVendorDiscoveryScreen() {
         vendor: vendor.id,
         terminal: vendor.terminal_id,
         cartData: JSON.stringify(cartData),
+        shopName: vendor.shop_name,
       },
     });
   }
@@ -216,7 +267,21 @@ export default function CustomerVendorDiscoveryScreen() {
         </Text>
       ) : null}
 
-      {vendors.map((vendor) => (
+      {vendors.length > 0 ? (
+        <View style={styles.catalogueIntro}>
+          <Text style={styles.catalogueTitle}>Shop available products</Text>
+          <Text style={styles.catalogueText}>Browse verified products from nearby shops. Images are shown only when approved; products without images remain orderable.</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Search product, brand, Hindi or Kannada name"
+            value={productSearch}
+            onChangeText={setProductSearch}
+            accessibilityLabel="Search products"
+          />
+        </View>
+      ) : null}
+
+      {filteredVendors.map((vendor) => (
         <View key={`${vendor.id}-${vendor.terminal_id}`} style={styles.vendorCard}>
           <View style={styles.cardHeader}>
             <View style={{ flex: 1 }}>
@@ -235,25 +300,27 @@ export default function CustomerVendorDiscoveryScreen() {
           </Text>
           <Text style={styles.vendorMeta}>{vendor.delivery_terms}</Text>
 
-          <Text style={styles.productsTitle}>Available today</Text>
-          {(vendor.available_products || []).map((product: any) => (
-            <View key={product.id} style={styles.productPill}>
-              <Text style={styles.productName}>
-                {[product.generic_product_name || product.item_name, product.brand_name, product.variant_name, product.pack_size && product.pack_unit ? `${product.pack_size} ${product.pack_unit}` : ""].filter(Boolean).join(" - ")}
-              </Text>
-              <Text style={styles.productLine}>
-                {product.price_label || (product.price == null ? "Ask Vendor" : `Rs ${Number(product.price || 0).toFixed(2)}`)}
-                {product.daily_availability_status === "limited_stock" ? " | Limited stock" : ""}
-                {product.daily_availability_status === "available_on_request" ? " | Available on request" : ""}
-              </Text>
-            </View>
-          ))}
+          <Text style={styles.productsTitle}>Available today from {vendor.shop_name}</Text>
+          <ProductGrid
+            products={vendor.available_products || []}
+            quantities={cartByShop[shopKey(vendor)] || {}}
+            onChangeQuantity={(productId, nextQty) => setProductQty(vendor, productId, nextQty)}
+          />
 
           <TouchableOpacity style={styles.orderBtn} onPress={() => openCart(vendor)}>
-            <Text style={styles.orderText}>Select Vendor</Text>
+            <Text style={styles.orderText}>
+              {Object.keys(cartByShop[shopKey(vendor)] || {}).length > 0 ? "Review Cart" : "Add Products First"}
+            </Text>
           </TouchableOpacity>
         </View>
       ))}
+
+      {vendors.length > 0 && filteredVendors.length === 0 ? (
+        <View style={styles.emptyCard}>
+          <Text style={styles.emptyTitle}>No matching products</Text>
+          <Text style={styles.emptyText}>Try another product name, brand, Hindi or Kannada term.</Text>
+        </View>
+      ) : null}
 
       {!loading && (searchRadius || errorMessage) && vendors.length === 0 ? (
         <View style={styles.emptyCard}>
@@ -299,6 +366,9 @@ const styles = StyleSheet.create({
   errorText: { color: "#991b1b", fontWeight: "900", lineHeight: 20 },
   errorHint: { color: "#7f1d1d", marginTop: 6, lineHeight: 19 },
   resultNote: { color: "#555", marginTop: 16, marginBottom: 8 },
+  catalogueIntro: { borderWidth: 1, borderColor: "#99f6e4", backgroundColor: "#ecfeff", borderRadius: 10, padding: 12, marginTop: 14, marginBottom: 4 },
+  catalogueTitle: { color: "#0f766e", fontSize: 18, fontWeight: "900" },
+  catalogueText: { color: "#334155", lineHeight: 19, marginTop: 5, marginBottom: 10 },
   vendorCard: { borderWidth: 1, borderColor: "#ddd", borderRadius: 10, padding: 14, marginTop: 12 },
   cardHeader: { flexDirection: "row", gap: 12 },
   shopName: { fontSize: 18, fontWeight: "900" },
@@ -307,9 +377,6 @@ const styles = StyleSheet.create({
   open: { color: "#16a34a" },
   closed: { color: "#dc2626" },
   productsTitle: { fontWeight: "900", marginTop: 12, marginBottom: 4 },
-  productPill: { borderWidth: 1, borderColor: "#e5e7eb", borderRadius: 8, padding: 8, marginTop: 6 },
-  productName: { color: "#111827", fontWeight: "900" },
-  productLine: { color: "#333", marginTop: 3 },
   orderBtn: { backgroundColor: "#16a34a", borderRadius: 8, padding: 12, marginTop: 14 },
   orderText: { color: "#fff", textAlign: "center", fontWeight: "900" },
   emptyCard: { backgroundColor: "#fff7ed", borderWidth: 1, borderColor: "#fed7aa", borderRadius: 10, padding: 14, marginTop: 18 },

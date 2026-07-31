@@ -115,6 +115,16 @@ Still requires Supabase dashboard verification:
 - Phone OTP settings/rate limits must permit the tested mobile number.
 - Auth logs should show whether Supabase accepted, rate-limited, failed or delivered the OTP request.
 
+Follow-up registration storage fix:
+
+- Fixed web/PWA registration error reported as `n.default.getValueWithKeyAsynk is not a function`.
+- Root cause: registration audit metadata and Supabase session storage could attempt native `expo-secure-store` methods inside the web/PWA runtime.
+- Updated `mobile/lib/deviceIdentity.ts` so web/PWA uses browser `localStorage` for the device audit identifier and native mobile uses Expo SecureStore only when the native methods exist.
+- Updated `mobile/lib/secureSessionStorage.ts` so web/PWA Supabase session persistence uses browser `localStorage`, while Android/iOS continue using SecureStore where available.
+- This applies to both customer and vendor registration because both use the same auth/session/device metadata path.
+- Verified with `npx.cmd tsc --noEmit --pretty false`.
+- Rebuilt Hostinger PWA bundle with `npm.cmd run export:web:hostinger`; validation passed and archive `20260731171544` was created.
+
 ## 2026-07-31 PWA And Static Deployment Safety Update
 
 Implemented after Hostinger `public_html` audit:
@@ -180,6 +190,102 @@ Personalized greeting update:
 - If no safe preferred name is available, the app shows a generic greeting.
 - The app avoids displaying email addresses, long phone-like numbers or customer IDs as greeting names.
 - A visible `Switch account or log out` action is shown for shared-device safety.
+
+## 2026-07-31 Image-Based Customer Product Catalogue Update
+
+Assessment against the attached reference screenshot:
+
+- Previous state: **partially implemented**.
+- Evidence: customer discovery used vendor `available_products` from `GET /api/discovery/vendors`, but displayed them as simple text rows inside each vendor card.
+- Missing before this update: responsive product-card grid, image placeholder handling, add/increase/decrease controls, customer-side product search by brand/local names, clean hidden-price labels and selected-product cart handoff.
+
+Implemented:
+
+- Added reusable original SabSewa Local product-card grid:
+  - `mobile/components/ProductGrid.tsx`
+- Updated nearby-shop discovery to show available products in a responsive image-based grid:
+  - `mobile/app/customer/discover.tsx`
+- Product grid supports:
+  - Approved image URL when available.
+  - Clean SabSewa placeholder when no image is available.
+  - Product name, local-language names if provided, brand, variant, pack size, unit, category, availability and optional offer label.
+  - `Add` button and quantity increase/decrease controls after adding.
+  - Search by product name, brand, variant, English/Hindi/Kannada/local-name fields where present in API data.
+  - Products without images remain searchable and addable.
+  - Hidden-price items display `Price confirmation required from vendor`; no `Rs 0`, null or blank price is shown.
+  - Unavailable/out-of-stock items cannot be added.
+- Updated discovery API product payload:
+  - `mobile/server/hyperlocal/discoveryRoutes.js`
+  - Sends up to 50 currently available products per terminal instead of 6.
+  - Avoids `Rs 0.00` labels when no valid published price exists.
+- Updated cart/order wording for hidden-price items:
+  - `mobile/app/hyperlocal/cart.tsx`
+  - `mobile/server/hyperlocal/placeOrder.js`
+  - Cart marks these as `Price pending`; backend labels them `Price confirmation required from vendor`.
+
+No third-party copyrighted assets copied:
+
+- The reference screenshot was used only for usability comparison.
+- No Amazon branding, code, images, descriptions or proprietary content were copied.
+- Product images continue to come only from vendor/master/SabSewa-approved sources already represented by the catalogue data.
+
+Still requires live data verification:
+
+- Test with a real vendor/terminal containing:
+  - Vegetable with approved image and displayed price.
+  - Vegetable without image.
+  - Branded grocery product with image, brand and pack size.
+  - Unbranded grocery product without image.
+  - Hidden-price product.
+  - Temporarily unavailable product.
+  - English, Hindi and Kannada/local product names.
+- Verify AWS S3 thumbnail delivery and image moderation records once real product images are uploaded.
+- Capture mobile screenshots after deploying the refreshed `mobile/dist` to Hostinger.
+
+## 2026-07-31 Vendor Catalogue Setup After Registration Update
+
+Implemented against the supplied vendor-catalogue setup instruction:
+
+- Added a mobile-friendly vendor catalogue setup screen:
+  - `mobile/app/vendor/CatalogueSetup.tsx`
+- Vendor Dashboard now opens this workflow through `Catalogue Setup`:
+  - `mobile/app/vendor/dashboard.tsx`
+- Added protected backend catalogue setup routes:
+  - `mobile/server/catalog/catalogueSetupRoutes.js`
+  - Mounted in `mobile/server/index.js` under `/api/catalog`.
+- Added database migration and SQL runner:
+  - `supabase/migrations/202607310004_vendor_catalogue_setup_workflow.sql`
+  - `supabase/RUN_ONLY_VENDOR_CATALOGUE_SETUP_WORKFLOW.sql`
+- Updated the PRD:
+  - `PRD/SABSEWA_HLM_MOBILE_PRD.md`
+
+Functional coverage added:
+
+- Searchable/category-filtered Master Product Catalogue selection.
+- Multi-select product cards with checkbox controls and `Add selected items to my store`.
+- Vendor-specific catalogue entries reference `master_product_catalog`; they do not duplicate master product records.
+- Vendor-specific fields are stored on `vendor_items`: price, price display mode, daily availability, stock quantity, maximum order quantity, branch/terminal and review status.
+- Products without approved images show an `Image pending` placeholder and remain usable.
+- `Can't find an item? Add a new product` flow now captures product name, local name, category, brand, variant, pack/unit, barcode, description, optional price, visibility, stock, optional image and image-reuse consent.
+- Backend duplicate-check route searches likely master catalogue matches before a new vendor submission is created.
+- Vendor-created products are added to that vendor's own catalogue with `pending_review` / `pending master-catalogue review` status.
+- New `vendor_product_submissions` and `vendor_product_submission_audit` schema supports Company CRM moderation: approve, reject, request correction, link to existing or promote to master catalogue.
+- Image-reuse consent is explicit and unchecked by default; shared reuse remains subject to moderation and evidence retention.
+
+Verified locally:
+
+- `node --check mobile\server\catalog\catalogueSetupRoutes.js` passed.
+- `node --check mobile\server\index.js` passed.
+- `npx.cmd tsc --noEmit --pretty false` passed from `mobile`.
+
+Still requires live Supabase verification:
+
+- Run `supabase/RUN_ONLY_VENDOR_CATALOGUE_SETUP_WORKFLOW.sql` in the `sabsewa-local` Supabase SQL Editor after the master catalogue migrations are already applied.
+- Test with two real vendor accounts to confirm vendor-specific catalogue isolation.
+- Test adding master products with and without images.
+- Test submitting a missing product with and without image-reuse consent.
+- Test Company CRM moderation actions after the admin moderation screen is connected to the new `vendor_product_submissions` table.
+- Verify AWS S3 malware scanning/metadata stripping/thumbnail generation with the production upload pipeline.
 
 Still requires live verification:
 

@@ -43,10 +43,16 @@ export default function VendorDashboard() {
   const vendorLoaded = Boolean(vendor?.id);
   const actionCards = [
     {
-      title: "Add New Item",
-      description: "Create catalogue items, upload images, stock details and daily availability.",
+      title: "Catalogue Setup",
+      description: "Search the master catalogue, multi-select products and add them to your store.",
       color: "#007bff",
-      route: vendorLoaded ? `/vendor/AddItem?vendor=${vendor.id}` : "",
+      route: vendorLoaded ? `/vendor/CatalogueSetup?vendor=${vendor.id}${terminals[0]?.id ? `&terminal=${terminals[0].id}` : ""}` : "",
+    },
+    {
+      title: "Add One Item",
+      description: "Create one custom catalogue item with image, brand, stock details and daily availability.",
+      color: "#0ea5e9",
+      route: vendorLoaded ? `/vendor/AddItem?vendor=${vendor.id}${terminals[0]?.id ? `&terminal=${terminals[0].id}` : ""}` : "",
     },
     {
       title: "Gemini Inventory Capture",

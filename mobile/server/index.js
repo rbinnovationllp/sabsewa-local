@@ -5,6 +5,7 @@ import cors from "cors";
 
 // --- ROUTES ---
 import catalogRoutes from "./catalog/catalogRoutes.js";
+import catalogueSetupRoutes from "./catalog/catalogueSetupRoutes.js";
 import inventoryRoutes from "./catalog/inventoryRoutes.js";
 
 import creditNotificationsRouter from "./hyperwallet/creditNotifications.js";
@@ -46,6 +47,7 @@ app.use("/api/rider", riderRoutes);
 app.use("/api/hyperwallet/credit", creditNotificationsRouter);
 
 app.use("/api/catalog", catalogRoutes);
+app.use("/api/catalog", catalogueSetupRoutes);
 app.use("/api/inventory", inventoryRoutes);
 
 app.use("/api/order", placeOrderRoutes);

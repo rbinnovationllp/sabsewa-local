@@ -165,9 +165,7 @@ export default function SabSewaLocalCartScreen() {
         const quoteRequired = item.price_display_mode === "hide_price" || item.price_display_mode === "market_price" || item.daily_availability_status === "available_on_request";
         const price = quoteRequired ? 0 : Number(item.price);
         const priceLabel = quoteRequired
-          ? item.price_display_mode === "market_price"
-            ? "Market Price"
-            : "Price on Request"
+          ? "Price pending - vendor confirmation required"
           : `Rs ${price.toFixed(2)}${item.price_unit_label ? `/${item.price_unit_label}` : ""}`;
         return { ...item, price, qty, total: price * qty, price_quote_required: quoteRequired, price_label: priceLabel };
       })
@@ -311,7 +309,7 @@ export default function SabSewaLocalCartScreen() {
           <View key={line.id} style={styles.line}>
             <View style={styles.lineHeader}>
               <Text style={styles.itemName}>{line.item_name}</Text>
-              <Text style={styles.price}>{line.price_quote_required ? "Ask Vendor" : `Rs ${line.total.toFixed(2)}`}</Text>
+              <Text style={styles.price}>{line.price_quote_required ? "Price pending" : `Rs ${line.total.toFixed(2)}`}</Text>
             </View>
             <Text style={styles.muted}>
               {[line.brand_name, line.variant_name, line.pack_size && line.pack_unit ? `${line.pack_size} ${line.pack_unit}` : ""].filter(Boolean).join(" - ") || line.generic_product_name || "Vendor listing"}

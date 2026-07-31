@@ -253,6 +253,20 @@ When vendor rejects an order:
 - Company CRM must record verification status, reviewed documents, reviewer, date, expiry and discrepancies.
 - SabSewa Local must not collect, investigate, rank or disclose a vendor's religion, and must not treat a vendor differently because religion differs from religious or cultural wording in a shop name.
 
+### 4.14 Vendor Catalogue Setup After Registration
+- After registration, verification and activation, a vendor must be guided to create the store catalogue before receiving commercial orders.
+- The setup screen must not use one long product dropdown. It must provide a searchable, category-based, mobile-friendly multi-select Master Product Catalogue.
+- Search must support product title, brand, category, English/Hindi/Kannada/local names, synonyms and common spellings where records exist.
+- A vendor may select several master products and choose **Add selected items to my store**. This creates vendor-specific `vendor_items` rows that reference the relevant `master_product_catalog` row and does not create duplicate master records.
+- Vendor-specific fields must remain outside the master product record: price, price visibility, daily availability, stock, maximum order quantity, branch/terminal, private image and review status.
+- Products without authorised images must show a neutral category/product placeholder and remain searchable/orderable if otherwise active.
+- Vendors must have a clearly visible **Can't find an item? Add a new product** flow with product name, local name, category, brand, variant, pack size, unit, description, optional price, price visibility, optional image, availability and barcode/SKU/EAN where available.
+- Before a new vendor product is created, the backend must check likely duplicates using normalised name, brand, variant, pack size, barcode, synonyms and spelling/transliteration fields.
+- A valid vendor-created item may be added immediately to that vendor's own catalogue as `pending_review`, but it must not be described as a company-verified master product until moderation is complete.
+- Vendor-submitted master-catalogue candidates must enter a Company CRM moderation queue. Admins may approve, reject, request correction, link to an existing master product or promote the submission into the master catalogue.
+- Image reuse consent must be unchecked by default. Shared reuse requires the vendor's explicit rights declaration, timestamp, terms version, source vendor/user, filename/hash and moderation approval.
+- Vendor images, master images and submission evidence must use AWS S3/private storage controls, signed uploads, validation, compression, metadata removal, duplicate checks and moderation. Third-party e-commerce product images must not be copied or hotlinked without documented commercial reuse permission.
+
 ## 5. Data Entities
 
 Minimum mobile-facing data entities:
@@ -266,6 +280,8 @@ Minimum mobile-facing data entities:
 - `master_product_images`
 - `master_product_image_consents`
 - `master_product_image_takedown_audit`
+- `vendor_product_submissions`
+- `vendor_product_submission_audit`
 - `hyperlocal_orders`
 - `order_items`
 - `riders`
@@ -312,6 +328,8 @@ This is important for the hackathon demo because judges need proof that Gemini i
 The HLM MVP is acceptable for hackathon demo when:
 
 - A vendor can add at least three products manually.
+- A vendor can set up a shop catalogue by searching the Master Product Catalogue, selecting multiple items and adding them to the vendor store.
+- A vendor can submit a missing product into the vendor catalogue with pending master-catalogue review status.
 - A vendor can upload one shelf/list photo and Gemini extracts draft inventory.
 - A customer can create a cart manually.
 - A customer can type or speak an order and Gemini converts it to cart items.

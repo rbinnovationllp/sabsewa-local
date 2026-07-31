@@ -9,14 +9,33 @@ function randomId() {
 }
 
 function loadSecureStore() {
+  if (Platform.OS === "web") return null;
   try {
-    return require("expo-secure-store");
+    const SecureStore = require("expo-secure-store");
+    if (typeof SecureStore?.getItemAsync !== "function" || typeof SecureStore?.setItemAsync !== "function") {
+      return null;
+    }
+    return SecureStore;
   } catch {
     return null;
   }
 }
 
+function getBrowserStorage() {
+  if (Platform.OS !== "web" || typeof globalThis.localStorage === "undefined") return null;
+  return globalThis.localStorage;
+}
+
 export async function getOrCreateDeviceId() {
+  const browserStorage = getBrowserStorage();
+  if (browserStorage) {
+    const existing = browserStorage.getItem(DEVICE_ID_KEY);
+    if (existing) return existing;
+    const next = randomId();
+    browserStorage.setItem(DEVICE_ID_KEY, next);
+    return next;
+  }
+
   const SecureStore = loadSecureStore();
   if (!SecureStore) return randomId();
 

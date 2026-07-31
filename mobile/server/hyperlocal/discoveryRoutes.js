@@ -61,7 +61,7 @@ function vendorCard({ vendor, terminal, items, distanceM }) {
     rating_count: Number(vendor.rating_count || 0),
     estimated_fulfilment_minutes: terminalFulfilment || vendor.estimated_fulfilment_minutes || 45,
     available_product_count: items.length,
-    available_products: items.slice(0, 6).map((item) => ({
+    available_products: items.slice(0, 50).map((item) => ({
       id: item.id,
       item_name: item.item_name,
       generic_product_name: item.generic_product_name || item.item_name,
@@ -77,11 +77,11 @@ function vendorCard({ vendor, terminal, items, distanceM }) {
       expected_restock_at: item.expected_restock_at || null,
       price: item.price_display_mode === "show_price" ? Number(item.price || 0) : null,
       price_display_mode: item.price_display_mode || "show_price",
-      price_label: item.price_display_mode === "hide_price"
-        ? "Price on Request"
-        : item.price_display_mode === "market_price"
-          ? "Market Price"
-          : `Rs ${Number(item.price || 0).toFixed(2)}${item.price_unit_label ? `/${item.price_unit_label}` : ""}`,
+      price_label: item.price_display_mode === "hide_price" || item.price_display_mode === "market_price"
+        ? "Price confirmation required from vendor"
+        : item.price == null || Number(item.price) <= 0
+          ? "Price available from shop"
+          : `Rs ${Number(item.price).toFixed(2)}${item.price_unit_label ? `/${item.price_unit_label}` : ""}`,
       unit: item.unit || null,
       price_unit_label: item.price_unit_label || null,
       item_pic: item.item_pic || null,

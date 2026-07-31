@@ -5,16 +5,17 @@ import {
   ACTIVATION_USAGE_CHARGE,
   INITIAL_VENDOR_PAYMENT,
   STANDARD_WALLET_TOPUP,
-  applyInitialActivationPayment,
   applyWalletCredit,
   calculateVendorExitPreview,
   createRazorpayOrder,
   getRazorpayPayment,
+  recordTestPaymentAttempt,
   getOrCreateSecurityWallet,
   requestVendorClosure,
   verifyRazorpaySignature,
 } from "./securityWalletService.js";
 import { supabase } from "../connection.js";
+import { getPaymentReadiness } from "../payments/paymentEnvironment.js";
 
 const router = express.Router();
 
@@ -286,6 +287,7 @@ router.get("/:vendor_id", async (req, res) => {
       wallet,
       transactions: transactions || [],
       warnings: warnings || [],
+      payment_environment: getPaymentReadiness(),
       thresholds: {
         initial_vendor_payment: INITIAL_VENDOR_PAYMENT,
         activation_service_charge: ACTIVATION_USAGE_CHARGE,
@@ -458,11 +460,13 @@ router.post("/:vendor_id/topup-order", async (req, res) => {
     }
 
     const razorpayOrder = await createRazorpayOrder({ vendorId, amount, purpose });
+    const paymentReadiness = getPaymentReadiness();
 
     return res.json({
       success: true,
       razorpay_order: razorpayOrder,
       key_id: process.env.RAZORPAY_KEY_ID,
+      payment_environment: paymentReadiness,
       purpose,
       amount,
       allocation: purpose === "vendor_initial_activation"
@@ -500,6 +504,7 @@ router.post("/:vendor_id/verify-topup", async (req, res) => {
     }
 
     const payment = await getRazorpayPayment(razorpay_payment_id);
+    const paymentReadiness = getPaymentReadiness();
 
     if (payment.order_id !== razorpay_order_id) {
       return res.status(400).json({ success: false, error: "Razorpay order mismatch." });
@@ -512,57 +517,58 @@ router.post("/:vendor_id/verify-topup", async (req, res) => {
     const verifiedAmount = Number(payment.amount || 0) / 100;
     const purpose = payment.notes?.purpose || payment.notes?.payment_purpose || "vendor_wallet_topup";
 
-    if (purpose === "vendor_initial_activation") {
-      if (verifiedAmount !== INITIAL_VENDOR_PAYMENT) {
-        return res.status(400).json({ success: false, error: "Initial activation payment must be Rs 5,500." });
-      }
-
-      const wallet = await applyInitialActivationPayment({
+    if (!paymentReadiness.live_payments_enabled) {
+      await recordTestPaymentAttempt({
         vendorId,
         razorpayOrderId: razorpay_order_id,
         razorpayPaymentId: razorpay_payment_id,
-        razorpaySignature: razorpay_signature,
+        purpose,
+        amount: verifiedAmount,
         payment,
+        paymentReadiness,
       });
 
       return res.json({
         success: true,
-        wallet,
-        payment_method: payment.method,
+        test_mode: true,
+        wallet_credited: false,
+        vendor_activated: false,
+        payment_environment: paymentReadiness,
+        message: paymentReadiness.payment_message,
         verified_amount: verifiedAmount,
-        allocation: {
-          initial_payment: INITIAL_VENDOR_PAYMENT,
-          activation_service_charge: ACTIVATION_USAGE_CHARGE,
-          refundable_wallet_credit: SECURITY_DEPOSIT_MINIMUM,
-        },
+        payment_method: payment.method,
       });
     }
 
-    if (verifiedAmount !== STANDARD_WALLET_TOPUP) {
+    if (purpose === "vendor_initial_activation" && verifiedAmount !== INITIAL_VENDOR_PAYMENT) {
+      return res.status(400).json({ success: false, error: "Initial activation payment must be Rs 5,500." });
+    }
+
+    if (purpose !== "vendor_initial_activation" && verifiedAmount !== STANDARD_WALLET_TOPUP) {
       return res.status(400).json({ success: false, error: "Standard wallet top-up must be Rs 5,000." });
     }
 
-    const wallet = await applyWalletCredit({
-      vendorId,
-      amount: verifiedAmount,
-      transactionType: "top_up",
-      paymentReference: razorpay_payment_id,
-      razorpayOrderId: razorpay_order_id,
-      razorpayPaymentId: razorpay_payment_id,
-      razorpaySignature: razorpay_signature,
-      metadata: {
-        gateway: "razorpay",
-        method: payment.method,
-        bank: payment.bank,
-        card_id: payment.card_id,
-        vpa: payment.vpa,
-        status: payment.status,
-        payment_purpose: "vendor_wallet_topup",
-        is_refundable: true,
-      },
+    return res.json({
+      success: true,
+      wallet_credited: false,
+      vendor_activated: false,
+      awaiting_webhook: true,
+      payment_environment: paymentReadiness,
+      message: "Payment response verified. Vendor wallet will update only after the secure Razorpay webhook is received and verified by the backend.",
+      payment_method: payment.method,
+      verified_amount: verifiedAmount,
+      allocation: purpose === "vendor_initial_activation"
+        ? {
+            initial_payment: INITIAL_VENDOR_PAYMENT,
+            activation_service_charge: ACTIVATION_USAGE_CHARGE,
+            refundable_wallet_credit: SECURITY_DEPOSIT_MINIMUM,
+          }
+        : {
+            topup_amount: STANDARD_WALLET_TOPUP,
+            activation_service_charge: 0,
+            refundable_wallet_credit: STANDARD_WALLET_TOPUP,
+          },
     });
-
-    return res.json({ success: true, wallet, payment_method: payment.method, verified_amount: verifiedAmount });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }

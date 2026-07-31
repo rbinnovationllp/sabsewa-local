@@ -2,21 +2,38 @@ const fs = require("fs");
 const path = require("path");
 
 const projectRoot = path.resolve(__dirname, "..");
-const source = path.join(projectRoot, "public_hostinger.htaccess");
+const publicDir = path.join(projectRoot, "web-public");
 const distDir = path.join(projectRoot, "dist");
-const target = path.join(distDir, ".htaccess");
 const pwaIconDir = path.join(distDir, "pwa-icons");
+const buildId = new Date().toISOString().replace(/[-:T.Z]/g, "").slice(0, 14);
 
-if (!fs.existsSync(source)) {
-  throw new Error(`Missing Hostinger .htaccess template: ${source}`);
+function copyRecursive(source, target) {
+  const stat = fs.statSync(source);
+  if (stat.isDirectory()) {
+    fs.mkdirSync(target, { recursive: true });
+    for (const entry of fs.readdirSync(source)) {
+      copyRecursive(path.join(source, entry), path.join(target, entry));
+    }
+    return;
+  }
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  let content = fs.readFileSync(source);
+  if (path.basename(source) === "service-worker.js") {
+    content = Buffer.from(content.toString("utf8").replaceAll("__BUILD_ID__", buildId), "utf8");
+  }
+  fs.writeFileSync(target, content);
+}
+
+if (!fs.existsSync(publicDir)) {
+  throw new Error(`Missing version-controlled web public assets directory: ${publicDir}`);
 }
 
 if (!fs.existsSync(distDir)) {
   throw new Error(`Missing Expo export folder: ${distDir}`);
 }
 
-fs.copyFileSync(source, target);
-console.log(`Copied Hostinger .htaccess to ${target}`);
+copyRecursive(publicDir, distDir);
+console.log(`Copied version-controlled web public assets from ${publicDir} to ${distDir}`);
 
 const indexPath = path.join(distDir, "index.html");
 if (fs.existsSync(indexPath)) {
@@ -26,6 +43,9 @@ if (fs.existsSync(indexPath)) {
       "</head>",
       [
         '  <meta name="theme-color" content="#0f766e">',
+        '  <meta name="apple-mobile-web-app-capable" content="yes">',
+        '  <meta name="apple-mobile-web-app-title" content="SabSewa Local">',
+        '  <meta name="apple-mobile-web-app-status-bar-style" content="default">',
         '  <link rel="manifest" href="/manifest.webmanifest">',
         '  <link rel="apple-touch-icon" href="/pwa-icons/icon-192.png">',
         "</head>"
@@ -61,103 +81,20 @@ if (fs.existsSync(splashSource)) {
   fs.copyFileSync(splashSource, path.join(pwaIconDir, "icon-512.png"));
 }
 
-const manifest = {
-  name: "SabSewa Local",
-  short_name: "SabSewa",
-  description: "SabSewa Local hyperlocal marketplace for customers, vendors and riders.",
-  start_url: "/",
-  scope: "/",
-  display: "standalone",
-  orientation: "portrait",
-  background_color: "#ffffff",
-  theme_color: "#0f766e",
-  categories: ["shopping", "business", "food"],
-  icons: [
-    {
-      src: "/pwa-icons/icon-192.png",
-      sizes: "192x192",
-      type: "image/png",
-      purpose: "any maskable"
-    },
-    {
-      src: "/pwa-icons/icon-512.png",
-      sizes: "512x512",
-      type: "image/png",
-      purpose: "any maskable"
-    }
-  ]
+const deploymentMeta = {
+  build_id: buildId,
+  built_at: new Date().toISOString(),
+  source: "mobile/web-public",
+  public_app_url: "https://www.sabsewa.in",
+  production_api_url: "https://api.sabsewa.in",
+  supabase_project_ref: "xodmazgfibftorrlbotk",
+  note: "Static frontend deployment only. No database migrations, storage deletion or backend deployment are performed by this export script.",
 };
 
 fs.writeFileSync(
-  path.join(distDir, "manifest.webmanifest"),
-  `${JSON.stringify(manifest, null, 2)}\n`,
+  path.join(distDir, "deployment-meta.json"),
+  `${JSON.stringify(deploymentMeta, null, 2)}\n`,
   "utf8"
 );
 
-fs.writeFileSync(
-  path.join(distDir, "offline.html"),
-  `<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>SabSewa Local Offline</title>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 0; padding: 32px; color: #0f172a; background: #f8fafc; }
-    main { max-width: 560px; margin: 10vh auto; }
-    h1 { color: #0f766e; }
-    p { line-height: 1.5; }
-  </style>
-</head>
-<body>
-  <main>
-    <h1>SabSewa Local is offline</h1>
-    <p>Please check your internet connection. Saved app screens may open, but live shop, order, wallet and payment information requires secure network access.</p>
-  </main>
-</body>
-</html>
-`,
-  "utf8"
-);
-
-fs.writeFileSync(
-  path.join(distDir, "service-worker.js"),
-  `const CACHE_NAME = "sabsewa-local-shell-20260731";
-const APP_SHELL = ["/", "/index.html", "/metadata.json", "/favicon.ico", "/offline.html", "/manifest.webmanifest"];
-
-self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)));
-  self.skipWaiting();
-});
-
-self.addEventListener("activate", (event) => {
-  event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key)))
-    )
-  );
-  self.clients.claim();
-});
-
-self.addEventListener("fetch", (event) => {
-  if (event.request.method !== "GET") return;
-
-  if (event.request.mode === "navigate") {
-    event.respondWith(
-      fetch(event.request).catch(async () => {
-        const cache = await caches.open(CACHE_NAME);
-        return (await cache.match("/index.html")) || cache.match("/offline.html");
-      })
-    );
-    return;
-  }
-
-  event.respondWith(
-    caches.match(event.request).then((cached) => cached || fetch(event.request))
-  );
-});
-`,
-  "utf8"
-);
-
-console.log("Prepared PWA manifest, offline shell and service worker in dist");
+console.log("Prepared complete Hostinger PWA public assets in dist");

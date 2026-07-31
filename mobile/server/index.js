@@ -28,6 +28,9 @@ import pendingOrderRouter from "./routes/orders.js";
 import riderActionsRouter from "./routes/riderActions.js";
 import deviceAuthRouter from "./auth/deviceRoutes.js";
 import vendorDirectoryRouter from "./company/vendorDirectoryRoutes.js";
+import { getPaymentReadiness } from "./payments/paymentEnvironment.js";
+import razorpayWebhookRouter from "./payments/razorpayWebhookRoutes.js";
+import webPushRouter from "./notifications/webPushRoutes.js";
 // Database connection
 import { supabase } from "./connection.js";
 
@@ -35,6 +38,7 @@ const app = express();
 
 // Middleware
 app.use(cors());
+app.use("/api/payments", razorpayWebhookRouter);
 app.use(express.json());
 
 // --- ROUTE MOUNTING ---
@@ -63,9 +67,14 @@ app.use("/api/orders", pendingOrderRouter);
 app.use("/api/rider", riderActionsRouter);
 app.use("/api/auth", deviceAuthRouter);
 app.use("/api/company", vendorDirectoryRouter);
+app.use("/api/notifications", webPushRouter);
 // Health Check
 app.get("/", (req, res) => {
   res.json({ status: "SabSewa Backend is running 🚀" });
+});
+
+app.get("/api/admin/payment-environment", (req, res) => {
+  res.json({ success: true, payment_environment: getPaymentReadiness() });
 });
 
 // --- OPTIONAL: AUTOMATED CRON JOBS ---

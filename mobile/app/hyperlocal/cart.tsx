@@ -55,6 +55,8 @@ export default function SabSewaLocalCartScreen() {
   const [lines, setLines] = useState<CartLine[]>([]);
   const [address, setAddress] = useState("");
   const [phone, setPhone] = useState("");
+  const [customerName, setCustomerName] = useState("");
+  const [addressConfirmed, setAddressConfirmed] = useState(false);
   const [loading, setLoading] = useState(true);
   const [placing, setPlacing] = useState(false);
   const [notice, setNotice] = useState("");
@@ -81,6 +83,32 @@ export default function SabSewaLocalCartScreen() {
     loadCartItems();
     loadDeliverySettings();
   }, [rawCartData]);
+
+  useEffect(() => {
+    loadSavedCustomerDetails();
+  }, [user?.id]);
+
+  async function loadSavedCustomerDetails() {
+    if (!user?.id) return;
+
+    const [{ data: profile }, { data: savedAddress }] = await Promise.all([
+      supabase
+        .from("user_profiles")
+        .select("full_name, phone")
+        .eq("user_id", user.id)
+        .maybeSingle(),
+      supabase
+        .from("customer_addresses")
+        .select("full_address")
+        .eq("customer_id", user.id)
+        .eq("is_primary", true)
+        .maybeSingle(),
+    ]);
+
+    if (profile?.full_name) setCustomerName(profile.full_name);
+    if (profile?.phone) setPhone(profile.phone);
+    if (savedAddress?.full_address) setAddress(savedAddress.full_address);
+  }
 
   async function loadDeliverySettings() {
     if (!terminalId) return;
@@ -189,6 +217,12 @@ export default function SabSewaLocalCartScreen() {
       return;
     }
 
+    if (!addressConfirmed) {
+      setNotice("Please confirm the delivery address before placing this order.");
+      Alert.alert("Confirm delivery address", "Review the selected delivery address and tick confirmation before placing the order.");
+      return;
+    }
+
     setPlacing(true);
 
     try {
@@ -205,6 +239,7 @@ export default function SabSewaLocalCartScreen() {
           product_variant_id: line.product_variant_id || null,
         })),
         customer_address: address.trim(),
+        customer_name: customerName.trim(),
         customer_phone: phone.trim(),
         payment_method: paymentMethod,
         delivery_charge: deliveryFee,
@@ -349,6 +384,11 @@ export default function SabSewaLocalCartScreen() {
       ) : null}
 
       <Text style={styles.label}>Delivery Address</Text>
+      <View style={styles.confirmBox}>
+        <Text style={styles.confirmTitle}>Deliver to:</Text>
+        <Text style={styles.confirmText}>{address.trim() || "No saved address selected"}</Text>
+        <Text style={styles.confirmHelp}>Change address below if this is not correct.</Text>
+      </View>
       <TextInput
         style={[styles.input, styles.textArea]}
         multiline
@@ -365,6 +405,13 @@ export default function SabSewaLocalCartScreen() {
         keyboardType="phone-pad"
         placeholder="Customer phone number"
       />
+
+      <TouchableOpacity style={styles.confirmRow} onPress={() => setAddressConfirmed((value) => !value)}>
+        <View style={[styles.checkbox, addressConfirmed && styles.checkboxChecked]}>
+          {addressConfirmed ? <Text style={styles.checkboxText}>OK</Text> : null}
+        </View>
+        <Text style={styles.confirmRowText}>I confirm this delivery address and contact number for this order.</Text>
+      </TouchableOpacity>
 
       <TouchableOpacity
         style={[styles.placeBtn, placing && styles.disabled]}
@@ -459,6 +506,10 @@ const styles = StyleSheet.create({
   summaryLabel: { fontSize: 16, fontWeight: "800" },
   summaryTotal: { fontSize: 18, fontWeight: "900" },
   label: { fontWeight: "800", marginBottom: 8 },
+  confirmBox: { borderWidth: 1, borderColor: "#99f6e4", backgroundColor: "#ecfeff", borderRadius: 10, padding: 12, marginBottom: 12 },
+  confirmTitle: { color: "#0f766e", fontWeight: "900" },
+  confirmText: { color: "#111827", marginTop: 4, lineHeight: 19 },
+  confirmHelp: { color: "#64748b", marginTop: 4, fontSize: 12 },
   input: {
     borderWidth: 1,
     borderColor: "#ccc",
@@ -467,6 +518,11 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   textArea: { minHeight: 88, textAlignVertical: "top" },
+  confirmRow: { flexDirection: "row", gap: 10, alignItems: "center", marginBottom: 14 },
+  checkbox: { width: 28, height: 28, borderWidth: 1, borderColor: "#777", borderRadius: 6, alignItems: "center", justifyContent: "center" },
+  checkboxChecked: { backgroundColor: "#0f766e", borderColor: "#0f766e" },
+  checkboxText: { color: "#fff", fontSize: 10, fontWeight: "900" },
+  confirmRowText: { flex: 1, color: "#374151", lineHeight: 18 },
   placeBtn: {
     backgroundColor: "#16a34a",
     padding: 15,

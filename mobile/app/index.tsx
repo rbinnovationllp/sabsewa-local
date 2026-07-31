@@ -1,15 +1,29 @@
 import { useRouter } from "expo-router";
-import React from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import BrandHeader from "@/components/BrandHeader";
 import LanguageSelector from "@/components/LanguageSelector";
+import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/AuthProvider";
 import { useLanguage } from "@/providers/LanguageProvider";
 
+function sanitizeGreetingName(value?: string | null) {
+  const name = String(value || "")
+    .replace(/[<>]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 40);
+  if (!name || name.includes("@")) return "";
+  const digits = name.replace(/\D/g, "");
+  if (digits.length >= 8) return "";
+  return name;
+}
+
 export default function HomeScreen() {
   const router = useRouter();
-  const { user } = useAuth();
-  const { t } = useLanguage();
+  const { user, loading, signOut } = useAuth();
+  const { t, setLanguage, isLanguageAvailable } = useLanguage();
+  const [profileName, setProfileName] = useState("");
   const role = user?.user_metadata?.role;
   const isCustomer = role === "customer";
   const isVendor = role === "vendor";
@@ -21,6 +35,49 @@ export default function HomeScreen() {
     "category.medical",
     "category.tiffin",
   ];
+  const displayName = useMemo(
+    () => sanitizeGreetingName(profileName || user?.user_metadata?.preferred_name || user?.user_metadata?.full_name),
+    [profileName, user?.user_metadata?.full_name, user?.user_metadata?.preferred_name]
+  );
+  const greeting = loading || !user
+    ? ""
+    : isVendor
+    ? displayName
+      ? t("home.vendorGreeting", { name: displayName })
+      : t("home.vendorGreetingGeneric")
+    : displayName
+    ? t("home.customerGreeting", { name: displayName })
+    : t("home.customerGreetingGeneric");
+
+  useEffect(() => {
+    let active = true;
+    async function loadProfile() {
+      if (!user?.id) {
+        setProfileName("");
+        return;
+      }
+      const { data } = await supabase
+        .from("user_profiles")
+        .select("full_name, preferred_language")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (!active) return;
+      setProfileName(sanitizeGreetingName(data?.full_name));
+      const preferredLanguage = data?.preferred_language;
+      if (preferredLanguage && isLanguageAvailable(preferredLanguage as any)) {
+        setLanguage(preferredLanguage as any);
+      }
+    }
+    loadProfile();
+    return () => {
+      active = false;
+    };
+  }, [isLanguageAvailable, setLanguage, user?.id]);
+
+  async function handleSwitchAccount() {
+    await signOut();
+    router.push("/auth/Login" as any);
+  }
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -33,6 +90,15 @@ export default function HomeScreen() {
         <TextInput style={styles.input} placeholder={t("home.searchPlaceholder")} accessibilityLabel={t("home.searchPlaceholder")} />
         <LanguageSelector />
       </View>
+
+      {greeting ? (
+        <View style={styles.greetingPanel}>
+          <Text style={styles.greetingText}>{greeting}</Text>
+          <TouchableOpacity accessibilityRole="button" accessibilityLabel={t("home.switchAccount")} onPress={handleSwitchAccount}>
+            <Text style={styles.switchText}>{t("home.switchAccount")}</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
 
       <View style={styles.categoryRow}>
         {categoryKeys.map((key) => (
@@ -136,6 +202,16 @@ const styles = StyleSheet.create({
   categoryRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 14 },
   categoryChip: { borderWidth: 1, borderColor: "#99f6e4", backgroundColor: "#ecfeff", borderRadius: 999, paddingVertical: 9, paddingHorizontal: 12 },
   categoryText: { color: "#0f766e", fontWeight: "900" },
+  greetingPanel: {
+    borderWidth: 1,
+    borderColor: "#99f6e4",
+    backgroundColor: "#ecfeff",
+    borderRadius: 8,
+    padding: 14,
+    marginBottom: 14,
+  },
+  greetingText: { color: "#0f766e", fontSize: 18, fontWeight: "900", lineHeight: 24 },
+  switchText: { color: "#1166ff", fontWeight: "900", marginTop: 8 },
   panel: {
     borderWidth: 1,
     borderColor: "#e5e7eb",

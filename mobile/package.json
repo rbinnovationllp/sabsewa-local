@@ -10,7 +10,10 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "export:web": "expo export --platform web",
-    "export:web:hostinger": "expo export --platform web && node ./scripts/copy-hostinger-htaccess.js",
+    "export:web:hostinger": "expo export --platform web && node ./scripts/copy-hostinger-htaccess.js && node ./scripts/validate-production-web-build.js && node ./scripts/archive-web-build.js",
+    "deploy:validate": "node ./scripts/validate-production-web-build.js",
+    "deploy:archive": "node ./scripts/archive-web-build.js",
+    "deploy:rollback": "node ./scripts/rollback-web-build.js",
     "test:localization": "node ./scripts/verify-multilingual-foundation.mjs"
   },
   "dependencies": {

@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
+import { normalizeIndianPhone } from "@/lib/phone";
 
 export type AppUser = User | null;
 
@@ -12,7 +13,12 @@ export type AuthContextType = {
   firebaseUser: AppUser;
   hasActiveSubscription: boolean;
   signInWithOtp: (phone: string) => Promise<{ data?: unknown; error?: unknown }>;
+  signInWithEmailOtp: (email: string, metadata?: Record<string, unknown>) => Promise<{ data?: unknown; error?: unknown }>;
+  signInWithEmailPassword: (email: string, password: string) => Promise<{ data?: any; error?: unknown }>;
+  signUpWithEmailPassword: (email: string, password: string, metadata?: Record<string, unknown>) => Promise<{ data?: any; error?: unknown }>;
+  verifyEmailOtp: (email: string, token: string) => Promise<{ data?: any; error?: unknown }>;
   verifyOtp: (phone: string, token: string) => Promise<{ data?: any; error?: unknown }>;
+  signInWithGoogle: () => Promise<{ data?: unknown; error?: unknown }>;
   signOut: () => Promise<void>;
   refreshSession: () => Promise<void>;
 };
@@ -45,14 +51,52 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
       firebaseUser: session?.user ?? null,
       hasActiveSubscription: true,
       signInWithOtp: async (phone: string) => {
-        const { data, error } = await supabase.auth.signInWithOtp({ phone });
+        const normalizedPhone = normalizeIndianPhone(phone);
+        const { data, error } = await supabase.auth.signInWithOtp({ phone: normalizedPhone });
+        return { data, error };
+      },
+      signInWithEmailOtp: async (email: string, metadata = {}) => {
+        const { data, error } = await supabase.auth.signInWithOtp({
+          email: String(email || "").trim().toLowerCase(),
+          options: { data: metadata },
+        });
+        return { data, error };
+      },
+      signInWithEmailPassword: async (email: string, password: string) => {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: String(email || "").trim().toLowerCase(),
+          password,
+        });
+        return { data, error };
+      },
+      signUpWithEmailPassword: async (email: string, password: string, metadata = {}) => {
+        const { data, error } = await supabase.auth.signUp({
+          email: String(email || "").trim().toLowerCase(),
+          password,
+          options: { data: metadata },
+        });
         return { data, error };
       },
       verifyOtp: async (phone: string, token: string) => {
+        const normalizedPhone = normalizeIndianPhone(phone);
         const { data, error } = await supabase.auth.verifyOtp({
-          phone,
+          phone: normalizedPhone,
           token,
           type: "sms"
+        });
+        return { data, error };
+      },
+      verifyEmailOtp: async (email: string, token: string) => {
+        const { data, error } = await supabase.auth.verifyOtp({
+          email: String(email || "").trim().toLowerCase(),
+          token,
+          type: "email",
+        });
+        return { data, error };
+      },
+      signInWithGoogle: async () => {
+        const { data, error } = await supabase.auth.signInWithOAuth({
+          provider: "google",
         });
         return { data, error };
       },

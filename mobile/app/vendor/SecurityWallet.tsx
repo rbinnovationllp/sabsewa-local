@@ -31,6 +31,7 @@ export default function VendorSecurityWalletScreen() {
 
   const wallet = walletData?.wallet;
   const isActivated = Boolean(wallet?.activation_fee_paid);
+  const paymentEnvironment = walletData?.payment_environment;
 
   const statusText = useMemo(() => {
     switch (wallet?.eligibility_status) {
@@ -131,6 +132,9 @@ export default function VendorSecurityWalletScreen() {
         throw new Error(json.error || "Could not create Razorpay order");
       }
 
+      const shouldContinue = await confirmPaymentEnvironment(json.payment_environment);
+      if (!shouldContinue) return;
+
       let RazorpayCheckout: any = null;
       try {
         RazorpayCheckout = require("react-native-razorpay");
@@ -173,18 +177,40 @@ export default function VendorSecurityWalletScreen() {
         throw new Error(verifyJson.error || "Payment verification failed");
       }
 
-      Alert.alert(
-        purpose === "vendor_initial_activation" ? "Activation successful" : "Top-up successful",
-        purpose === "vendor_initial_activation"
-          ? "Rs 5,000 has been credited to your refundable advance wallet. The Rs 500 activation/service charge is recorded separately."
-          : "Vendor advance balance updated."
-      );
+      if (verifyJson.test_mode) {
+        Alert.alert("Test payment recorded", verifyJson.message || "No real money was collected and no production wallet balance was credited.");
+      } else if (verifyJson.awaiting_webhook) {
+        Alert.alert("Payment verification received", verifyJson.message || "Wallet will update after the verified Razorpay webhook is processed.");
+      } else {
+        Alert.alert(
+          purpose === "vendor_initial_activation" ? "Activation successful" : "Top-up successful",
+          purpose === "vendor_initial_activation"
+            ? "Rs 5,000 has been credited to your refundable advance wallet. The Rs 500 activation/service charge is recorded separately."
+            : "Vendor advance balance updated."
+        );
+      }
       await loadWallet(vendorId);
     } catch (error) {
       Alert.alert("Top-up failed", error instanceof Error ? error.message : "Unknown error");
     } finally {
       setCreatingOrder(false);
     }
+  }
+
+  function confirmPaymentEnvironment(environment: any): Promise<boolean> {
+    if (environment?.live_payments_enabled) return Promise.resolve(true);
+
+    return new Promise((resolve) => {
+      Alert.alert(
+        environment?.banner || "TEST MODE - NO REAL MONEY WILL BE COLLECTED",
+        environment?.payment_message ||
+          "This is a test transaction. No real money will be collected, no production wallet balance will be credited and the vendor account will not be activated for commercial orders.",
+        [
+          { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
+          { text: "Continue Test", onPress: () => resolve(true) },
+        ]
+      );
+    });
   }
 
   async function viewEvidence(tx: any) {
@@ -269,6 +295,15 @@ export default function VendorSecurityWalletScreen() {
       ) : (
         <>
           <View style={styles.statusCard}>
+            {paymentEnvironment ? (
+              <View style={[
+                styles.environmentBanner,
+                paymentEnvironment.live_payments_enabled ? styles.liveBanner : styles.testBanner,
+              ]}>
+                <Text style={styles.environmentBannerText}>{paymentEnvironment.banner}</Text>
+                <Text style={styles.environmentBannerSubtext}>{paymentEnvironment.payment_message}</Text>
+              </View>
+            ) : null}
             <Text style={styles.statusLabel}>Order Eligibility</Text>
             <Text style={styles.statusText}>{statusText}</Text>
             <Text style={styles.balance}>Rs {Number(wallet.current_balance || 0).toFixed(2)}</Text>
@@ -394,6 +429,11 @@ const styles = StyleSheet.create({
   subtitle: { marginTop: 6, marginBottom: 16, color: "#555", lineHeight: 20 },
   muted: { color: "#666", marginTop: 3 },
   statusCard: { padding: 16, borderRadius: 12, backgroundColor: "#eef6ff", marginBottom: 14 },
+  environmentBanner: { borderRadius: 10, padding: 12, marginBottom: 12 },
+  testBanner: { backgroundColor: "#fff7ed", borderWidth: 1, borderColor: "#fb923c" },
+  liveBanner: { backgroundColor: "#ecfdf5", borderWidth: 1, borderColor: "#10b981" },
+  environmentBannerText: { fontWeight: "900", color: "#111827", marginBottom: 4 },
+  environmentBannerSubtext: { color: "#374151", lineHeight: 18 },
   statusLabel: { fontWeight: "700", color: "#1d4ed8" },
   statusText: { fontWeight: "900", fontSize: 16, marginTop: 4 },
   balance: { fontWeight: "900", fontSize: 28, marginTop: 8 },

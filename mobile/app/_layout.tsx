@@ -5,6 +5,7 @@ import { Platform } from "react-native";
 import { LanguageProvider } from "@/providers/LanguageProvider";
 import AuthProvider from "@/providers/AuthProvider";
 import { UserProvider } from "@/contexts/UserContext";
+import PwaInstallPrompt from "@/components/PwaInstallPrompt";
 
 export default function RootLayout() {
   return (
@@ -21,6 +22,7 @@ export default function RootLayout() {
               }),
             }}
           />
+          <PwaInstallPrompt />
         </UserProvider>
       </AuthProvider>
     </LanguageProvider>

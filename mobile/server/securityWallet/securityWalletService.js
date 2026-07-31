@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import axios from "axios";
 import { supabase } from "../connection.js";
+import { getPaymentReadiness } from "../payments/paymentEnvironment.js";
 
 export const SECURITY_DEPOSIT_MINIMUM = 5000;
 export const INITIAL_VENDOR_PAYMENT = 5500;
@@ -213,6 +214,7 @@ export async function createRazorpayOrder({ vendorId, amount, purpose = "vendor_
   }
 
   const wallet = await getOrCreateSecurityWallet(vendorId);
+  const paymentReadiness = getPaymentReadiness();
   const publicVendorId = await getVendorPublicId(vendorId);
   const isInitialActivation = purpose === "vendor_initial_activation";
   const expectedAmount = isInitialActivation ? INITIAL_VENDOR_PAYMENT : STANDARD_WALLET_TOPUP;
@@ -251,6 +253,8 @@ export async function createRazorpayOrder({ vendorId, amount, purpose = "vendor_
           : "SabSewa Local vendor advance wallet top-up",
         purpose,
         payment_purpose: purpose,
+        environment: paymentReadiness.mode,
+        production_wallet_credit_allowed: paymentReadiness.live_payments_enabled ? "true" : "false",
         service_charge: isInitialActivation ? String(ACTIVATION_USAGE_CHARGE) : "0",
         wallet_credit: isInitialActivation ? String(SECURITY_DEPOSIT_MINIMUM) : String(STANDARD_WALLET_TOPUP),
         real_world_services: "true",
@@ -267,6 +271,38 @@ export async function createRazorpayOrder({ vendorId, amount, purpose = "vendor_
   );
 
   return data;
+}
+
+export async function recordTestPaymentAttempt({
+  vendorId,
+  razorpayOrderId,
+  razorpayPaymentId,
+  purpose,
+  amount,
+  payment,
+  paymentReadiness,
+}) {
+  try {
+    await supabase.from("vendor_payment_test_events").insert({
+      vendor_id: vendorId,
+      razorpay_order_id: razorpayOrderId,
+      razorpay_payment_id: razorpayPaymentId,
+      purpose,
+      amount,
+      environment: "test",
+      payment_status: payment?.status || null,
+      payment_method: payment?.method || null,
+      wallet_credit_applied: false,
+      vendor_activation_applied: false,
+      readiness_snapshot: paymentReadiness,
+      metadata: {
+        gateway: "razorpay",
+        note: "Test Mode transaction recorded separately. No production wallet credit or vendor activation is applied.",
+      },
+    });
+  } catch (error) {
+    console.warn("Unable to record Razorpay test payment event:", error.message);
+  }
 }
 
 export async function getRazorpayPayment(razorpayPaymentId) {

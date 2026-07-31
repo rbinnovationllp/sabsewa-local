@@ -22,6 +22,7 @@ import {
   SABSEWA_PRIVACY_VERSION,
   SABSEWA_TERMS_VERSION,
 } from "@/lib/legalVersions";
+import { normalizeIndianPhone } from "@/lib/phone";
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -30,7 +31,7 @@ export default function LoginScreen() {
   const { t } = useLanguage();
 
   const [phone, setPhone] = useState(params.phone ? String(params.phone) : "");
-  const [otpSent, setOtpSent] = useState(false);
+  const [otpSent, setOtpSent] = useState(params.otpSent === "1" || params.registering === "1");
   const [token, setToken] = useState("");
   const [trustDevice, setTrustDevice] = useState(true);
 
@@ -43,12 +44,14 @@ export default function LoginScreen() {
     setSubmitLoading(true);
 
     try {
-      const { error } = await signInWithOtp(phone);
+      const normalizedPhone = normalizeIndianPhone(phone);
+      const { error } = await signInWithOtp(normalizedPhone);
       if (error) throw error;
 
+      setPhone(normalizedPhone);
       setOtpSent(true);
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message || "Unable to send OTP. Confirm Supabase phone OTP/SMS provider settings.");
     } finally {
       setSubmitLoading(false);
     }
@@ -60,7 +63,8 @@ export default function LoginScreen() {
     setSubmitLoading(true);
 
     try {
-      const { data, error } = await verifyOtp(phone, token);
+      const normalizedPhone = normalizeIndianPhone(phone);
+      const { data, error } = await verifyOtp(normalizedPhone, token);
       if (error) throw error;
 
       const user = data.user;
@@ -70,7 +74,7 @@ export default function LoginScreen() {
           user_id: user.id,
           role: metadata.role,
           full_name: metadata.full_name || "",
-          phone,
+          phone: normalizedPhone,
           city: metadata.city || "",
           preferred_language: metadata.preferred_language || "en",
           terms_version: metadata.terms_version || SABSEWA_TERMS_VERSION,
@@ -222,6 +226,13 @@ export default function LoginScreen() {
               <Text style={styles.buttonText}>Verify OTP</Text>
             )}
           </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.resendBtn}
+            onPress={handleSendOTP}
+            disabled={submitLoading}
+          >
+            <Text style={styles.resendText}>Resend OTP</Text>
+          </TouchableOpacity>
         </>
       )}
 
@@ -273,6 +284,18 @@ const styles = StyleSheet.create({
   buttonText: {
     color: "#fff",
     fontWeight: "700",
+  },
+  resendBtn: {
+    borderWidth: 1,
+    borderColor: "#1e88e5",
+    padding: 12,
+    borderRadius: 10,
+    alignItems: "center",
+    marginTop: 10,
+  },
+  resendText: {
+    color: "#1e88e5",
+    fontWeight: "800",
   },
   errorText: { color: "red", marginBottom: 10, textAlign: "center" },
   trustRow: { flexDirection: "row", gap: 10, alignItems: "flex-start", marginBottom: 12 },

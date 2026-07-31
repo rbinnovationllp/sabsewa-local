@@ -45,6 +45,8 @@ For final AI handover, use [`docs/GEMINI_HANDOVER_PROMPT.md`](docs/GEMINI_HANDOV
 
 For the first controlled housing-society pilot, use [`docs/SOCIETY_PILOT_LAUNCH_RUNBOOK.md`](docs/SOCIETY_PILOT_LAUNCH_RUNBOOK.md), [`docs/PILOT_FEEDBACK_FORM.md`](docs/PILOT_FEEDBACK_FORM.md), [`docs/PILOT_DAILY_MONITORING_REPORT.md`](docs/PILOT_DAILY_MONITORING_REPORT.md) and [`docs/PILOT_REVENUE_AND_ORDER_LOG_TEMPLATE.csv`](docs/PILOT_REVENUE_AND_ORDER_LOG_TEMPLATE.csv).
 
+For Razorpay live-payment readiness, use [`docs/RAZORPAY_LIVE_MODE_READINESS.md`](docs/RAZORPAY_LIVE_MODE_READINESS.md). Razorpay Test Mode transactions are simulations and must not activate real vendor wallets or commercial order receiving.
+
 ## Core Features
 
 - Nearby vendor discovery within approximately 500 metres to 1 kilometre
@@ -65,6 +67,12 @@ For the first controlled housing-society pilot, use [`docs/SOCIETY_PILOT_LAUNCH_
 - Secure image and document storage
 - Razorpay integration for Rs 5,500 first vendor activation and Rs 5,000 later wallet top-ups
 - Gemini-powered product and ordering assistance
+
+## Razorpay Payment Safety
+
+Vendor payments are separated by Razorpay environment. In Test Mode, no real money is collected, no production wallet balance is credited and no vendor is activated for commercial orders.
+
+In Live Mode, vendor wallet credits are applied only after the backend receives and verifies a Razorpay `payment.captured` webhook. Client-side payment callbacks are used only to inform the user that the payment response was received.
 
 ## Multilingual Support
 

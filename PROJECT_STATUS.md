@@ -49,6 +49,145 @@ Current compliance status:
 - Still requires live proof: Gemini API key configuration, real Gemini calls, usage dashboard screenshots, redacted logs and a recorded demo showing live AI outputs.
 - Eligibility risk: the older combined SabSewa project must be disclosed as prototype/reference work. The standalone SabSewa Local business and repository must be presented honestly as hackathon-period work where applicable.
 
+## 2026-07-31 Razorpay Live-Mode Hardening Update
+
+Implemented after Gemini payment-readiness review:
+
+- Added explicit Razorpay environment detection through `RAZORPAY_ENVIRONMENT` / `RAZORPAY_MODE`.
+- Added backend readiness route: `GET /api/admin/payment-environment`.
+- Added Company CRM environment banner:
+  - `TEST MODE - NO REAL MONEY WILL BE COLLECTED`
+  - `LIVE MODE - REAL PAYMENTS ENABLED`
+- Added Vendor Wallet environment banner and pre-checkout warning.
+- Test Mode checkout warning states that no real money will be collected, no production wallet balance will be credited and no commercial order activation will happen.
+- Browser/mobile callback route now verifies the payment response but does not credit the wallet or activate the vendor in live mode.
+- Added verified Razorpay webhook route:
+  - `POST /api/payments/razorpay/webhook`
+  - Verifies `x-razorpay-signature` with HMAC-SHA256.
+  - Processes wallet credits only for `payment.captured`.
+  - Records webhook event IDs for replay/idempotency protection.
+  - Ignores duplicate webhook deliveries without duplicate wallet credit.
+- Added separated test-payment evidence table:
+  - `vendor_payment_test_events`
+- Added Razorpay webhook audit table:
+  - `razorpay_webhook_events`
+- Updated server environment templates:
+  - `mobile/server/.env.example`
+  - `backend/.env.example`
+- Added readiness guide:
+  - `docs/RAZORPAY_LIVE_MODE_READINESS.md`
+- Added SQL runner:
+  - `supabase/RUN_ONLY_RAZORPAY_ENVIRONMENT_SAFEGUARDS.sql`
+
+Current Razorpay recommendation:
+
+- **Safe to onboard vendors for registration and training only.**
+- **Safe to conduct a controlled test pilot without real money.**
+- **Not safe to accept real vendor payments until live Razorpay keys, live webhook secret, HTTPS webhook configuration, duplicate webhook replay test and reconciliation are verified.**
+
+Basic payment behaviour confirmed:
+
+- Razorpay Test Mode transactions are simulations.
+- Test Mode does not collect or settle real money.
+- No vendor should be marked payment-verified, credited with real wallet balance or allowed to receive commercial orders from a Test Mode payment.
+- Test and Live Razorpay environments must use separate keys, secrets, webhooks, reconciliation records and wallet-credit evidence.
+
+## 2026-07-31 Registration OTP Flow Fix
+
+Implemented after customer/vendor OTP delivery complaint:
+
+- Added shared Indian mobile-number normalisation helper:
+  - `mobile/lib/phone.ts`
+- Auth provider now sends and verifies Supabase SMS OTP using E.164 format, e.g. `+91XXXXXXXXXX`.
+- Registration now routes directly to OTP entry after a successful OTP request instead of returning to a fresh `Send OTP` screen.
+- Login/OTP screen now supports direct OTP entry when registration has already requested the OTP.
+- Added `Resend OTP` action on the OTP screen.
+- Improved OTP send error message so Supabase phone/SMS configuration issues are easier to identify.
+
+Verified:
+
+- `npx.cmd tsc --noEmit --pretty false` passed from `mobile`.
+
+Still requires Supabase dashboard verification:
+
+- Phone provider must be enabled under Supabase Authentication.
+- SMS provider credentials/templates must be configured and active.
+- Phone OTP settings/rate limits must permit the tested mobile number.
+- Auth logs should show whether Supabase accepted, rate-limited, failed or delivered the OTP request.
+
+## 2026-07-31 PWA And Static Deployment Safety Update
+
+Implemented after Hostinger `public_html` audit:
+
+- Confirmed from the supplied Hostinger screenshot that `public_html` contains static frontend/PWA files only: `_expo`, `assets`, `pwa-icons`, `.htaccess`, `favicon.ico`, `index.html`, `manifest.webmanifest`, `metadata.json`, `offline.html` and `service-worker.js`.
+- Added version-controlled public web assets under:
+  - `mobile/web-public/.htaccess`
+  - `mobile/web-public/manifest.webmanifest`
+  - `mobile/web-public/service-worker.js`
+  - `mobile/web-public/offline.html`
+  - `mobile/web-public/robots.txt`
+  - `mobile/web-public/sitemap.xml`
+  - `mobile/web-public/domain-verification/README.md`
+- Added PWA install/update UI:
+  - `mobile/components/PwaInstallPrompt.tsx`
+  - Android/desktop supported browsers see an install action when available.
+  - iPhone users see Safari Add to Home Screen guidance.
+  - Updates are surfaced through a refresh action when a waiting service worker is available.
+- Added safe service-worker caching rules:
+  - Caches only app shell/static assets.
+  - Does not cache Supabase, API, auth, OTP, profile, address, wallet, payment, Razorpay or private responses.
+  - Provides `offline.html` for network failure on navigation.
+- Added web-push subscription persistence route and migration:
+  - `mobile/server/notifications/webPushRoutes.js`
+  - `supabase/migrations/202607310003_pwa_web_push_subscriptions.sql`
+  - `supabase/RUN_ONLY_PWA_WEB_PUSH_SUBSCRIPTIONS.sql`
+- Added delivery-address confirmation in checkout:
+  - `mobile/app/hyperlocal/cart.tsx`
+  - Saved customer name, phone and primary address are loaded for convenience.
+  - Customer must confirm the delivery address/contact before each order attempt.
+- Added deployment validation and rollback tooling:
+  - `mobile/scripts/validate-production-web-build.js`
+  - `mobile/scripts/archive-web-build.js`
+  - `mobile/scripts/rollback-web-build.js`
+  - `npm run export:web:hostinger` now exports, copies PWA public assets, validates production target and archives the successful build.
+  - `npm run deploy:validate` blocks deployment if `https://api.sabsewa.in` or Supabase project ref `xodmazgfibftorrlbotk` is missing/wrong, if localhost appears, or if server secrets/server folders/migrations are present in `dist`.
+
+Architecture confirmation:
+
+- Hostinger stores only the static PWA frontend.
+- Supabase stores customer, vendor, order, wallet, payment, credit, support and audit records.
+- AWS S3 stores product images and vendor documents.
+- EC2 at `https://api.sabsewa.in` runs backend logic, Gemini calls, Razorpay verification and privileged Supabase operations.
+- Routine frontend deployment must not execute database migrations, S3 deletion or backend deployment.
+
+Additional PWA home-screen install update:
+
+- `mobile/components/PwaInstallPrompt.tsx` now shows a clearly visible but non-intrusive home-page floating action labelled `Install SabSewa Local`.
+- Supporting text explains that customers can add SabSewa Local to the phone home screen and avoid typing `www.sabsewa.in` each time.
+- The install guide opens in the selected app language and includes tabs for Android, iPhone/iPad and Computer.
+- Android/desktop browsers use the browser PWA prompt where supported through an explicit `Install Now` action.
+- iPhone/iPad instructions explain Safari's Share menu and do not claim the website can install itself automatically.
+- The prompt is keyboard-accessible, dismissible and remembers dismissal for 14 days.
+- The prompt is not shown while the PWA is already running in standalone mode.
+- Only privacy-safe local PWA events are emitted: guide opened, prompt accepted/dismissed, installed and push enabled.
+
+Personalized greeting update:
+
+- `mobile/app/index.tsx` now loads the authenticated user's saved profile name after session restore.
+- Greetings are generated from local translation files in English, Hindi and Kannada, not Gemini or paid dynamic translation.
+- Customer greeting: `Hello, {name}! How can we help you today?`
+- Vendor greeting: `Hello, {name}! Let us manage and grow your local business today.`
+- If no safe preferred name is available, the app shows a generic greeting.
+- The app avoids displaying email addresses, long phone-like numbers or customer IDs as greeting names.
+- A visible `Switch account or log out` action is shown for shared-device safety.
+
+Still requires live verification:
+
+- Run `supabase/RUN_ONLY_PWA_WEB_PUSH_SUBSCRIPTIONS.sql` in the live Supabase project.
+- Rebuild and upload the refreshed `mobile/dist` to Hostinger.
+- Test PWA installability and update handling on Android Chrome, iPhone Safari and desktop.
+- Configure a real VAPID public/private key pair before enabling production web push notifications.
+
 ## Deadline-Focused Production Readiness Classification
 
 Current go/no-go recommendation: **not ready for unrestricted production launch today**.

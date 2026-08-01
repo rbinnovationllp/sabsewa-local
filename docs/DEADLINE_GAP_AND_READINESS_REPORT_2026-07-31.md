@@ -34,9 +34,11 @@ Owner must check the Play Console dashboard for the exact account requirement sh
 
 ## Verified From Repository
 
-Implemented but still requiring live verification:
+Implemented in code but still requiring live verification:
 
-- Customer registration and OTP completion with profile/address/policy persistence checks.
+- Customer registration flow and profile/address/policy persistence checks.
+- Mobile OTP code path is implemented but not active or verified until Supabase Phone Auth, SMS provider, India `+91` delivery and DLT/template requirements are configured and a real OTP is received.
+- Email OTP code path is implemented but disabled until production SMTP and numeric OTP template delivery are verified.
 - Supabase-backed persistent mobile sessions using secure storage where available.
 - English, Hindi and Kannada launch-language foundation.
 - Customer-friendly nearby-shop discovery without raw vendor/terminal IDs.
@@ -65,7 +67,8 @@ Severity P0:
 
 - Run all required incremental SQL runners in the live Supabase `sabsewa-local` project and confirm success.
 - Test RLS with separate customer, vendor, rider and admin accounts.
-- Test customer registration with OTP on live Supabase after migrations.
+- Test customer registration with the enabled method on live Supabase after migrations.
+- Do not mark Mobile OTP production-ready until a real Indian SMS is received, verified, and profile/address/Terms persistence is confirmed.
 - Test vendor registration, verification and terminal activation.
 - Test first vendor Razorpay activation payment and ledger split.
 - Test Razorpay webhook/callback idempotency and duplicate payment handling.

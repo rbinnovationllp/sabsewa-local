@@ -16,7 +16,8 @@ Do not invite real residents or accept real vendor money until the P0 checklist 
 - RLS tested with separate customer, vendor, rider and admin accounts.
 - Backend API at `https://api.sabsewa.in` is reachable.
 - PWA uploaded to Hostinger and installable on mobile Chrome.
-- Customer OTP registration tested.
+- Customer registration tested with the currently enabled method.
+- Mobile OTP tested only after real Indian SMS delivery and verification succeeds; until then, do not treat mobile OTP as available.
 - Vendor onboarding and terminal activation tested.
 - Razorpay activation/top-up tested in the intended mode.
 - Rs 15 acceptance deduction tested once and duplicate-click protection verified.
@@ -56,7 +57,7 @@ Use one checklist per vendor.
 - Vendor owner/proprietor name collected.
 - Public shop/trade name collected.
 - Business address and shop location verified.
-- Registered mobile number OTP verified.
+- Registered mobile number OTP verified only if production SMS is active; otherwise email/password registration completed and vendor identity verified manually.
 - Category selected correctly.
 - GSTIN/PAN/FSSAI/drug licence collected where applicable.
 - Shop photo captured with consent.
@@ -108,7 +109,8 @@ Customer workflow:
 - Customer opens `https://www.sabsewa.in` on mobile browser.
 - Customer installs PWA to home screen.
 - Customer selects English, Hindi or Kannada.
-- Customer registers with OTP.
+- Customer registers with the currently enabled method.
+- If mobile OTP is enabled, a real Indian SMS is received, verified, and the profile/address/Terms records are confirmed.
 - Customer remains signed in after closing and reopening browser/PWA.
 - Customer selects location/PIN/locality.
 - Customer finds listed vendor within service area.

@@ -11,6 +11,7 @@ const requiredFiles = [
   "locales/kn/common.ts",
   "app/auth/Register.tsx",
   "app/auth/Login.tsx",
+  "lib/registrationCompletion.ts",
   "app/hyperlocal/cart.tsx"
 ];
 
@@ -58,7 +59,8 @@ if (!register.includes("submitting") || !register.includes("auth.acceptAndRegist
 }
 
 const login = read("app/auth/Login.tsx");
-if (!login.includes("registrationSuccessCustomer") || !login.includes("profileError")) {
+const registrationCompletion = read("lib/registrationCompletion.ts");
+if (!login.includes("registrationSuccessCustomer") || !login.includes("completeRegistrationProfile") || !registrationCompletion.includes("user_profiles") || !registrationCompletion.includes("customer_addresses") || !registrationCompletion.includes("user_policy_acceptances")) {
   throw new Error("Login OTP completion does not confirm profile persistence before success.");
 }
 

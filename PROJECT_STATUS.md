@@ -125,6 +125,58 @@ Follow-up registration storage fix:
 - Verified with `npx.cmd tsc --noEmit --pretty false`.
 - Rebuilt Hostinger PWA bundle with `npm.cmd run export:web:hostinger`; validation passed and archive `20260731171544` was created.
 
+## 2026-08-01 Registration Localization And OTP Reliability Update
+
+Implemented after the full registration workflow review:
+
+- Root cause found in application code:
+  - `mobile/app/auth/Register.tsx` showed a fixed `+91` label but limited the phone input to 10 characters and validated only digit length.
+  - This made `+91` / spaced / hyphenated Indian numbers difficult or impossible to enter correctly and could still allow invalid 10-digit values that do not match Indian mobile numbering.
+  - Registration used a direct Supabase OTP call while login used the auth provider path, causing inconsistent phone handling and error handling.
+  - Customer/vendor registration had many hardcoded English labels, placeholders, legal-link labels, retry messages and OTP messages.
+- Fixed Indian mobile handling:
+  - `mobile/lib/phone.ts` now normalizes Indian mobile numbers to E.164 `+91XXXXXXXXXX`.
+  - Accepts normal 10-digit numbers and `+91` numbers with spaces/hyphens/brackets.
+  - Rejects invalid starts, leading-zero patterns, duplicate `+91`, unsupported foreign country codes, letters and invalid lengths.
+  - Adds phone masking for OTP screens.
+  - Adds error classification for unsupported country, rate limit, expired/incorrect OTP, network failure and SMS-provider failure.
+- Registration now uses the shared auth provider OTP path:
+  - `mobile/providers/AuthProvider.tsx`
+  - `mobile/app/auth/Register.tsx`
+- OTP verification/profile completion is now idempotent and resumable:
+  - New helper: `mobile/lib/registrationCompletion.ts`
+  - After OTP verification, it upserts `user_profiles`, records `user_policy_acceptances`, saves the customer primary address and creates/updates a pending vendor profile for vendor registrations.
+  - `AuthProvider` attempts recovery if an authenticated session exists but profile creation was incomplete.
+- Login/OTP screen improved:
+  - `mobile/app/auth/Login.tsx`
+  - Shows masked OTP destination.
+  - Keeps original technical error in logs and a small diagnostic detail for support while showing localized user-facing messages.
+  - Provides resend, change-mobile and email-registration alternatives.
+  - Shows localized customer/vendor registration success messages only after profile completion succeeds.
+- Registration localization improved:
+  - Added English/Hindi/Kannada keys for registration method selection, field labels, placeholders, validation messages, OTP messages, legal document links, consent text, retry options and success messages.
+  - Updated files:
+    - `mobile/locales/en/common.ts`
+    - `mobile/locales/hi/common.ts`
+    - `mobile/locales/kn/common.ts`
+- Updated localization smoke test:
+  - `mobile/scripts/verify-multilingual-foundation.mjs`
+  - It now verifies the shared registration completion helper instead of old duplicated inline profile-saving code.
+
+Verified locally:
+
+- `npx.cmd tsc --noEmit --pretty false` passed from `mobile`.
+- `npm.cmd run test:localization` passed from `mobile`.
+
+Still requires live Supabase/SMS verification before real-customer launch:
+
+- Confirm Supabase Phone Auth is enabled for project `xodmazgfibftorrlbotk`.
+- Confirm the SMS provider is configured for India and the tested number is allowed.
+- Confirm TRAI/DLT sender ID and OTP template approval, if the provider requires it for India.
+- Check Supabase Auth logs for the original `Unsupported phone number` response after retrying a real permitted Indian mobile number.
+- Test valid Indian mobile, `+91` format, spaced/hyphenated format, leading zero, too short/too long, unsupported foreign number, OTP resend cooldown, incorrect/expired OTP and successful customer/vendor profile save.
+- Do not mark registration production-ready until a real permitted Indian mobile number receives OTP, verifies successfully, saves profile/address/Terms acceptance and restores the session after closing/reopening the PWA.
+
 ## 2026-07-31 PWA And Static Deployment Safety Update
 
 Implemented after Hostinger `public_html` audit:
@@ -799,3 +851,150 @@ Passed:
 ## Production Readiness
 
 Not production-ready until the incremental SQL runs successfully in Supabase and the critical workflows are tested with real credentials.
+
+## 2026-08-01 Phone OTP Provider Blocker And Registration UI Correction
+
+Screenshot reviewed: customer/vendor registration reached Supabase phone auth but returned `Unsupported phone provider`; no OTP was delivered.
+
+Evidence-based conclusion:
+- App-side E.164 normalization is in place and sends Indian numbers as `+91XXXXXXXXXX`.
+- The latest failure is not proven to be an unsupported Indian country code. It is a Supabase Phone Auth/SMS-provider configuration blocker.
+- Phone registration must remain unavailable for real users until Supabase Phone Auth, a production SMS provider, Indian +91 delivery, TRAI/DLT sender/template approval where required, rate limits and callback behavior are verified in the `sabsewa-local` Supabase project.
+
+Changes made:
+- `mobile/lib/phone.ts` now classifies `Unsupported phone provider` as an OTP/SMS-provider issue instead of showing the wrong country-code message.
+- `mobile/app/auth/Register.tsx` and `mobile/app/auth/Login.tsx` no longer expose raw internal provider errors such as `Unsupported phone provider` to ordinary users.
+- Added a public build switch: `EXPO_PUBLIC_PHONE_AUTH_ENABLED=false` in `mobile/.env.example`. Keep it false until real OTP delivery is verified; set it to true only after production SMS readiness is complete.
+- Mobile OTP registration is visibly unavailable when the switch is false, and email registration remains available.
+- Hindi registration/login retry labels were corrected from Roman Hindi to Devanagari, including retry, change mobile number, email registration, location success, shop/trade labels and OTP messages.
+- Kannada and English translation keys were kept complete for the new phone-auth-disabled state and support-reference message.
+
+Manual owner/Supabase actions still required:
+- Confirm the frontend uses `https://xodmazgfibftorrlbotk.supabase.co`.
+- In Supabase Dashboard, enable Phone Authentication for the SabSewa Local project.
+- Configure a supported SMS provider with production credentials.
+- Confirm provider support for Indian `+91` OTP delivery.
+- Complete TRAI/DLT sender ID and OTP template approval if the selected provider requires it.
+- Verify OTP rate limits/CAPTCHA settings.
+- Send a real OTP to a permitted Indian mobile number, verify it, and confirm `user_profiles`, `customer_addresses` and `user_policy_acceptances` are saved.
+
+Local tests passed after this correction:
+- `npx.cmd tsc --noEmit --pretty false`
+- `npm.cmd run test:localization`
+
+Registration status:
+- Email registration path remains the safe fallback for pilot onboarding.
+- Mobile-number registration is not production-ready until a real Indian OTP is delivered, verified, profile/address/Terms acceptance are saved, and the session restores after closing/reopening the PWA.
+
+## 2026-08-01 Vendor Email Registration Rectification
+
+Screenshot reviewed: vendor registration showed mobile OTP disabled and selected Email OTP, but the vendor could not receive/complete verification and therefore could not reach catalogue, orders, wallet or terminal testing.
+
+Confirmed code-level causes fixed:
+- `mobile/app/auth/Register.tsx` previously defaulted to Email OTP when phone auth was disabled, even though production SMTP/email OTP template delivery had not been verified.
+- `mobile/app/auth/Login.tsx` previously verified only phone/SMS OTP. Email OTP registrations were routed to a screen that did not call `verifyEmailOtp(...)`.
+- `mobile/providers/AuthProvider.tsx` now sets email auth redirect URLs back to SabSewa Local (`/auth`) so email/password verification links can return to the PWA.
+
+Changes made:
+- Added `EXPO_PUBLIC_EMAIL_OTP_ENABLED=false` and `EXPO_PUBLIC_AUTH_REDIRECT_URL=https://www.sabsewa.in/auth` to `mobile/.env.example`.
+- Email/password registration is now the default fallback while mobile SMS and numeric email OTP are unverified.
+- Email OTP remains implemented but is visibly unavailable unless `EXPO_PUBLIC_EMAIL_OTP_ENABLED=true` is deliberately set after SMTP/template verification.
+- Login now supports distinct email OTP verification through Supabase `verifyEmailOtp(...)`; it no longer treats email OTP as a phone OTP.
+- Vendor registration success copy now states that the shop profile is awaiting verification and does not imply commercial activation.
+- Hindi and Kannada translation keys were added for email OTP disabled, email OTP send/entry and the vendor pending-verification success state.
+
+Manual owner/Supabase actions still required before declaring email registration production-ready:
+- In Supabase Auth for project `https://xodmazgfibftorrlbotk.supabase.co`, enable Email Auth.
+- Configure and verify production SMTP sender/domain.
+- Set Site URL to `https://www.sabsewa.in`.
+- Add permitted redirect URL `https://www.sabsewa.in/auth` and any required local testing URL.
+- Decide whether Email OTP will use a numeric token template or only verification/magic links. Do not enable `EXPO_PUBLIC_EMAIL_OTP_ENABLED=true` until the numeric token email template is verified.
+- Send a real verification email, open the link or enter the OTP, confirm Supabase session creation, and verify `user_profiles`, `vendors` and `user_policy_acceptances` are saved.
+
+Local tests passed:
+- `npx.cmd tsc --noEmit --pretty false`
+- `npm.cmd run test:localization`
+
+Current safe testing route:
+- Use email/password registration for vendor onboarding tests after Supabase SMTP and redirect URLs are configured.
+- Keep mobile OTP and numeric email OTP disabled until their provider/template delivery is proven end to end.
+
+## 2026-08-01 Mobile OTP Separate Readiness Status
+
+Immediate status: **MOBILE OTP IS NOT ACTIVE**.
+
+Important evidence rule:
+- TypeScript, localization and web export checks only prove that the code builds and can be packaged.
+- They do not prove that SMS or email OTP delivery works.
+- Mobile OTP becomes production-ready only after a real permitted Indian mobile number receives an SMS, verifies the OTP, creates a Supabase session, saves the customer/vendor profile, records Terms acceptance and restores the session after reopening the PWA.
+
+Mobile OTP control points:
+- Frontend feature flag: `EXPO_PUBLIC_PHONE_AUTH_ENABLED` in `mobile/.env` / deployment environment.
+- Template/default value: `EXPO_PUBLIC_PHONE_AUTH_ENABLED=false` in `mobile/.env.example`.
+- Phone OTP request implementation: `mobile/providers/AuthProvider.tsx` uses Supabase `signInWithOtp({ phone })`.
+- Phone OTP verification implementation: `mobile/providers/AuthProvider.tsx` uses Supabase `verifyOtp({ phone, token, type: "sms" })`.
+- Phone validation/normalization: `mobile/lib/phone.ts`.
+- Registration UI gating: `mobile/app/auth/Register.tsx`.
+- OTP screen flow: `mobile/app/auth/Login.tsx`.
+- Profile/Terms persistence after verification: `mobile/lib/registrationCompletion.ts`.
+- Latest built PWA status: code export passed, but deployed SMS delivery is unverified.
+
+| Area | Status | Evidence / blocker |
+| --- | --- | --- |
+| Mobile OTP frontend | Implemented but unverified | UI exists, but hidden/disabled while `EXPO_PUBLIC_PHONE_AUTH_ENABLED=false`. |
+| Phone-number normalization | Implemented but unverified | Code normalizes valid Indian numbers to `+91XXXXXXXXXX`; real service delivery still untested. |
+| Supabase Phone Auth | Blocked by external configuration | Must be checked/enabled in the `sabsewa-local` Supabase dashboard. |
+| SMS provider | Blocked by external configuration | No verified provider delivery evidence recorded. |
+| Indian `+91` delivery | Blocked by external configuration | Requires provider support and real delivery test. |
+| TRAI/DLT approval | Blocked by external configuration | Entity/sender/template approval status not verified. |
+| OTP delivery test | Blocked by external configuration | No real Indian SMS received evidence recorded. |
+| OTP verification test | Blocked by external configuration | No successful real SMS OTP verification evidence recorded. |
+| Customer-profile persistence after OTP | Implemented but unverified | Code path exists; must be tested after real OTP verification. |
+| Vendor-profile persistence after OTP | Implemented but unverified | Code path exists; must be tested after real OTP verification. |
+| Production deployment | Implemented but unverified | PWA export passes, but Hostinger deployment must be refreshed and tested with live Supabase/SMS. |
+
+Manual Mobile OTP activation checklist:
+1. Supabase Dashboard -> project `sabsewa-local` (`https://xodmazgfibftorrlbotk.supabase.co`) -> Authentication -> Providers -> Phone: enable Phone provider.
+2. Supabase Dashboard -> Authentication -> Providers/Phone/SMS configuration: choose and configure a supported production SMS provider.
+3. Add provider secrets only in Supabase/SMS-provider dashboard or approved secret storage. Do not put SMS secrets in GitHub, frontend code, screenshots or chat.
+4. Confirm the provider supports India `+91` delivery and OTP use cases.
+5. Complete TRAI/DLT entity registration, sender ID and OTP template approval if required by the provider for India.
+6. Supabase Dashboard -> Authentication -> URL Configuration: confirm Site URL is `https://www.sabsewa.in` and required redirects are allowed.
+7. Configure CAPTCHA/rate limits according to Supabase/provider guidance without blocking real pilot numbers.
+8. Set `EXPO_PUBLIC_PHONE_AUTH_ENABLED=true` only after the provider is configured and ready for testing.
+9. Rebuild the PWA with `npm.cmd run export:web:hostinger`.
+10. Upload the refreshed `mobile/dist` contents to Hostinger `public_html`.
+11. Test with a real permitted Indian number and record only masked evidence, for example `+91******2846`, delivery status, verification status and profile-save status.
+
+Final Mobile OTP status:
+- Production-ready: NO
+- Real Indian SMS received: NO
+- Profile saved after OTP verification: NO
+- Owner action still required: configure Supabase Phone Auth, production SMS provider, India `+91` delivery, TRAI/DLT sender/template where required, enable `EXPO_PUBLIC_PHONE_AUTH_ENABLED=true`, rebuild/deploy Hostinger `dist`, and complete a real OTP delivery/verification/profile-persistence test.
+
+## 2026-08-01 Twilio Verify Local Mobile OTP Test Activation
+
+Owner reported that Supabase Phone Auth is now configured with a separate SabSewa Local Twilio Verify Service.
+
+Current status: **MOBILE OTP IS CONFIGURED BUT NOT VERIFIED**.
+
+Local-only change:
+- Enabled `EXPO_PUBLIC_PHONE_AUTH_ENABLED=true` in `mobile/.env` for local testing only.
+- Confirmed `mobile/.env` is ignored by Git through `.gitignore`; this local testing flag was not added to source-controlled `.env.example` and must not be deployed publicly until the full test succeeds.
+- Kept `EXPO_PUBLIC_EMAIL_OTP_ENABLED=false`.
+
+Code checks after local flag change:
+- `npx.cmd tsc --noEmit --pretty false` passed.
+- `npm.cmd run test:localization` passed.
+- `git check-ignore -v mobile/.env` confirms local env is ignored.
+
+End-to-end test still pending:
+- Real Indian SMS delivery through Twilio Verify.
+- OTP verification through Supabase.
+- Supabase session creation.
+- Customer or vendor profile save through `mobile/lib/registrationCompletion.ts`.
+- Terms acceptance record in `user_policy_acceptances`.
+- Session restoration after closing/reopening the PWA.
+
+Do not deploy publicly yet:
+- Do not upload a PWA build containing `EXPO_PUBLIC_PHONE_AUTH_ENABLED=true` to Hostinger until a real OTP request, Twilio delivery, OTP verification, profile save and Terms acceptance are confirmed.

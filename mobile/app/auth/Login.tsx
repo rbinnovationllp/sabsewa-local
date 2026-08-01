@@ -15,35 +15,77 @@ import { supabase } from "@/lib/supabase";
 import { apiUrl } from "@/lib/backend";
 import { getDeviceMetadata } from "@/lib/deviceIdentity";
 import { useLanguage } from "@/providers/LanguageProvider";
-import {
-  SABSEWA_ACCEPTANCE_STATEMENT,
-  SABSEWA_ACCEPTED_DOCUMENT_VERSIONS,
-  SABSEWA_POLICY_BUNDLE_VERSION,
-  SABSEWA_PRIVACY_VERSION,
-  SABSEWA_TERMS_VERSION,
-} from "@/lib/legalVersions";
-import { normalizeIndianPhone } from "@/lib/phone";
+import { completeRegistrationProfile } from "@/lib/registrationCompletion";
+import { authErrorKey, maskPhone, normalizeIndianPhone, validateIndianMobile } from "@/lib/phone";
+
+const PHONE_AUTH_ENABLED = process.env.EXPO_PUBLIC_PHONE_AUTH_ENABLED === "true";
+const EMAIL_OTP_ENABLED = process.env.EXPO_PUBLIC_EMAIL_OTP_ENABLED === "true";
+const makeDiagnosticId = () => `SSL-AUTH-${Date.now().toString(36).toUpperCase()}`;
 
 export default function LoginScreen() {
   const router = useRouter();
   const params: any = useLocalSearchParams();
-  const { signInWithOtp, verifyOtp, loading } = useAuth();
+  const { signInWithOtp, signInWithEmailOtp, verifyEmailOtp, verifyOtp, loading } = useAuth();
   const { t } = useLanguage();
 
   const [phone, setPhone] = useState(params.phone ? String(params.phone) : "");
+  const [email, setEmail] = useState(params.email ? String(params.email) : "");
+  const initialMethod = String(params.method || (params.email ? "email_otp" : "phone"));
+  const [method, setMethod] = useState(initialMethod === "email_otp" && EMAIL_OTP_ENABLED ? "email_otp" : "phone");
   const [otpSent, setOtpSent] = useState(params.otpSent === "1" || params.registering === "1");
   const [token, setToken] = useState("");
   const [trustDevice, setTrustDevice] = useState(true);
+  const [technicalError, setTechnicalError] = useState<string | null>(null);
 
   const [submitLoading, setSubmitLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  function isRegistrationSaveError(err: any) {
+    const message = String(err?.message || err || "").toLowerCase();
+    return [
+      "user_profiles",
+      "customer_addresses",
+      "user_policy_acceptances",
+      "vendors",
+      "row-level",
+      "rls",
+      "profile",
+      "address",
+      "policy",
+      "terms",
+    ].some((needle) => message.includes(needle));
+  }
+
   // 1ï¸âƒ£ SEND OTP
   async function handleSendOTP() {
     setError(null);
+    setTechnicalError(null);
     setSubmitLoading(true);
 
     try {
+      if (method === "email_otp") {
+        if (!EMAIL_OTP_ENABLED) throw new Error("email_otp_disabled");
+        const normalizedEmail = String(email || "").trim().toLowerCase();
+        if (!normalizedEmail) throw new Error(t("auth.errorEmail"));
+        const { error } = await signInWithEmailOtp(normalizedEmail);
+        if (error) throw error;
+        setEmail(normalizedEmail);
+        setOtpSent(true);
+        return;
+      }
+
+      if (!PHONE_AUTH_ENABLED) {
+        throw new Error("phone_auth_disabled");
+      }
+      const validation = validateIndianMobile(phone);
+      if (validation.ok === false) {
+        const key = validation.reason === "unsupported_country"
+          ? "auth.errorUnsupportedCountry"
+          : validation.reason === "duplicate_country_code"
+            ? "auth.errorDuplicateCountryCode"
+            : "auth.errorMobile";
+        throw new Error(t(key));
+      }
       const normalizedPhone = normalizeIndianPhone(phone);
       const { error } = await signInWithOtp(normalizedPhone);
       if (error) throw error;
@@ -51,7 +93,18 @@ export default function LoginScreen() {
       setPhone(normalizedPhone);
       setOtpSent(true);
     } catch (err: any) {
-      setError(err.message || "Unable to send OTP. Confirm Supabase phone OTP/SMS provider settings.");
+      const diagnosticId = makeDiagnosticId();
+      console.warn("OTP send error", { diagnosticId, message: err?.message || String(err || "") });
+      setTechnicalError(diagnosticId);
+      setError(
+        err?.message === "phone_auth_disabled"
+          ? t("auth.phoneRegistrationUnavailable")
+          : err?.message === "email_otp_disabled"
+            ? t("auth.emailOtpUnavailable")
+          : err?.message?.startsWith?.("Please") || err?.message === t("auth.errorMobile")
+            ? err.message
+            : t(authErrorKey(err))
+      );
     } finally {
       setSubmitLoading(false);
     }
@@ -60,62 +113,21 @@ export default function LoginScreen() {
   // 2ï¸âƒ£ VERIFY OTP + ROUTE USER
   async function handleVerifyOTP() {
     setError(null);
+    setTechnicalError(null);
     setSubmitLoading(true);
 
     try {
-      const normalizedPhone = normalizeIndianPhone(phone);
-      const { data, error } = await verifyOtp(normalizedPhone, token);
+      const normalizedEmail = String(email || "").trim().toLowerCase();
+      const normalizedPhone = method === "email_otp" ? "" : normalizeIndianPhone(phone);
+      const { data, error } = method === "email_otp"
+        ? await verifyEmailOtp(normalizedEmail, token)
+        : await verifyOtp(normalizedPhone, token);
       if (error) throw error;
 
       const user = data.user;
       const metadata = user?.user_metadata || {};
       if (user?.id && metadata.role) {
-        const { error: profileError } = await supabase.from("user_profiles").upsert({
-          user_id: user.id,
-          role: metadata.role,
-          full_name: metadata.full_name || "",
-          phone: normalizedPhone,
-          city: metadata.city || "",
-          preferred_language: metadata.preferred_language || "en",
-          terms_version: metadata.terms_version || SABSEWA_TERMS_VERSION,
-          privacy_version: metadata.privacy_version || SABSEWA_PRIVACY_VERSION,
-          policies_accepted_at: new Date().toISOString(),
-          policies_accepted_language: metadata.policy_acceptance_language || metadata.preferred_language || "en",
-        }, { onConflict: "user_id" });
-        if (profileError) throw new Error(profileError.message || t("auth.registrationSaveFailed"));
-
-        if (metadata.accepted_policies) {
-          const device = metadata.policy_acceptance_device || {};
-          const { error: policyError } = await supabase.from("user_policy_acceptances").upsert({
-            user_id: user.id,
-            role: metadata.role,
-            terms_version: metadata.terms_version || SABSEWA_TERMS_VERSION,
-            privacy_version: metadata.privacy_version || SABSEWA_PRIVACY_VERSION,
-            policy_bundle_version: metadata.policy_bundle_version || SABSEWA_POLICY_BUNDLE_VERSION,
-            accepted_document_versions: metadata.accepted_document_versions || SABSEWA_ACCEPTED_DOCUMENT_VERSIONS,
-            accepted_statement: metadata.policy_acceptance_statement || SABSEWA_ACCEPTANCE_STATEMENT,
-            displayed_language: metadata.policy_acceptance_language || metadata.preferred_language || "en",
-            device_id: device.device_id || null,
-            device_name: device.device_name || null,
-            platform: device.platform || null,
-            app_version: device.app_version || null,
-            session_id: data.session?.access_token ? data.session.access_token.slice(0, 16) : null,
-            otp_verified: true,
-            marketing_consent: Boolean(metadata.marketing_consent),
-          }, { onConflict: "user_id,terms_version,privacy_version,policy_bundle_version,displayed_language" });
-          if (policyError) throw new Error(policyError.message || t("auth.registrationSaveFailed"));
-        }
-
-        if (metadata.role === "customer" && metadata.primary_address) {
-          const { error: addressError } = await supabase.from("customer_addresses").upsert({
-            customer_id: user.id,
-            label: "Primary",
-            full_address: metadata.primary_address,
-            city: metadata.city || "",
-            is_primary: true,
-          }, { onConflict: "customer_id,label" });
-          if (addressError) throw new Error(addressError.message || t("auth.registrationSaveFailed"));
-        }
+        await completeRegistrationProfile(user, data.session);
       }
 
       // ðŸ” Fetch Profile to get role
@@ -132,7 +144,7 @@ export default function LoginScreen() {
       const profile = await res.json();
       const role = profile?.[0]?.role;
 
-      if (!role) throw new Error("User role not found.");
+      if (!role) throw new Error(t("auth.userRoleNotFound"));
 
       if (trustDevice && data.session?.user?.id) {
         const device = await getDeviceMetadata();
@@ -155,11 +167,20 @@ export default function LoginScreen() {
         ]);
         return;
       }
+      if (params.registering === "1" && role === "vendor") {
+        Alert.alert("SabSewa Local", t("auth.registrationSuccessVendor"), [
+          { text: "OK", onPress: () => router.replace("/vendor/dashboard" as any) },
+        ]);
+        return;
+      }
 
       // ðŸŽ¯ Redirect user based on role
       router.replace(routeUser(role) as any);
     } catch (err: any) {
-      setError(err.message);
+      const diagnosticId = makeDiagnosticId();
+      console.warn("OTP verify/profile completion error", { diagnosticId, message: err?.message || String(err || "") });
+      setTechnicalError(diagnosticId);
+      setError(t(isRegistrationSaveError(err) ? "auth.registrationSaveFailed" : authErrorKey(err)) || err.message);
     } finally {
       setSubmitLoading(false);
     }
@@ -167,20 +188,68 @@ export default function LoginScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Login to SabSewa</Text>
+      <Text style={styles.title}>{t("auth.loginTitle")}</Text>
 
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
+      {technicalError ? <Text style={styles.technicalError}>{t("auth.diagnosticReference", { reference: technicalError })}</Text> : null}
 
       {!otpSent ? (
         <>
-          <Text style={styles.label}>Phone Number</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Enter phone number"
-            keyboardType="phone-pad"
-            value={phone}
-            onChangeText={setPhone}
-          />
+          <View style={styles.modeRow}>
+            <TouchableOpacity
+              style={[styles.modeChip, method === "email_otp" && styles.modeChipSelected, !EMAIL_OTP_ENABLED && styles.modeChipDisabled]}
+              onPress={() => {
+                if (!EMAIL_OTP_ENABLED) {
+                  setError(t("auth.emailOtpUnavailable"));
+                  return;
+                }
+                setMethod("email_otp");
+                setError(null);
+              }}
+            >
+              <Text style={[styles.modeText, method === "email_otp" && styles.modeTextSelected]}>
+                {EMAIL_OTP_ENABLED ? t("auth.methodEmailOtp") : t("auth.methodEmailOtpUnavailable")}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.modeChip, method === "phone" && styles.modeChipSelected, !PHONE_AUTH_ENABLED && styles.modeChipDisabled]}
+              onPress={() => {
+                if (!PHONE_AUTH_ENABLED) {
+                  setError(t("auth.phoneRegistrationUnavailable"));
+                  return;
+                }
+                setMethod("phone");
+                setError(null);
+              }}
+            >
+              <Text style={[styles.modeText, method === "phone" && styles.modeTextSelected]}>{t("auth.methodPhone")}</Text>
+            </TouchableOpacity>
+          </View>
+
+          {method === "email_otp" ? (
+            <>
+              <Text style={styles.label}>{t("auth.emailAddress")}</Text>
+              <TextInput
+                style={styles.input}
+                placeholder={t("auth.enterEmail")}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                value={email}
+                onChangeText={setEmail}
+              />
+            </>
+          ) : (
+            <>
+              <Text style={styles.label}>{t("auth.phoneNumber")}</Text>
+              <TextInput
+                style={styles.input}
+                placeholder={t("auth.enterMobile")}
+                keyboardType="phone-pad"
+                value={phone}
+                onChangeText={setPhone}
+              />
+            </>
+          )}
 
           <TouchableOpacity
             style={styles.button}
@@ -190,16 +259,21 @@ export default function LoginScreen() {
             {submitLoading ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text style={styles.buttonText}>Send OTP</Text>
+              <Text style={styles.buttonText}>{method === "email_otp" ? t("auth.sendEmailOtp") : t("auth.sendOtp")}</Text>
             )}
           </TouchableOpacity>
         </>
       ) : (
         <>
-          <Text style={styles.label}>Enter OTP</Text>
+          <Text style={styles.label}>{method === "email_otp" ? t("auth.enterEmailOtp") : t("auth.enterOtp")}</Text>
+          <Text style={styles.otpDestination}>
+            {method === "email_otp"
+              ? t("auth.emailOtpSentTo", { email })
+              : t("auth.otpSentTo", { phone: String(params.maskedPhone || maskPhone(phone)) })}
+          </Text>
           <TextInput
             style={styles.input}
-            placeholder="6-digit code"
+            placeholder={t("auth.otpPlaceholder")}
             keyboardType="number-pad"
             value={token}
             onChangeText={setToken}
@@ -210,10 +284,15 @@ export default function LoginScreen() {
               {trustDevice ? <Text style={styles.checkText}>✓</Text> : null}
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.trustTitle}>Trust this device</Text>
-              <Text style={styles.trustText}>Stay signed in securely on this phone/browser until logout, revocation, prolonged inactivity or a security event.</Text>
+              <Text style={styles.trustTitle}>{t("auth.trustDevice")}</Text>
+              <Text style={styles.trustText}>{t("auth.trustDeviceText")}</Text>
             </View>
           </TouchableOpacity>
+          {!PHONE_AUTH_ENABLED ? (
+            <TouchableOpacity style={styles.resendBtn} onPress={() => router.push({ pathname: "/auth/Register", params: { role: params.role || "customer", method: EMAIL_OTP_ENABLED ? "email_otp" : "email_password" } } as any)}>
+              <Text style={styles.resendText}>{t("auth.registerWithEmail")}</Text>
+            </TouchableOpacity>
+          ) : null}
 
           <TouchableOpacity
             style={styles.button}
@@ -223,7 +302,7 @@ export default function LoginScreen() {
             {submitLoading ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text style={styles.buttonText}>Verify OTP</Text>
+              <Text style={styles.buttonText}>{t("auth.verifyOtp")}</Text>
             )}
           </TouchableOpacity>
           <TouchableOpacity
@@ -231,7 +310,13 @@ export default function LoginScreen() {
             onPress={handleSendOTP}
             disabled={submitLoading}
           >
-            <Text style={styles.resendText}>Resend OTP</Text>
+            <Text style={styles.resendText}>{t("auth.resendOtp")}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.resendBtn} onPress={() => { setOtpSent(false); setToken(""); }}>
+            <Text style={styles.resendText}>{t("auth.changeMobile")}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.resendBtn} onPress={() => router.push({ pathname: "/auth/Register", params: { role: params.role || "customer", method: EMAIL_OTP_ENABLED ? "email_otp" : "email_password" } } as any)}>
+            <Text style={styles.resendText}>{t("auth.registerWithEmail")}</Text>
           </TouchableOpacity>
         </>
       )}
@@ -240,7 +325,7 @@ export default function LoginScreen() {
         onPress={() => router.push("/auth")}
         style={styles.backBtn}
       >
-        <Text style={styles.backText}>â† Back</Text>
+        <Text style={styles.backText}>← {t("auth.back")}</Text>
       </TouchableOpacity>
     </View>
   );
@@ -297,7 +382,15 @@ const styles = StyleSheet.create({
     color: "#1e88e5",
     fontWeight: "800",
   },
+  modeRow: { flexDirection: "row", gap: 8, marginBottom: 12 },
+  modeChip: { flex: 1, borderWidth: 1, borderColor: "#cbd5e1", borderRadius: 10, padding: 10, alignItems: "center" },
+  modeChipSelected: { backgroundColor: "#1e88e5", borderColor: "#1e88e5" },
+  modeChipDisabled: { opacity: 0.5 },
+  modeText: { color: "#334155", fontWeight: "800", textAlign: "center" },
+  modeTextSelected: { color: "#fff" },
   errorText: { color: "red", marginBottom: 10, textAlign: "center" },
+  technicalError: { color: "#7f1d1d", backgroundColor: "#fef2f2", borderRadius: 8, padding: 8, marginBottom: 12, fontSize: 11 },
+  otpDestination: { color: "#64748b", marginBottom: 10, fontSize: 12 },
   trustRow: { flexDirection: "row", gap: 10, alignItems: "flex-start", marginBottom: 12 },
   checkbox: { width: 24, height: 24, borderWidth: 1, borderColor: "#777", borderRadius: 6, alignItems: "center", justifyContent: "center", marginTop: 2 },
   checked: { backgroundColor: "#1e88e5", borderColor: "#1e88e5" },

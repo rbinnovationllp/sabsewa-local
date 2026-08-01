@@ -75,6 +75,10 @@ Vendor payments are separated by Razorpay environment. In Test Mode, no real mon
 
 In Live Mode, vendor wallet credits are applied only after the backend receives and verifies a Razorpay `payment.captured` webhook. Client-side payment callbacks are used only to inform the user that the payment response was received.
 
+## Authentication Readiness
+
+Mobile OTP is not active until Supabase Phone Auth, a production SMS provider, India `+91` delivery and any required TRAI/DLT sender/template approvals are configured and verified with a real SMS. Email OTP is also disabled until production SMTP and numeric OTP template delivery are verified. TypeScript, localization and web export checks prove only that the code builds; they do not prove that OTP delivery or verification works.
+
 ## Multilingual Support
 
 English is the default offline fallback. English, Hindi and Kannada are enabled as the Bengaluru launch-language foundation for core onboarding, registration, discovery and delivery-safety flows. Other Eighth Schedule Indian languages are listed as phased languages and shown as `Coming Soon` until reviewed translations or validated downloadable language packs are available.

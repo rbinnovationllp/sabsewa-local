@@ -2,6 +2,14 @@ import React, { createContext, useContext, useEffect, useMemo, useState } from "
 import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 import { normalizeIndianPhone } from "@/lib/phone";
+import { recoverIncompleteRegistration } from "@/lib/registrationCompletion";
+
+function getEmailRedirectTo() {
+  if (typeof window !== "undefined" && window.location?.origin) {
+    return `${window.location.origin}/auth`;
+  }
+  return process.env.EXPO_PUBLIC_AUTH_REDIRECT_URL || "https://www.sabsewa.in/auth";
+}
 
 export type AppUser = User | null;
 
@@ -12,7 +20,7 @@ export type AuthContextType = {
   isLoading: boolean;
   firebaseUser: AppUser;
   hasActiveSubscription: boolean;
-  signInWithOtp: (phone: string) => Promise<{ data?: unknown; error?: unknown }>;
+  signInWithOtp: (phone: string, metadata?: Record<string, unknown>) => Promise<{ data?: unknown; error?: unknown }>;
   signInWithEmailOtp: (email: string, metadata?: Record<string, unknown>) => Promise<{ data?: unknown; error?: unknown }>;
   signInWithEmailPassword: (email: string, password: string) => Promise<{ data?: any; error?: unknown }>;
   signUpWithEmailPassword: (email: string, password: string, metadata?: Record<string, unknown>) => Promise<{ data?: any; error?: unknown }>;
@@ -42,6 +50,13 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
     return () => data.subscription.unsubscribe();
   }, []);
 
+  useEffect(() => {
+    if (!session?.user?.id) return;
+    recoverIncompleteRegistration(session.user, session).catch((error) => {
+      console.warn("Registration recovery failed", error?.message || error);
+    });
+  }, [session?.user?.id]);
+
   const value = useMemo<AuthContextType>(
     () => ({
       user: session?.user ?? null,
@@ -50,15 +65,22 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
       isLoading: loading,
       firebaseUser: session?.user ?? null,
       hasActiveSubscription: true,
-      signInWithOtp: async (phone: string) => {
+      signInWithOtp: async (phone: string, metadata = {}) => {
         const normalizedPhone = normalizeIndianPhone(phone);
-        const { data, error } = await supabase.auth.signInWithOtp({ phone: normalizedPhone });
+        const { data, error } = await supabase.auth.signInWithOtp({
+          phone: normalizedPhone,
+          options: Object.keys(metadata).length ? { data: metadata } : undefined,
+        });
         return { data, error };
       },
       signInWithEmailOtp: async (email: string, metadata = {}) => {
         const { data, error } = await supabase.auth.signInWithOtp({
           email: String(email || "").trim().toLowerCase(),
-          options: { data: metadata },
+          options: {
+            data: metadata,
+            shouldCreateUser: true,
+            emailRedirectTo: getEmailRedirectTo(),
+          },
         });
         return { data, error };
       },
@@ -73,7 +95,10 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
         const { data, error } = await supabase.auth.signUp({
           email: String(email || "").trim().toLowerCase(),
           password,
-          options: { data: metadata },
+          options: {
+            data: metadata,
+            emailRedirectTo: getEmailRedirectTo(),
+          },
         });
         return { data, error };
       },

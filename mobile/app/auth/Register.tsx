@@ -9,7 +9,6 @@ import {
     TouchableOpacity,
     View,
 } from "react-native";
-import { supabase } from "@/lib/supabase";
 import LanguageSelector from "@/components/LanguageSelector";
 import { useLanguage } from "@/providers/LanguageProvider";
 import { useAuth } from "@/providers/AuthProvider";
@@ -22,17 +21,30 @@ import {
   SABSEWA_PRIVACY_VERSION,
   SABSEWA_TERMS_VERSION,
 } from "@/lib/legalVersions";
-import { getIndianMobileDigits, normalizeIndianPhone } from "@/lib/phone";
+import { authErrorKey, maskPhone, normalizeIndianPhone, validateIndianMobile } from "@/lib/phone";
 
 type RegistrationMethod = "phone" | "email_password" | "email_otp" | "google";
+const PHONE_AUTH_ENABLED = process.env.EXPO_PUBLIC_PHONE_AUTH_ENABLED === "true";
+const EMAIL_OTP_ENABLED = process.env.EXPO_PUBLIC_EMAIL_OTP_ENABLED === "true";
+const makeDiagnosticId = () => `SSL-AUTH-${Date.now().toString(36).toUpperCase()}`;
 
 export default function RegisterScreen() {
   const router = useRouter();
-  const { role } = useLocalSearchParams();
-  const { signUpWithEmailPassword, signInWithEmailOtp, signInWithGoogle } = useAuth();
+  const { role, method: methodParam } = useLocalSearchParams();
+  const { signInWithOtp, signUpWithEmailPassword, signInWithEmailOtp, signInWithGoogle } = useAuth();
+  const requestedMethod =
+    methodParam === "phone" || methodParam === "email_otp" || methodParam === "email_password" || methodParam === "google"
+      ? methodParam
+      : "phone";
 
   const [fullname, setFullname] = useState("");
-  const [method, setMethod] = useState<RegistrationMethod>("phone");
+  const [method, setMethod] = useState<RegistrationMethod>(
+    requestedMethod === "phone" && !PHONE_AUTH_ENABLED
+      ? "email_password"
+      : requestedMethod === "email_otp" && !EMAIL_OTP_ENABLED
+        ? "email_password"
+        : requestedMethod
+  );
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -50,39 +62,53 @@ export default function RegisterScreen() {
   const [acceptedPolicies, setAcceptedPolicies] = useState(false);
   const [marketingConsent, setMarketingConsent] = useState(false);
   const [error, setError] = useState("");
+  const [technicalError, setTechnicalError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const { language, t } = useLanguage();
 
   const roleTitle =
     role === "customer"
-      ? "Customer"
+      ? t("common.customer")
       : role === "vendor"
-      ? "Vendor"
-      : "Rider";
+      ? t("common.vendor")
+      : t("common.rider");
 
   const handleRegister = async () => {
     if (submitting) return;
     if (!fullname) return setError(t("auth.errorFullName"));
-    const mobileDigits = getIndianMobileDigits(phone);
-    if (method === "phone" && (!mobileDigits || mobileDigits.length !== 10))
-      return setError(t("auth.errorMobile"));
+    if (method === "phone" && !PHONE_AUTH_ENABLED) {
+      return setError(t("auth.phoneRegistrationUnavailable"));
+    }
+    if (method === "email_otp" && !EMAIL_OTP_ENABLED) {
+      return setError(t("auth.emailOtpUnavailable"));
+    }
+    const mobileValidation = validateIndianMobile(phone);
+    if (method === "phone" && mobileValidation.ok === false) {
+      const key = mobileValidation.reason === "unsupported_country"
+        ? "auth.errorUnsupportedCountry"
+        : mobileValidation.reason === "duplicate_country_code"
+          ? "auth.errorDuplicateCountryCode"
+          : "auth.errorMobile";
+      return setError(t(key));
+    }
     if ((method === "email_password" || method === "email_otp") && !email.trim()) {
-      return setError("Enter your email address");
+      return setError(t("auth.errorEmail"));
     }
     if (method === "email_password" && password.length < 8) {
-      return setError("Enter a password of at least 8 characters");
+      return setError(t("auth.errorPassword"));
     }
     if (!city) return setError(t("auth.errorCity"));
     const address = buildAddress();
     if (role === "customer" && !address.trim()) return setError(t("auth.errorCustomerAddress"));
-    if (role === "vendor" && !shopName.trim()) return setError("Enter your shop or trade name");
-    if (role === "vendor" && !address.trim()) return setError("Enter your shop address");
+    if (role === "vendor" && !shopName.trim()) return setError(t("auth.errorVendorShop"));
+    if (role === "vendor" && !address.trim()) return setError(t("auth.errorVendorAddress"));
     if (!acceptedPolicies) return setError(t("auth.errorPolicies"));
 
     if ((role === "vendor" || role === "rider") && !extra)
-      return setError("Please fill all required fields");
+      return setError(t("auth.errorRequiredFields"));
 
     setError("");
+    setTechnicalError("");
 
     setSubmitting(true);
     try {
@@ -126,15 +152,12 @@ export default function RegisterScreen() {
       };
 
       if (method === "phone") {
-        const { error: otpError } = await supabase.auth.signInWithOtp({
-          phone: formattedPhone,
-          options: { data: authMetadata },
-        });
+        const { error: otpError } = await signInWithOtp(formattedPhone, authMetadata);
         if (otpError) throw otpError;
 
         router.push({
           pathname: "/auth/Login",
-          params: { phone: formattedPhone, method: "phone", registering: "1", otpSent: "1", role: String(role || "customer") },
+          params: { phone: formattedPhone, method: "phone", registering: "1", otpSent: "1", role: String(role || "customer"), maskedPhone: maskPhone(formattedPhone) },
         });
         return;
       }
@@ -153,14 +176,17 @@ export default function RegisterScreen() {
       if (method === "email_password") {
         const { error: signUpError } = await signUpWithEmailPassword(email, password, authMetadata);
         if (signUpError) throw signUpError;
-        setError("Please verify your email using the link sent to your inbox, then log in.");
+        setError(t("auth.emailVerificationSent"));
         return;
       }
 
       const { error: googleError } = await signInWithGoogle();
       if (googleError) throw googleError;
     } catch (err: any) {
-      setError(err.message || t("auth.registrationSaveFailed"));
+      const diagnosticId = makeDiagnosticId();
+      console.warn("Registration OTP/auth error", { diagnosticId, message: err?.message || String(err || "") });
+      setTechnicalError(diagnosticId);
+      setError(t(authErrorKey(err)));
     } finally {
       setSubmitting(false);
     }
@@ -184,7 +210,7 @@ export default function RegisterScreen() {
   async function captureLocation() {
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== "granted") {
-      setError("Location permission was not granted. You can continue and add location later.");
+      setError(t("auth.locationDenied"));
       return;
     }
     const current = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
@@ -199,22 +225,38 @@ export default function RegisterScreen() {
       <Text style={styles.subheading}>{t("auth.registerSubtitle")}</Text>
 
       <View style={styles.methodBox}>
-        <Text style={styles.methodTitle}>How would you like to register?</Text>
+        <Text style={styles.methodTitle}>{t("auth.methodTitle")}</Text>
         {[
-          ["phone", "Continue with Mobile Number"],
-          ["email_password", "Continue with Email and Password"],
-          ["email_otp", "Continue with Email OTP"],
-          ["google", "Continue with Google, where available"],
+          ["phone", PHONE_AUTH_ENABLED ? t("auth.methodPhone") : t("auth.methodPhoneUnavailable")],
+          ["email_password", t("auth.methodEmailPassword")],
+          ["email_otp", EMAIL_OTP_ENABLED ? t("auth.methodEmailOtp") : t("auth.methodEmailOtpUnavailable")],
+          ["google", t("auth.methodGoogle")],
         ].map(([key, label]) => (
           <TouchableOpacity
             key={key}
-            style={[styles.methodBtn, method === key && styles.methodSelected]}
-            onPress={() => setMethod(key as RegistrationMethod)}
+            style={[
+              styles.methodBtn,
+              method === key && styles.methodSelected,
+              ((key === "phone" && !PHONE_AUTH_ENABLED) || (key === "email_otp" && !EMAIL_OTP_ENABLED)) && styles.methodDisabled,
+            ]}
+            onPress={() => {
+              if (key === "phone" && !PHONE_AUTH_ENABLED) {
+                setError(t("auth.phoneRegistrationUnavailable"));
+                return;
+              }
+              if (key === "email_otp" && !EMAIL_OTP_ENABLED) {
+                setError(t("auth.emailOtpUnavailable"));
+                return;
+              }
+              setMethod(key as RegistrationMethod);
+            }}
           >
             <Text style={[styles.methodText, method === key && styles.methodTextSelected]}>{label}</Text>
           </TouchableOpacity>
         ))}
-        <Text style={styles.methodNote}>Email is optional. Mobile number remains the simplest primary option.</Text>
+        <Text style={styles.methodNote}>
+          {!PHONE_AUTH_ENABLED ? t("auth.phoneRegistrationUnavailable") : !EMAIL_OTP_ENABLED ? t("auth.emailOtpUnavailable") : t("auth.methodNote")}
+        </Text>
       </View>
 
       {/* NAME */}
@@ -235,12 +277,12 @@ export default function RegisterScreen() {
         <View style={styles.inputBlock}>
           <Text style={styles.label}>{t("auth.mobileNumber")}</Text>
           <View style={styles.phoneRow}>
-            <Text style={styles.countryCode}>+91</Text>
+            <Text style={styles.countryCode}>{t("auth.countryCodeIndia")}</Text>
             <TextInput
               style={[styles.input, styles.phoneInput]}
               placeholder={t("auth.enterMobile")}
-              keyboardType="number-pad"
-              maxLength={10}
+              keyboardType="phone-pad"
+              maxLength={18}
               value={phone}
               onChangeText={(t) => {
                 setPhone(t);
@@ -251,10 +293,10 @@ export default function RegisterScreen() {
         </View>
       ) : (
         <View style={styles.inputBlock}>
-          <Text style={styles.label}>Email Address</Text>
+          <Text style={styles.label}>{t("auth.emailAddress")}</Text>
           <TextInput
             style={styles.input}
-            placeholder="name@example.com"
+            placeholder={t("auth.enterEmail")}
             autoCapitalize="none"
             keyboardType="email-address"
             value={email}
@@ -265,10 +307,10 @@ export default function RegisterScreen() {
           />
           {method === "email_password" ? (
             <>
-              <Text style={styles.label}>Password</Text>
+              <Text style={styles.label}>{t("auth.password")}</Text>
               <TextInput
                 style={styles.input}
-                placeholder="At least 8 characters"
+                placeholder={t("auth.passwordPlaceholder")}
                 secureTextEntry
                 value={password}
                 onChangeText={(t) => {
@@ -300,45 +342,45 @@ export default function RegisterScreen() {
           <Text style={styles.label}>{role === "vendor" ? t("auth.shopAddress") : t("auth.customerAddress")}</Text>
           <TextInput
             style={styles.input}
-            placeholder={role === "vendor" ? "Shop/flat/house number" : "Flat/house number"}
+            placeholder={role === "vendor" ? t("auth.flatHouseVendor") : t("auth.flatHouseCustomer")}
             value={flatHouse}
             onChangeText={setFlatHouse}
           />
           <TextInput
             style={styles.input}
-            placeholder="Building, apartment or society name"
+            placeholder={t("auth.buildingSociety")}
             value={buildingSociety}
             onChangeText={setBuildingSociety}
           />
           <TextInput
             style={styles.input}
-            placeholder="Street or locality"
+            placeholder={t("auth.streetLocality")}
             value={streetLocality}
             onChangeText={setStreetLocality}
           />
           <TextInput
             style={styles.input}
-            placeholder="Landmark (optional)"
+            placeholder={t("auth.landmarkOptional")}
             value={landmark}
             onChangeText={setLandmark}
           />
           <TextInput
             style={styles.input}
-            placeholder="PIN code"
+            placeholder={t("auth.pinCode")}
             keyboardType="number-pad"
             value={pincode}
             onChangeText={setPincode}
           />
           <TextInput
             style={styles.input}
-            placeholder="State"
+            placeholder={t("auth.state")}
             value={stateName}
             onChangeText={setStateName}
           />
           <TextInput
             style={[styles.input, styles.textArea]}
             multiline
-            placeholder="Delivery instructions (optional)"
+            placeholder={t("auth.deliveryInstructions")}
             value={deliveryInstructions}
             onChangeText={setDeliveryInstructions}
           />
@@ -355,20 +397,20 @@ export default function RegisterScreen() {
       {/* ROLE-SPECIFIC EXTRA FIELD */}
       {role === "vendor" && (
         <View style={styles.inputBlock}>
-          <Text style={styles.label}>Shop / Trade Name</Text>
+          <Text style={styles.label}>{t("auth.shopTradeName")}</Text>
           <TextInput
             style={styles.input}
-            placeholder="Public shop name"
+            placeholder={t("auth.shopTradePlaceholder")}
             value={shopName}
             onChangeText={(t) => {
               setShopName(t);
               setError("");
             }}
           />
-          <Text style={styles.label}>Shop or Service Type</Text>
+          <Text style={styles.label}>{t("auth.shopServiceType")}</Text>
           <TextInput
             style={styles.input}
-            placeholder="E.g., Kirana store, pharmacy, food, repair"
+            placeholder={t("auth.shopServicePlaceholder")}
             value={extra}
             onChangeText={(t) => {
               setExtra(t);
@@ -380,10 +422,10 @@ export default function RegisterScreen() {
 
       {role === "rider" && (
         <View style={styles.inputBlock}>
-          <Text style={styles.label}>Delivery Area</Text>
+          <Text style={styles.label}>{t("auth.deliveryArea")}</Text>
           <TextInput
             style={styles.input}
-            placeholder="E.g., Sector 10, Gurugram"
+            placeholder={t("auth.deliveryAreaPlaceholder")}
             value={extra}
             onChangeText={(t) => {
               setExtra(t);
@@ -395,39 +437,50 @@ export default function RegisterScreen() {
 
       {/* ERROR */}
       {error ? <Text style={styles.error}>{error}</Text> : null}
+      {technicalError ? <Text style={styles.technicalError}>{t("auth.diagnosticReference", { reference: technicalError })}</Text> : null}
+      {technicalError ? (
+        <View style={styles.retryBox}>
+          <TouchableOpacity style={styles.retryChip} onPress={handleRegister} disabled={submitting}>
+            <Text style={styles.retryText}>{t("auth.retry")}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.retryChip} onPress={() => { setPhone(""); setTechnicalError(""); setError(""); }}>
+            <Text style={styles.retryText}>{t("auth.changeMobile")}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.retryChip} onPress={() => { setMethod(EMAIL_OTP_ENABLED ? "email_otp" : "email_password"); setTechnicalError(""); setError(""); }}>
+            <Text style={styles.retryText}>{t("auth.registerWithEmail")}</Text>
+          </TouchableOpacity>
+          <Text style={styles.supportText}>{t("auth.supportHelp")}</Text>
+        </View>
+      ) : null}
 
       <View style={styles.legalBox}>
-        <Text style={styles.legalTitle}>Required before registration</Text>
-        <Text style={styles.legalText}>
-          Please open and review each applicable document before ticking acceptance. These documents remain visible in the app and are recorded by version for future dispute evidence.
-        </Text>
-        <Text style={styles.legalText}>
-          The selected vendor will receive your name, delivery address and contact number only after accepting your order for fulfilment.
-        </Text>
+        <Text style={styles.legalTitle}>{t("auth.requiredBeforeRegistration")}</Text>
+        <Text style={styles.legalText}>{t("auth.legalIntro")}</Text>
+        <Text style={styles.legalText}>{t("auth.customerDisclosure")}</Text>
         <View style={styles.legalLinks}>
           <TouchableOpacity onPress={() => router.push("/terms" as any)}>
-            <Text style={styles.legalLink}>Open Terms of Use</Text>
+            <Text style={styles.legalLink}>{t("auth.openTerms")}</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => router.push("/customer-terms" as any)}>
-            <Text style={styles.legalLink}>Open Customer Terms</Text>
+            <Text style={styles.legalLink}>{t("auth.openCustomerTerms")}</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => router.push("/vendor-terms" as any)}>
-            <Text style={styles.legalLink}>Open Vendor Terms</Text>
+            <Text style={styles.legalLink}>{t("auth.openVendorTerms")}</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => router.push("/privacy" as any)}>
-            <Text style={styles.legalLink}>Open Privacy Notice</Text>
+            <Text style={styles.legalLink}>{t("auth.openPrivacy")}</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => router.push("/credit-disclaimer" as any)}>
-            <Text style={styles.legalLink}>Open Credit Record Disclaimer</Text>
+            <Text style={styles.legalLink}>{t("auth.openCreditDisclaimer")}</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => router.push("/refund-cancellation" as any)}>
-            <Text style={styles.legalLink}>Open Refund/Cancellation Policy</Text>
+            <Text style={styles.legalLink}>{t("auth.openRefundPolicy")}</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => router.push("/grievance-dispute" as any)}>
-            <Text style={styles.legalLink}>Open Grievance and Dispute Policy</Text>
+            <Text style={styles.legalLink}>{t("auth.openGrievance")}</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => router.push("/policy" as any)}>
-            <Text style={styles.legalLink}>Open Platform Policy</Text>
+            <Text style={styles.legalLink}>{t("auth.openPlatformPolicy")}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -443,17 +496,17 @@ export default function RegisterScreen() {
         <View style={[styles.checkbox, marketingConsent && styles.checked]}>
           {marketingConsent ? <Text style={styles.checkText}>✓</Text> : null}
         </View>
-        <Text style={styles.consentText}>Optional: I agree to receive promotional offers and marketing updates from SabSewa Local. I can opt out later.</Text>
+        <Text style={styles.consentText}>{t("auth.marketingConsent")}</Text>
       </TouchableOpacity>
 
       {/* SUBMIT */}
       <TouchableOpacity style={[styles.registerBtn, (!acceptedPolicies || submitting) && styles.registerBtnDisabled]} onPress={handleRegister} disabled={submitting}>
-        <Text style={styles.registerBtnText}>{submitting ? "Please wait..." : method === "phone" || method === "email_otp" ? "Accept and Send OTP" : t("auth.acceptAndRegister")}</Text>
+        <Text style={styles.registerBtnText}>{submitting ? t("auth.pleaseWait") : method === "phone" || method === "email_otp" ? t("auth.acceptAndSendOtp") : t("auth.acceptAndRegister")}</Text>
       </TouchableOpacity>
 
       {/* BACK */}
       <TouchableOpacity onPress={() => router.push("/auth")}>
-        <Text style={styles.backText}>← Back</Text>
+        <Text style={styles.backText}>← {t("auth.back")}</Text>
       </TouchableOpacity>
     </ScrollView>
   );
@@ -495,6 +548,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
   },
   methodSelected: { backgroundColor: "#1e88e5", borderColor: "#1e88e5" },
+  methodDisabled: { opacity: 0.55 },
   methodText: { color: "#334155", fontWeight: "800" },
   methodTextSelected: { color: "#fff" },
   methodNote: { color: "#64748b", fontSize: 12, lineHeight: 17 },
@@ -544,6 +598,11 @@ const styles = StyleSheet.create({
     fontSize: 13,
     textAlign: "center",
   },
+  technicalError: { color: "#7f1d1d", backgroundColor: "#fef2f2", borderRadius: 8, padding: 8, marginBottom: 12, fontSize: 11 },
+  retryBox: { borderWidth: 1, borderColor: "#fecaca", backgroundColor: "#fff7f7", borderRadius: 10, padding: 10, marginBottom: 14 },
+  retryChip: { borderWidth: 1, borderColor: "#1e88e5", borderRadius: 8, padding: 10, marginBottom: 8, alignItems: "center", backgroundColor: "#fff" },
+  retryText: { color: "#1e88e5", fontWeight: "900" },
+  supportText: { color: "#7f1d1d", fontSize: 12, lineHeight: 18 },
 
   registerBtn: {
     backgroundColor: "#1e88e5",

@@ -1,58 +1,35 @@
 import { supabase } from '../../lib/supabase';
 
-/**
- * Formats raw Indian phone input into strict E.164 standard.
- * Examples:
- *   "9876543210"    -> "+919876543210"
- *   "+919876543210" -> "+919876543210"
- *   "09876543210"   -> "+919876543210"
- */
-export const formatIndianPhoneNumber = (input: string): string => {
-  const digitsOnly = input.replace(/\D/g, '');
-  
-  if (digitsOnly.length === 10) {
-    return `+91${digitsOnly}`;
-  } else if (digitsOnly.length === 12 && digitsOnly.startsWith('91')) {
-    return `+${digitsOnly}`;
-  } else if (digitsOnly.length === 11 && digitsOnly.startsWith('0')) {
-    return `+91${digitsOnly.slice(1)}`;
-  }
-  
-  throw new Error('Please enter a valid 10-digit Indian mobile number.');
+// Helper function to enforce strict +91 E.164 format across all steps
+export const normalizeIndiaPhone = (phone: string): string => {
+  const digits = phone.replace(/\D/g, '');
+  if (digits.length === 10) return `+91${digits}`;
+  if (digits.length === 12 && digits.startsWith('91')) return `+${digits}`;
+  return phone.startsWith('+') ? phone : `+${phone}`;
 };
 
-/**
- * Initiates Phone OTP Authentication via Supabase & Twilio Verify
- */
-export const requestPhoneOTP = async (rawPhone: string) => {
-  const phoneAuthEnabled = process.env.EXPO_PUBLIC_PHONE_AUTH_ENABLED === 'true';
-  
-  if (!phoneAuthEnabled) {
-    throw new Error('Phone OTP authentication is disabled in current runtime environment.');
-  }
-
-  const formattedPhone = formatIndianPhoneNumber(rawPhone);
+// Step 1: Request OTP
+export const sendMobileOTP = async (rawPhone: string) => {
+  const formattedPhone = normalizeIndiaPhone(rawPhone);
 
   const { data, error } = await supabase.auth.signInWithOtp({
     phone: formattedPhone,
     options: {
-      shouldCreateUser: true,
+      shouldCreateUser: true, // MUST be true for new user registration
     },
   });
 
   if (error) {
-    console.error('[AuthService] signInWithOtp Error:', error.status, error.message);
+    console.error('Error sending OTP:', error.message);
     throw error;
   }
-
   return { success: true, phone: formattedPhone, data };
 };
 
-/**
- * Verifies submitted OTP against Supabase Auth session
- */
-export const verifyPhoneOTP = async (rawPhone: string, token: string) => {
-  const formattedPhone = formatIndianPhoneNumber(rawPhone);
+// Step 2: Verify OTP
+export const verifyMobileOTP = async (rawPhone: string, token: string) => {
+  // CRITICAL: Must format EXACTLY the same as Step 1
+  const formattedPhone = normalizeIndiaPhone(rawPhone);
 
   const { data, error } = await supabase.auth.verifyOtp({
     phone: formattedPhone,
@@ -61,7 +38,7 @@ export const verifyPhoneOTP = async (rawPhone: string, token: string) => {
   });
 
   if (error) {
-    console.error('[AuthService] verifyOtp Error:', error.status, error.message);
+    console.error('Error verifying OTP:', error.message);
     throw error;
   }
 

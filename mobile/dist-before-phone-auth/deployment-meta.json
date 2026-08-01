@@ -1,0 +1,9 @@
+{
+  "build_id": "20260801064446",
+  "built_at": "2026-08-01T06:44:46.175Z",
+  "source": "mobile/web-public",
+  "public_app_url": "https://www.sabsewa.in",
+  "production_api_url": "https://api.sabsewa.in",
+  "supabase_project_ref": "xodmazgfibftorrlbotk",
+  "note": "Static frontend deployment only. No database migrations, storage deletion or backend deployment are performed by this export script."
+}

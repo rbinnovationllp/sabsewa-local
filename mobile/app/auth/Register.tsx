@@ -1,6 +1,7 @@
 // app/auth/register.tsx
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useState } from "react";
+import { savePendingRegistrationDraft } from "@/lib/pendingRegistration";
 import {
     ScrollView,
     StyleSheet,
@@ -152,6 +153,7 @@ export default function RegisterScreen() {
       };
 
       if (method === "phone") {
+        savePendingRegistrationDraft(formattedPhone, authMetadata);
         const { error: otpError } = await signInWithOtp(formattedPhone, authMetadata);
         if (otpError) throw otpError;
 
@@ -163,6 +165,7 @@ export default function RegisterScreen() {
       }
 
       if (method === "email_otp") {
+        savePendingRegistrationDraft(email.trim().toLowerCase(), authMetadata);
         const { error: otpError } = await signInWithEmailOtp(email, authMetadata);
         if (otpError) throw otpError;
 

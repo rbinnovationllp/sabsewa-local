@@ -8,6 +8,7 @@ import {
   StyleSheet,
   Alert,
 } from "react-native";
+import { loadPendingRegistrationDraft, clearPendingRegistrationDraft } from "@/lib/pendingRegistration";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useAuth } from "@/providers/AuthProvider";
 import { routeUser } from "@/src/utils/roleRouter";
@@ -125,10 +126,21 @@ export default function LoginScreen() {
       if (error) throw error;
 
       const user = data.user;
-      const metadata = user?.user_metadata || {};
-      if (user?.id && metadata.role) {
-        await completeRegistrationProfile(user, data.session);
-      }
+const metadata = user?.user_metadata || {};
+const registrationKey = method === "email_otp" ? normalizedEmail : normalizedPhone;
+const pendingMetadata = loadPendingRegistrationDraft(registrationKey) || {};
+const mergedMetadata = {
+  ...pendingMetadata,
+  ...metadata,
+  role: metadata.role || pendingMetadata.role || String(params.role || "customer"),
+  phone: metadata.phone || pendingMetadata.phone || normalizedPhone || null,
+  email: metadata.email || pendingMetadata.email || normalizedEmail || null,
+};
+
+if (user?.id && params.registering === "1") {
+  await completeRegistrationProfile(user, data.session, mergedMetadata);
+  clearPendingRegistrationDraft(registrationKey);
+}
 
       // ðŸ” Fetch Profile to get role
       const res = await fetch(

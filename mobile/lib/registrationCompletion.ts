@@ -22,8 +22,12 @@ function addressFromMetadata(metadata: any) {
   return clean(metadata.primary_address);
 }
 
-export async function completeRegistrationProfile(user: User, session: Session | null): Promise<RegistrationCompletionResult> {
-  const metadata = user.user_metadata || {};
+export async function completeRegistrationProfile(
+  user: User,
+  session: Session | null,
+  metadataOverride: Record<string, any> = {}
+): Promise<RegistrationCompletionResult> {
+  const metadata = { ...(metadataOverride || {}), ...(user.user_metadata || {}) };
   const role = clean(metadata.role) || "customer";
   const language = clean(metadata.preferred_language) || "en";
   const phone = clean(user.phone || metadata.phone);

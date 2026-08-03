@@ -79,6 +79,8 @@ In Live Mode, vendor wallet credits are applied only after the backend receives 
 
 Mobile OTP is not active until Supabase Phone Auth, a production SMS provider, India `+91` delivery and any required TRAI/DLT sender/template approvals are configured and verified with a real SMS. Email OTP is also disabled until production SMTP and numeric OTP template delivery are verified. TypeScript, localization and web export checks prove only that the code builds; they do not prove that OTP delivery or verification works.
 
+For MSG91 migration, keep Supabase as the OTP/session authority and use the Supabase Send SMS Hook. See [`docs/MSG91_SUPABASE_PHONE_AUTH_RUNBOOK.md`](docs/MSG91_SUPABASE_PHONE_AUTH_RUNBOOK.md). MSG91 credentials must be stored only in Supabase Edge Function secrets or another approved server-side secret store, never in `EXPO_PUBLIC_*`, GitHub, Hostinger `dist`, screenshots or logs.
+
 ## Multilingual Support
 
 English is the default offline fallback. English, Hindi and Kannada are enabled as the Bengaluru launch-language foundation for core onboarding, registration, discovery and delivery-safety flows. Other Eighth Schedule Indian languages are listed as phased languages and shown as `Coming Soon` until reviewed translations or validated downloadable language packs are available.

@@ -998,3 +998,28 @@ End-to-end test still pending:
 
 Do not deploy publicly yet:
 - Do not upload a PWA build containing `EXPO_PUBLIC_PHONE_AUTH_ENABLED=true` to Hostinger until a real OTP request, Twilio delivery, OTP verification, profile save and Terms acceptance are confirmed.
+
+## 2026-08-02 OTP Incident Review And MSG91 Migration Preparation
+
+Owner supplied an MSG91 migration instruction after Twilio OTP remained unresolved for approximately 48 hours.
+
+Current finding:
+- The frontend phone-auth contract is correct for Supabase-managed OTP: `mobile/providers/AuthProvider.tsx` calls `supabase.auth.signInWithOtp({ phone })` and verifies with `supabase.auth.verifyOtp({ phone, token, type: "sms" })`.
+- Indian mobile normalization is present in `mobile/lib/phone.ts` and produces `+91XXXXXXXXXX`.
+- `mobile/app/auth/Register.tsx` and `mobile/app/auth/Login.tsx` gate phone OTP with `EXPO_PUBLIC_PHONE_AUTH_ENABLED`.
+- `mobile/.env.example` is now reset to `EXPO_PUBLIC_PHONE_AUTH_ENABLED=false` so a public/template build is not accidentally enabled before a real provider test passes.
+- `mobile/app/+html.tsx` no longer registers the PWA service worker on `localhost` or `127.0.0.1`, reducing stale-cache/blank-page confusion during local OTP testing.
+- Added `supabase/functions/send-sms-msg91/index.ts` as a Supabase Send SMS Hook delivery function for MSG91. This preserves Supabase as the OTP generator and verifier.
+- Added `docs/MSG91_SUPABASE_PHONE_AUTH_RUNBOOK.md` with the safe MSG91 architecture, required dashboard actions, secret-storage rules, local testing command and acceptance criteria.
+
+Important blocker:
+- `mobile/.env` is Git-ignored, but the reviewed local file still contains placeholder public values such as `replace_with_supabase_anon_key`. Local OTP testing cannot succeed until the real SabSewa Local Supabase anon key is placed in `mobile/.env` on the owner machine. Do not paste the key into chat.
+- TypeScript validation could not be completed because `mobile/node_modules` is inconsistent: `package-lock.json` declares `typescript`, but the local `node_modules/.bin/tsc` binary is missing. `npm ci` was started to repair this but exceeded the tool timeout, so dependency repair must be completed before the next full validation.
+
+Do not mark MSG91/mobile OTP production-ready until:
+- Supabase Auth Hooks are confirmed available on the current Supabase project/plan.
+- The MSG91 account, Indian transactional OTP/DLT entity, sender/header and template are active and approved.
+- The Edge Function is deployed and configured as the Supabase Send SMS Hook.
+- `MSG91_AUTH_KEY`, `MSG91_OTP_TEMPLATE_ID`, `MSG91_SENDER_ID` and `SUPABASE_SEND_SMS_HOOK_SECRET` are stored only as Supabase Edge Function secrets.
+- A real Indian `+91` number receives an OTP, verifies successfully, creates/restores a Supabase session, saves profile/address/Terms acceptance, rejects an incorrect OTP and respects resend cooldown.
+- Only after that, set `EXPO_PUBLIC_PHONE_AUTH_ENABLED=true`, rebuild `mobile/dist`, confirm new bundle timestamps/hashes, audit for secret leakage and upload the complete fresh build to Hostinger.

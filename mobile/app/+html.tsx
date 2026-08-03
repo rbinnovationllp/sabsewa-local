@@ -21,7 +21,7 @@ export default function Root({ children }: { children: React.ReactNode }) {
         <script
           dangerouslySetInnerHTML={{
             __html:
-              'if ("serviceWorker" in navigator) { window.addEventListener("load", function () { navigator.serviceWorker.register("/service-worker.js").catch(function () {}); }); }',
+              'if ("serviceWorker" in navigator && !/^(localhost|127\\.0\\.0\\.1)$/.test(window.location.hostname)) { window.addEventListener("load", function () { navigator.serviceWorker.register("/service-worker.js").catch(function () {}); }); }',
           }}
         />
       </body>

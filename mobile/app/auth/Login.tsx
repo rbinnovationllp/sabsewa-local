@@ -125,6 +125,14 @@ export default function LoginScreen() {
         : await verifyOtp(normalizedPhone, token);
       if (error) throw error;
 
+      if (data.session?.access_token && data.session?.refresh_token) {
+        const { error: sessionError } = await supabase.auth.setSession({
+          access_token: data.session.access_token,
+          refresh_token: data.session.refresh_token,
+        });
+        if (sessionError) throw sessionError;
+      }
+
       const user = data.user;
 const metadata = user?.user_metadata || {};
 const registrationKey = method === "email_otp" ? normalizedEmail : normalizedPhone;
@@ -412,6 +420,7 @@ const styles = StyleSheet.create({
   backBtn: { marginTop: 20, alignItems: "center" },
   backText: { color: "#1a237e", fontWeight: "600" },
 });
+
 
 
 

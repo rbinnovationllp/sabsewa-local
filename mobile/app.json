@@ -7,12 +7,6 @@
     "icon": "./assets/images/icon.png",
     "scheme": "sabsewalocal",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
-    "splash": {
-      "image": "./assets/images/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "in.sabsewa.local"
@@ -37,6 +31,14 @@
     "plugins": [
       "expo-router",
       [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/splash-icon.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#ffffff"
+        }
+      ],
+      [
         "expo-image-picker",
         {
           "photosPermission": "SabSewa Local uses selected photos only when a vendor uploads product images or required business documents.",
@@ -53,7 +55,10 @@
     "web": {
       "bundler": "metro",
       "output": "single",
-      "favicon": "./assets/images/icon.png"
+      "favicon": "./assets/images/icon.png",
+      "headers": {
+        "Content-Security-Policy": "default-src 'self' 'unsafe-eval' 'unsafe-inline' http: https: ws: wss: data: blob:;"
+      }
     },
     "experiments": {
       "typedRoutes": true

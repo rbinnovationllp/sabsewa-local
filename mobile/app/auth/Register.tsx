@@ -3,12 +3,12 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useState } from "react";
 import { savePendingRegistrationDraft } from "@/lib/pendingRegistration";
 import {
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import LanguageSelector from "@/components/LanguageSelector";
 import { useLanguage } from "@/providers/LanguageProvider";
@@ -153,15 +153,28 @@ export default function RegisterScreen() {
       };
 
       if (method === "phone") {
+        // Standardize keys so draft is accurately retrieved across variations
         savePendingRegistrationDraft(formattedPhone, authMetadata);
-        savePendingRegistrationDraft("+" + formattedPhone, authMetadata);
+        if (formattedPhone.startsWith("+")) {
+          savePendingRegistrationDraft(formattedPhone.replace("+", ""), authMetadata);
+        } else {
+          savePendingRegistrationDraft("+" + formattedPhone, authMetadata);
+        }
         savePendingRegistrationDraft(phone, authMetadata);
+
         const { error: otpError } = await signInWithOtp(formattedPhone, authMetadata);
         if (otpError) throw otpError;
 
         router.push({
           pathname: "/auth/Login",
-          params: { phone: formattedPhone, method: "phone", registering: "1", otpSent: "1", role: String(role || "customer"), maskedPhone: maskPhone(formattedPhone) },
+          params: { 
+            phone: formattedPhone, 
+            method: "phone", 
+            registering: "1", 
+            otpSent: "1", 
+            role: String(role || "customer"), 
+            maskedPhone: maskPhone(formattedPhone) 
+          },
         });
         return;
       }
@@ -173,7 +186,13 @@ export default function RegisterScreen() {
 
         router.push({
           pathname: "/auth/Login",
-          params: { email: email.trim().toLowerCase(), method: "email_otp", registering: "1", otpSent: "1", role: String(role || "customer") },
+          params: { 
+            email: email.trim().toLowerCase(), 
+            method: "email_otp", 
+            registering: "1", 
+            otpSent: "1", 
+            role: String(role || "customer") 
+          },
         });
         return;
       }
@@ -631,6 +650,3 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
 });
-
-
-

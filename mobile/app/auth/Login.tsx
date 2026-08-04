@@ -1,4 +1,5 @@
-﻿import React, { useState } from "react";
+﻿// app/auth/login.tsx
+import React, { useState } from "react";
 import {
   View,
   Text,
@@ -26,13 +27,17 @@ const makeDiagnosticId = () => `SSL-AUTH-${Date.now().toString(36).toUpperCase()
 export default function LoginScreen() {
   const router = useRouter();
   const params: any = useLocalSearchParams();
-  const { signInWithOtp, signInWithEmailOtp, verifyEmailOtp, verifyOtp, loading } = useAuth();
+  const { signInWithOtp, signInWithEmailOtp, verifyEmailOtp, verifyOtp } = useAuth();
   const { t } = useLanguage();
 
   const [phone, setPhone] = useState(params.phone ? String(params.phone) : "");
   const [email, setEmail] = useState(params.email ? String(params.email) : "");
+  
   const initialMethod = String(params.method || (params.email ? "email_otp" : "phone"));
-  const [method, setMethod] = useState(initialMethod === "email_otp" && EMAIL_OTP_ENABLED ? "email_otp" : "phone");
+  const [method, setMethod] = useState<"phone" | "email_otp">(
+    initialMethod === "email_otp" && EMAIL_OTP_ENABLED ? "email_otp" : "phone"
+  );
+  
   const [otpSent, setOtpSent] = useState(params.otpSent === "1" || params.registering === "1");
   const [token, setToken] = useState("");
   const [trustDevice, setTrustDevice] = useState(true);
@@ -57,7 +62,7 @@ export default function LoginScreen() {
     ].some((needle) => message.includes(needle));
   }
 
-  // 1ï¸âƒ£ SEND OTP
+  // 1. SEND OTP
   async function handleSendOTP() {
     setError(null);
     setTechnicalError(null);
@@ -111,7 +116,7 @@ export default function LoginScreen() {
     }
   }
 
-  // 2ï¸âƒ£ VERIFY OTP + ROUTE USER
+  // 2. VERIFY OTP + ROUTE USER
   async function handleVerifyOTP() {
     setError(null);
     setTechnicalError(null);
@@ -119,10 +124,15 @@ export default function LoginScreen() {
 
     try {
       const normalizedEmail = String(email || "").trim().toLowerCase();
-      const normalizedPhone = method === "email_otp" ? "" : normalizeIndianPhone(phone);
+      
+      // Clean raw phone to avoid duplicate country code addition during verification
+      const rawPhone = String(phone || "").trim();
+      const normalizedPhone = method === "email_otp" ? "" : normalizeIndianPhone(rawPhone);
+
       const { data, error } = method === "email_otp"
         ? await verifyEmailOtp(normalizedEmail, token)
         : await verifyOtp(normalizedPhone, token);
+
       if (error) throw error;
 
       if (data.session?.access_token && data.session?.refresh_token) {
@@ -134,23 +144,35 @@ export default function LoginScreen() {
       }
 
       const user = data.user;
-const metadata = user?.user_metadata || {};
-const registrationKey = method === "email_otp" ? normalizedEmail : normalizedPhone;
-const pendingMetadata = loadPendingRegistrationDraft(registrationKey) || {};
-const mergedMetadata = {
-  ...pendingMetadata,
-  ...metadata,
-  role: metadata.role || pendingMetadata.role || String(params.role || "customer"),
-  phone: metadata.phone || pendingMetadata.phone || normalizedPhone || null,
-  email: metadata.email || pendingMetadata.email || normalizedEmail || null,
-};
+      const metadata = user?.user_metadata || {};
+      
+      // Attempt lookup by normalizedPhone, raw phone, and without '+' prefix
+      const registrationKey = method === "email_otp" ? normalizedEmail : normalizedPhone;
+      const altKey1 = normalizedPhone.startsWith("+") ? normalizedPhone.replace("+", "") : "+" + normalizedPhone;
+      const altKey2 = rawPhone;
 
-if (user?.id && params.registering === "1") {
-  await completeRegistrationProfile(user, data.session, mergedMetadata);
-  clearPendingRegistrationDraft(registrationKey);
-}
+      const pendingMetadata = 
+        loadPendingRegistrationDraft(registrationKey) || 
+        loadPendingRegistrationDraft(altKey1) || 
+        loadPendingRegistrationDraft(altKey2) || 
+        {};
 
-      // ðŸ” Fetch Profile to get role
+      const mergedMetadata = {
+        ...pendingMetadata,
+        ...metadata,
+        role: metadata.role || pendingMetadata.role || String(params.role || "customer"),
+        phone: metadata.phone || pendingMetadata.phone || normalizedPhone || null,
+        email: metadata.email || pendingMetadata.email || normalizedEmail || null,
+      };
+
+      if (user?.id && params.registering === "1") {
+        await completeRegistrationProfile(user, data.session, mergedMetadata);
+        clearPendingRegistrationDraft(registrationKey);
+        clearPendingRegistrationDraft(altKey1);
+        clearPendingRegistrationDraft(altKey2);
+      }
+
+      // Fetch Profile to get role
       const res = await fetch(
         `${process.env.EXPO_PUBLIC_SUPABASE_URL}/rest/v1/user_profiles?user_id=eq.${data.user?.id}`,
         {
@@ -194,7 +216,7 @@ if (user?.id && params.registering === "1") {
         return;
       }
 
-      // ðŸŽ¯ Redirect user based on role
+      // Redirect user based on role
       router.replace(routeUser(role) as any);
     } catch (err: any) {
       const diagnosticId = makeDiagnosticId();
@@ -420,8 +442,3 @@ const styles = StyleSheet.create({
   backBtn: { marginTop: 20, alignItems: "center" },
   backText: { color: "#1a237e", fontWeight: "600" },
 });
-
-
-
-
-

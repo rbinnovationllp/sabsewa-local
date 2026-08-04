@@ -154,6 +154,8 @@ export default function RegisterScreen() {
 
       if (method === "phone") {
         savePendingRegistrationDraft(formattedPhone, authMetadata);
+        savePendingRegistrationDraft("+" + formattedPhone, authMetadata);
+        savePendingRegistrationDraft(phone, authMetadata);
         const { error: otpError } = await signInWithOtp(formattedPhone, authMetadata);
         if (otpError) throw otpError;
 
@@ -490,14 +492,14 @@ export default function RegisterScreen() {
 
       <TouchableOpacity style={styles.consentRow} onPress={() => setAcceptedPolicies((value) => !value)}>
         <View style={[styles.checkbox, acceptedPolicies && styles.checked]}>
-          {acceptedPolicies ? <Text style={styles.checkText}>✓</Text> : null}
+          {acceptedPolicies ? <Text style={styles.checkText}>{"\u2713"}</Text> : null}
         </View>
         <Text style={styles.consentText}>{SABSEWA_ACCEPTANCE_STATEMENT}</Text>
       </TouchableOpacity>
 
       <TouchableOpacity style={styles.consentRow} onPress={() => setMarketingConsent((value) => !value)}>
         <View style={[styles.checkbox, marketingConsent && styles.checked]}>
-          {marketingConsent ? <Text style={styles.checkText}>✓</Text> : null}
+          {marketingConsent ? <Text style={styles.checkText}>{"\u2713"}</Text> : null}
         </View>
         <Text style={styles.consentText}>{t("auth.marketingConsent")}</Text>
       </TouchableOpacity>
@@ -509,7 +511,7 @@ export default function RegisterScreen() {
 
       {/* BACK */}
       <TouchableOpacity onPress={() => router.push("/auth")}>
-        <Text style={styles.backText}>← {t("auth.back")}</Text>
+        <Text style={styles.backText}>{"\u2190"} {t("auth.back")}</Text>
       </TouchableOpacity>
     </ScrollView>
   );
@@ -629,5 +631,6 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
 });
+
 
 

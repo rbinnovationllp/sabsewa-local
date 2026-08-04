@@ -27,7 +27,7 @@ export async function completeRegistrationProfile(
   session: Session | null,
   metadataOverride: Record<string, any> = {}
 ): Promise<RegistrationCompletionResult> {
-  const metadata = { ...(metadataOverride || {}), ...(user.user_metadata || {}) };
+  const metadata = { ...(user.user_metadata || {}), ...(metadataOverride || {}) };
   const role = clean(metadata.role) || "customer";
   const language = clean(metadata.preferred_language) || "en";
   const phone = clean(user.phone || metadata.phone);
@@ -46,6 +46,9 @@ export async function completeRegistrationProfile(
     accepted_document_versions: metadata.accepted_document_versions || SABSEWA_ACCEPTED_DOCUMENT_VERSIONS,
     policies_accepted_at: new Date().toISOString(),
     policies_accepted_language: clean(metadata.policy_acceptance_language) || language,
+    primary_address: addressFromMetadata(metadata) || null,
+    registration_completed_at: new Date().toISOString(),
+    last_login_at: new Date().toISOString(),
   }, { onConflict: "user_id" });
 
   if (profileError) throw profileError;
@@ -129,3 +132,4 @@ export async function recoverIncompleteRegistration(user: User | null, session: 
   if (existingProfile?.role) return { role: existingProfile.role, profileSaved: true };
   return completeRegistrationProfile(user, session);
 }
+

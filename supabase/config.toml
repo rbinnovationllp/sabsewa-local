@@ -29,6 +29,9 @@ enabled = true
 [edge_runtime]
 enabled = true
 
+[functions.send-sms-msg91]
+verify_jwt = false
+
 [functions.razorpay-create-platform-order]
 verify_jwt = false
 

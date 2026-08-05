@@ -25,6 +25,11 @@ const PHONE_AUTH_ENABLED = process.env.EXPO_PUBLIC_PHONE_AUTH_ENABLED === "true"
 const EMAIL_OTP_ENABLED = process.env.EXPO_PUBLIC_EMAIL_OTP_ENABLED === "true";
 const makeDiagnosticId = () => `SSL-AUTH-${Date.now().toString(36).toUpperCase()}`;
 
+function otpVerifyErrorKey(error: unknown) {
+  const key = authErrorKey(error);
+  return key === "auth.errorOtpSendFailed" ? "auth.errorOtpIncorrect" : key;
+}
+
 export default function LoginScreen() {
   const router = useRouter();
   const params: any = useLocalSearchParams();
@@ -248,7 +253,7 @@ export default function LoginScreen() {
       const diagnosticId = makeDiagnosticId();
       console.warn("OTP verify/profile completion error", { diagnosticId, message: err?.message || String(err || "") });
       setTechnicalError(diagnosticId);
-      setError(t(isRegistrationSaveError(err) ? "auth.registrationSaveFailed" : authErrorKey(err)) || err.message);
+      setError(t(isRegistrationSaveError(err) ? "auth.registrationSaveFailed" : otpVerifyErrorKey(err)) || err.message);
     } finally {
       setSubmitLoading(false);
     }

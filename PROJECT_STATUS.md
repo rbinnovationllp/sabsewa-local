@@ -1023,3 +1023,14 @@ Do not mark MSG91/mobile OTP production-ready until:
 - `MSG91_AUTH_KEY`, `MSG91_OTP_TEMPLATE_ID`, `MSG91_SENDER_ID` and `SUPABASE_SEND_SMS_HOOK_SECRET` are stored only as Supabase Edge Function secrets.
 - A real Indian `+91` number receives an OTP, verifies successfully, creates/restores a Supabase session, saves profile/address/Terms acceptance, rejects an incorrect OTP and respects resend cooldown.
 - Only after that, set `EXPO_PUBLIC_PHONE_AUTH_ENABLED=true`, rebuild `mobile/dist`, confirm new bundle timestamps/hashes, audit for secret leakage and upload the complete fresh build to Hostinger.
+Latest Milestones & Fixes:
+
+2026-08-01 / 2026-08-02 OTP Verification & Web Routing Fixes: Documents the removal of native Alert blockages, implementation of window.location.href web-level route fallbacks, and the resolution of the stuck state after OTP verification on sabsewa.in.
+
+Phone Auth & Provider Strategy: Captures the current status of Supabase Phone Auth, transition preparation for the MSG91 Supabase Hook, and the environment flag safeguards (EXPO_PUBLIC_PHONE_AUTH_ENABLED).
+
+Hostinger Static PWA Export: Documents build validation, .htaccess copying, PWA service worker policies, and deployment checks via npm run export:web:hostinger.
+
+Razorpay Live-Mode Hardening: Documents webhook signature verification (HMAC-SHA256), environment banners, idempotency tables (razorpay_webhook_events), and the updated Rs 5,500 vendor activation wallet policy.
+
+Gemini XPRIZE Alignment: Outlines compliance status across AI backend logging (gemini_agent_logs), multilingual Flash translation, conversational ordering, and Devpost submission checklist items.

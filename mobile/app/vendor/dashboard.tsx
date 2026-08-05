@@ -1,4 +1,4 @@
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from "react-native";
+﻿import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from "react-native";
 import { useUser } from "@/contexts/UserContext";
 import { useAuth } from "@/providers/AuthProvider";
 import { useRouter } from "expo-router";
@@ -65,6 +65,11 @@ export default function VendorDashboard() {
       description: "View product-image quota, warnings and optimized image-storage usage.",
       color: "#475569",
       route: vendorLoaded ? `/vendor/StorageUsage?vendor=${vendor.id}` : "",
+    },    {
+      title: "Payment Information",
+      description: "Upload vendor QR codes, UPI ID and preferred payment methods for direct customer collection.",
+      color: "#166534",
+      route: vendorLoaded ? `/vendor/PaymentInfo?vendor=${vendor.id}` : "",
     },
     {
       title: "Manage Items & Prices",
@@ -355,3 +360,4 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
 });
+

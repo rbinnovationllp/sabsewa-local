@@ -43,6 +43,7 @@ export default function CreditListScreen() {
 
   const [vendorId, setVendorId] = useState<string | null>(vendorParam || null);
   const [entries, setEntries] = useState<LedgerEntry[]>([]);
+  const [repaymentRequests, setRepaymentRequests] = useState<any[]>([]);
   const [accounts, setAccounts] = useState<CreditAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [customerId, setCustomerId] = useState("");
@@ -104,6 +105,7 @@ export default function CreditListScreen() {
       amount: Number(entry.amount),
       balance_after: Number(entry.balance_after || 0),
     })));
+    setRepaymentRequests(json.repayment_requests || []);
   }
 
   async function approveLimit() {
@@ -196,6 +198,26 @@ export default function CreditListScreen() {
     await loadLedger(vendorId);
   }
 
+
+  async function verifyRepayment(requestId: string, approved: boolean) {
+    if (!vendorId) return;
+    const response = await fetch(apiUrl(`/api/settlement/vendor/${vendorId}/repayments/${requestId}/verify`), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        approved,
+        vendor_user_id: user?.id,
+        vendor_note: approved ? "Payment receipt verified by vendor." : "Payment reference rejected by vendor.",
+      }),
+    });
+    const json = await response.json();
+    if (!response.ok || !json.success) {
+      Alert.alert("Repayment review failed", json.error || "Unable to review repayment.");
+      return;
+    }
+    await loadLedger(vendorId);
+  }
+
   if (loading) {
     return (
       <View style={styles.center}>
@@ -265,6 +287,29 @@ export default function CreditListScreen() {
         </TouchableOpacity>
       </View>
 
+
+      <Text style={styles.sectionTitle}>Repayment Requests</Text>
+      {repaymentRequests.filter((request) => request.status === "submitted").length === 0 ? (
+        <Text style={styles.muted}>No customer repayment references awaiting verification.</Text>
+      ) : null}
+      {repaymentRequests.filter((request) => request.status === "submitted").map((request) => (
+        <View key={request.id} style={styles.entryCard}>
+          <Text style={styles.entryType}>Customer marked repayment</Text>
+          <Text>Customer: {request.customer_id}</Text>
+          <Text>Amount: Rs {Number(request.amount || 0).toFixed(2)}</Text>
+          <Text>Method: {request.payment_method}</Text>
+          <Text>Reference: {request.payment_reference || "Not provided"}</Text>
+          {request.customer_note ? <Text style={styles.muted}>{request.customer_note}</Text> : null}
+          <View style={styles.requestActions}>
+            <TouchableOpacity style={styles.saveBtn} onPress={() => verifyRepayment(request.id, true)}>
+              <Text style={styles.saveText}>Confirm Received</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.suspendBtn} onPress={() => verifyRepayment(request.id, false)}>
+              <Text style={styles.saveText}>Reject</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      ))}
       <Text style={styles.sectionTitle}>Customer Balances</Text>
       {balances.length === 0 ? (
         <Text style={styles.muted}>No credit entries yet.</Text>
@@ -353,4 +398,6 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   entryType: { fontWeight: "900", marginBottom: 4 },
+  requestActions: { flexDirection: "row", gap: 8, marginTop: 10 },
 });
+

@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   StyleSheet,
   Alert,
+  Platform,
 } from "react-native";
 import { loadPendingRegistrationDraft, clearPendingRegistrationDraft } from "@/lib/pendingRegistration";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -61,6 +62,17 @@ export default function LoginScreen() {
       "terms",
     ].some((needle) => message.includes(needle));
   }
+
+  // Safe navigation helper for Web and Mobile
+  const navigateTo = (path: string) => {
+    try {
+      router.replace(path as any);
+    } catch (e) {
+      if (Platform.OS === "web") {
+        window.location.href = path;
+      }
+    }
+  };
 
   // 1. SEND OTP
   async function handleSendOTP() {
@@ -178,46 +190,60 @@ export default function LoginScreen() {
         {
           headers: {
             apikey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!,
-            Authorization: `Bearer ${data.session.access_token}`,
+            Authorization: `Bearer ${data.session?.access_token}`,
           },
         }
       );
 
       const profile = await res.json();
-      const role = profile?.[0]?.role;
+      const role = profile?.[0]?.role || mergedMetadata.role;
 
       if (!role) throw new Error(t("auth.userRoleNotFound"));
 
       if (trustDevice && data.session?.user?.id) {
-        const device = await getDeviceMetadata();
-        await fetch(apiUrl("/api/auth/trusted-device"), {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            user_id: data.session.user.id,
-            device_id: device.device_id,
-            device_name: device.device_name,
-            platform: device.platform,
-            app_version: device.app_version,
-          }),
-        });
+        try {
+          const device = await getDeviceMetadata();
+          await fetch(apiUrl("/api/auth/trusted-device"), {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              user_id: data.session.user.id,
+              device_id: device.device_id,
+              device_name: device.device_name,
+              platform: device.platform,
+              app_version: device.app_version,
+            }),
+          });
+        } catch (deviceErr) {
+          console.warn("Device metadata registration skipped", deviceErr);
+        }
       }
 
+      // Direct navigation handling across Web and Native
       if (params.registering === "1" && role === "customer") {
-        Alert.alert("SabSewa Local", t("auth.registrationSuccessCustomer"), [
-          { text: "OK", onPress: () => router.replace("/customer/discover" as any) },
-        ]);
+        if (Platform.OS === "web") {
+          navigateTo("/customer/discover");
+        } else {
+          Alert.alert("SabSewa Local", t("auth.registrationSuccessCustomer"), [
+            { text: "OK", onPress: () => navigateTo("/customer/discover") },
+          ]);
+        }
         return;
       }
+
       if (params.registering === "1" && role === "vendor") {
-        Alert.alert("SabSewa Local", t("auth.registrationSuccessVendor"), [
-          { text: "OK", onPress: () => router.replace("/vendor/dashboard" as any) },
-        ]);
+        if (Platform.OS === "web") {
+          navigateTo("/vendor/dashboard");
+        } else {
+          Alert.alert("SabSewa Local", t("auth.registrationSuccessVendor"), [
+            { text: "OK", onPress: () => navigateTo("/vendor/dashboard") },
+          ]);
+        }
         return;
       }
 
       // Redirect user based on role
-      router.replace(routeUser(role) as any);
+      navigateTo(routeUser(role));
     } catch (err: any) {
       const diagnosticId = makeDiagnosticId();
       console.warn("OTP verify/profile completion error", { diagnosticId, message: err?.message || String(err || "") });

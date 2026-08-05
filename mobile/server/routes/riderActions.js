@@ -1,11 +1,11 @@
 // server/routes/riderActions.js
 import express from "express";
 import { supabase } from "../connection.js";
-import { sendTrackingSms } from "../services/msg91Client.js";
+import { notifyCustomerOrderDispatched } from "../notifications/dispatchNotificationService.js";
 
 const router = express.Router();
 
-/** Helper – get rider by token */
+/** Helper â€“ get rider by token */
 async function getRiderByToken(token) {
   const { data, error } = await supabase
     .from("delivery_boys")
@@ -19,7 +19,7 @@ async function getRiderByToken(token) {
   return data;
 }
 
-/** GET /api/rider/assignments  – rider sees his active deliveries */
+/** GET /api/rider/assignments  â€“ rider sees his active deliveries */
 router.get("/assignments", async (req, res) => {
   try {
     const token = req.header("x-rider-token");
@@ -43,7 +43,7 @@ router.get("/assignments", async (req, res) => {
     if (orderIds.length > 0) {
       const { data: orders } = await supabase
         .from("hyperlocal_orders")
-        .select("id, delivery_address, customer_lat, customer_lng, customer_phone, shop_name")
+        .select("id, delivery_address, customer_address, customer_lat, customer_lng, customer_phone, shop_name, total_amount, payment_method, payment_status, settlement_status")
         .in("id", orderIds);
 
       ordersMap = new Map(orders.map((o) => [o.id, o]));
@@ -92,7 +92,7 @@ router.post("/update-location", async (req, res) => {
   }
 });
 
-/** POST /api/rider/picked – mark picked & send tracking SMS */
+/** POST /api/rider/picked - mark picked and notify customer through FCM/in-app */
 router.post("/picked", async (req, res) => {
   try {
     const token = req.header("x-rider-token");
@@ -105,7 +105,6 @@ router.post("/picked", async (req, res) => {
       return res.status(400).json({ success: false, message: "assignment_id required" });
     }
 
-    // 1) update assignment
     const { data: updated, error } = await supabase
       .from("delivery_assignments")
       .update({
@@ -118,38 +117,26 @@ router.post("/picked", async (req, res) => {
 
     if (error) throw error;
 
-    // 2) update order status
     await supabase
       .from("hyperlocal_orders")
       .update({ status: "out_for_delivery" })
       .eq("id", updated.order_id);
 
-    // 3) fetch order details for SMS
-    const { data: order } = await supabase
-      .from("hyperlocal_orders")
-      .select("customer_phone, shop_name")
-      .eq("id", updated.order_id)
-      .single();
-
-    if (order?.customer_phone) {
-      const publicAppUrl = process.env.PUBLIC_APP_URL || "https://sabsewa.app";
-      const trackLink = `${publicAppUrl}/customer/track?order_id=${updated.order_id}`;
-
-      await sendTrackingSms({
-        phone: order.customer_phone,
-        shopName: order.shop_name || "SabSewa Vendor",
-        trackLink,
-      });
+    let dispatchNotification = null;
+    try {
+      dispatchNotification = await notifyCustomerOrderDispatched(updated.order_id, { source: "rider_picked" });
+    } catch (notificationError) {
+      dispatchNotification = { error: notificationError.message };
     }
 
-    return res.json({ success: true, assignment: updated });
+    return res.json({ success: true, assignment: updated, dispatch_notification: dispatchNotification });
   } catch (err) {
     console.error("picked error:", err);
     return res.status(500).json({ success: false, message: err.message });
   }
 });
 
-/** POST /api/rider/delivered – mark delivered */
+/** POST /api/rider/delivered â€“ mark delivered */
 router.post("/delivered", async (req, res) => {
   try {
     const token = req.header("x-rider-token");
@@ -216,3 +203,7 @@ router.get("/customer-tracking", async (req, res) => {
 });
 
 export default router;
+
+
+
+

@@ -1,7 +1,9 @@
+import { apiUrl, authenticatedApiHeaders } from "@/lib/backend";
+
 export async function apiPost(path: string, payload: any) {
-  const res = await fetch(path, {
+  const res = await fetch(path.startsWith("http") ? path : apiUrl(path), {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: await authenticatedApiHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(payload),
   });
 
@@ -10,4 +12,3 @@ export async function apiPost(path: string, payload: any) {
 
   return json;
 }
-

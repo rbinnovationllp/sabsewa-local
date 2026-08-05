@@ -38,6 +38,10 @@ export async function upsertCreditAccount({
   status = "active",
   vendorUserId,
   notes,
+  customerName,
+  customerMobile,
+  customerAddress,
+  creditNotes,
 }) {
   const existing = await getCreditAccount(vendorId, customerId);
   const nextLimit = Number(creditLimit);
@@ -55,6 +59,11 @@ export async function upsertCreditAccount({
     payment_due_days: Number(paymentDueDays || 7),
     status,
     vendor_notes: notes || null,
+    customer_name: customerName || null,
+    customer_mobile: customerMobile || null,
+    customer_address: customerAddress || null,
+    credit_notes: creditNotes || notes || null,
+    credit_date: todayDate(),
     approved_by_vendor_user_id: vendorUserId || null,
     updated_at: new Date().toISOString(),
   };
@@ -196,6 +205,17 @@ export async function recordCreditPayment({ vendorId, customerId, amount, vendor
       due_date: balanceAfter > 0 ? account.due_date : null,
       status: nextStatus,
       updated_at: new Date().toISOString(),
+      ...(balanceAfter === 0 ? {
+        due_date: null,
+        status: "closed",
+        archived_at: new Date().toISOString(),
+        settled_at: new Date().toISOString(),
+        privacy_redacted_at: new Date().toISOString(),
+        archive_reason: "Credit balance fully paid; customer operational details redacted and accounting transactions retained.",
+        customer_name: null,
+        customer_mobile: null,
+        customer_address: null,
+      } : {}),
     })
     .eq("id", account.id)
     .select()
@@ -211,7 +231,7 @@ export async function recordCreditPayment({ vendorId, customerId, amount, vendor
     balanceAfter,
     vendorUserId,
     notes: notes || "Payment recorded by vendor.",
-    metadata: { recorded_by_vendor: true },
+    metadata: { recorded_by_vendor: true, auto_archived_after_full_payment: balanceAfter === 0 },
   });
 
   return data;
@@ -326,3 +346,5 @@ export async function queueCreditReminder(account, reminderType) {
 
   if (error) throw error;
 }
+
+

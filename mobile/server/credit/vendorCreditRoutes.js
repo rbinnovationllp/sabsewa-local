@@ -34,7 +34,16 @@ router.get("/:vendor_id", async (req, res) => {
 
     if (txError) throw txError;
 
-    return res.json({ success: true, accounts: accounts || [], transactions: transactions || [] });
+    const { data: repaymentRequests, error: repaymentError } = await supabase
+      .from("vendor_credit_repayment_requests")
+      .select("*")
+      .eq("vendor_id", vendorId)
+      .order("submitted_at", { ascending: false })
+      .limit(100);
+
+    if (repaymentError) throw repaymentError;
+
+    return res.json({ success: true, accounts: accounts || [], transactions: transactions || [], repayment_requests: repaymentRequests || [] });
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message });
   }
@@ -50,6 +59,10 @@ router.post("/:vendor_id/account", async (req, res) => {
       status: req.body.status || "active",
       vendorUserId: req.body.vendor_user_id,
       notes: req.body.notes,
+      customerName: req.body.customer_name,
+      customerMobile: req.body.customer_mobile,
+      customerAddress: req.body.customer_address,
+      creditNotes: req.body.credit_notes,
     });
 
     return res.json({ success: true, account });
@@ -66,6 +79,10 @@ router.post("/:vendor_id/payment", async (req, res) => {
       amount: req.body.amount,
       vendorUserId: req.body.vendor_user_id,
       notes: req.body.notes,
+      customerName: req.body.customer_name,
+      customerMobile: req.body.customer_mobile,
+      customerAddress: req.body.customer_address,
+      creditNotes: req.body.credit_notes,
     });
 
     return res.json({ success: true, account });
@@ -191,3 +208,5 @@ router.post("/admin/recovery/credit-accounts", async (req, res) => {
 });
 
 export default router;
+
+

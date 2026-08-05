@@ -1,4 +1,4 @@
-import express from "express";
+﻿import express from "express";
 import { supabase } from "../connection.js";
 
 const router = express.Router();
@@ -60,4 +60,55 @@ router.delete("/web-push-subscriptions", async (req, res) => {
   }
 });
 
+
+router.post("/fcm-tokens", async (req, res) => {
+  try {
+    const { user_id, token, platform = "web", app_role = "customer", user_agent, metadata = {} } = req.body || {};
+    if (!user_id || !token) {
+      return res.status(400).json({ success: false, error: "User id and FCM token are required." });
+    }
+
+    const { data, error } = await supabase
+      .from("device_push_tokens")
+      .upsert(
+        {
+          user_id,
+          provider: "fcm",
+          token,
+          platform,
+          app_role,
+          user_agent: user_agent || null,
+          consent_status: "granted",
+          revoked_at: null,
+          last_seen_at: new Date().toISOString(),
+          metadata,
+        },
+        { onConflict: "token" }
+      )
+      .select()
+      .single();
+
+    if (error) throw error;
+    return res.json({ success: true, token: data });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+router.delete("/fcm-tokens", async (req, res) => {
+  try {
+    const { token, user_id } = req.body || {};
+    if (!token && !user_id) return res.status(400).json({ success: false, error: "Token or user ID is required." });
+
+    let query = supabase.from("device_push_tokens").update({ consent_status: "revoked", revoked_at: new Date().toISOString() });
+    if (token) query = query.eq("token", token);
+    if (user_id) query = query.eq("user_id", user_id);
+    const { error } = await query;
+    if (error) throw error;
+    return res.json({ success: true });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
 export default router;
+

@@ -191,13 +191,14 @@ router.post("/place", async (req, res) => {
       `${terminal.estimated_delivery_min_minutes || 30}-${terminal.estimated_delivery_max_minutes || 60} minutes`;
     const deliveryProviderSnapshot = delivery_provider_type || terminal.delivery_provider_type || "vendor";
 
+    const allowedPaymentMethods = new Set(["prepaid", "cash", "vendor_qr", "bank_transfer", "other_digital", "credit"]);
     if (payment_method === "credit") {
       await assertCreditOrderAllowed({
         vendorId: vendor_id,
         customerId: customer_id,
         orderAmount: total_amount,
       });
-    } else if (payment_method !== "prepaid") {
+    } else if (!allowedPaymentMethods.has(payment_method)) {
       return res.status(400).json({
         success: false,
         message: "Invalid payment method.",
@@ -222,6 +223,7 @@ router.post("/place", async (req, res) => {
           customer_phone,
           payment_method,
           payment_status: payment_method === "credit" ? "credit_due" : "unpaid",
+          settlement_status: payment_method === "credit" ? "credit_pending" : "pending",
           price_quote_required: quoteRequired,
           price_quote_status: quoteRequired ? "pending_vendor_quote" : "not_required",
           requested_delivery_time,
@@ -262,3 +264,5 @@ router.post("/place", async (req, res) => {
 });
 
 export default router;
+
+

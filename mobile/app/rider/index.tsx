@@ -1,4 +1,4 @@
-// app/rider/index.tsx
+﻿// app/rider/index.tsx
 import { useEffect, useState } from "react";
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -43,7 +43,7 @@ export default function RiderHomeScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>Delivery Tasks 🚴‍♂️</Text>
+      <Text style={styles.title}>Delivery Tasks ðŸš´â€â™‚ï¸</Text>
 
       {loading && <Text>Loading...</Text>}
 
@@ -58,7 +58,7 @@ export default function RiderHomeScreen() {
           onPress={() =>
             router.push({
               pathname: "/rider/order",
-              params: { token, assignment_id: a.id },
+              params: { token, assignment_id: a.id, order_id: a.order_id },
             })
           }
         >
@@ -85,5 +85,6 @@ const styles = StyleSheet.create({
   cardTitle: { fontSize: 16, fontWeight: "700", marginBottom: 4 },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
 });
+
 
 

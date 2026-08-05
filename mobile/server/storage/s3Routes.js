@@ -9,6 +9,7 @@ const MB = 1024 * 1024;
 const MAX_VENDOR_QUOTA_BYTES = 2 * 1024 * MB;
 const MAX_ORIGINAL_IMAGE_BYTES = 5 * MB;
 const MAX_PRODUCT_IMAGE_BYTES = 200 * 1024;
+const MAX_PAYMENT_QR_BYTES = 500 * 1024;
 const MAX_IMAGE_DIMENSION = 1200;
 const ALLOWED_PRODUCT_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const ALLOWED_PRODUCT_IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "webp"]);
@@ -51,17 +52,45 @@ async function countCompletedOrders(vendorId) {
 
 async function getVendorStorageUsage(vendorId) {
   const successfulOrders = await countCompletedOrders(vendorId);
-  const quotaBytes = Math.min(quotaForSuccessfulOrders(successfulOrders), MAX_VENDOR_QUOTA_BYTES);
+  const defaultQuotaBytes = Math.min(quotaForSuccessfulOrders(successfulOrders), MAX_VENDOR_QUOTA_BYTES);
 
-  const { data: activeFiles, error: activeError } = await supabase
-    .from("vendor_storage_files")
-    .select("byte_size")
-    .eq("vendor_id", vendorId)
-    .eq("status", "active");
+  const [{ data: activeFiles, error: activeError }, { data: purchases, error: purchaseError }] = await Promise.all([
+    supabase
+      .from("vendor_storage_files")
+      .select("byte_size, purpose")
+      .eq("vendor_id", vendorId)
+      .eq("status", "active"),
+    supabase
+      .from("vendor_storage_purchases")
+      .select("quota_bytes")
+      .eq("vendor_id", vendorId)
+      .eq("payment_status", "paid"),
+  ]);
 
   if (activeError) throw activeError;
+  if (purchaseError && purchaseError.code !== "42P01") throw purchaseError;
 
-  const usedBytes = (activeFiles || []).reduce((sum, file) => sum + Number(file.byte_size || 0), 0);
+  const breakdown = {
+    product_images: 0,
+    pending_credit_orders: 0,
+    business_documents: 0,
+    qr_images: 0,
+    store_assets: 0,
+    other_vendor_assets: 0,
+  };
+
+  for (const file of activeFiles || []) {
+    const size = Number(file.byte_size || 0);
+    if (["product_image", "product_thumbnail"].includes(file.purpose)) breakdown.product_images += size;
+    else if (file.purpose === "payment_qr") breakdown.qr_images += size;
+    else if (["business_document", "kyc_document"].includes(file.purpose)) breakdown.business_documents += size;
+    else if (["store_banner", "store_asset"].includes(file.purpose)) breakdown.store_assets += size;
+    else breakdown.other_vendor_assets += size;
+  }
+
+  const purchasedQuotaBytes = (purchases || []).reduce((sum, purchase) => sum + Number(purchase.quota_bytes || 0), 0);
+  const quotaBytes = defaultQuotaBytes + purchasedQuotaBytes;
+  const usedBytes = Object.values(breakdown).reduce((sum, value) => sum + Number(value || 0), 0);
   const warningLevel = warningForUsage(usedBytes, quotaBytes);
 
   const { data, error } = await supabase
@@ -69,9 +98,12 @@ async function getVendorStorageUsage(vendorId) {
     .upsert({
       vendor_id: vendorId,
       quota_bytes: quotaBytes,
+      default_quota_bytes: defaultQuotaBytes,
+      purchased_quota_bytes: purchasedQuotaBytes,
       used_bytes: usedBytes,
       successful_order_count: successfulOrders,
       warning_level: warningLevel,
+      storage_breakdown: breakdown,
       updated_at: new Date().toISOString(),
     }, { onConflict: "vendor_id" })
     .select()
@@ -732,6 +764,133 @@ router.post("/use-master-product-image", async (req, res) => {
   }
 });
 
+
+router.post("/presign-payment-qr", async (req, res) => {
+  try {
+    const {
+      vendorId,
+      fileName,
+      contentType = "image/jpeg",
+      fileSize,
+      originalFileSize,
+      imageWidth,
+      imageHeight,
+      optimized = false,
+      label = "UPI QR",
+      upiId,
+      uploadedBy,
+    } = req.body;
+
+    if (!vendorId || !fileName) return res.status(400).json({ success: false, error: "Vendor id and QR file name are required." });
+    const normalizedContentType = String(contentType).toLowerCase();
+    const safeExtension = String(fileName).split(".").pop()?.replace(/[^a-zA-Z0-9]/g, "").toLowerCase() || "jpg";
+    const expectedSize = Number(fileSize || 0);
+    const originalSize = Number(originalFileSize || expectedSize || 0);
+    const width = Number(imageWidth || 0);
+    const height = Number(imageHeight || 0);
+
+    if (!ALLOWED_PRODUCT_IMAGE_TYPES.has(normalizedContentType)) return res.status(400).json({ success: false, error: "Only JPEG, PNG and WebP QR images are allowed." });
+    if (!ALLOWED_PRODUCT_IMAGE_EXTENSIONS.has(safeExtension)) return res.status(400).json({ success: false, error: "QR file extension does not match permitted image formats." });
+    if (originalSize > MAX_ORIGINAL_IMAGE_BYTES) return res.status(413).json({ success: false, error: "Original QR image is too large. Maximum original upload size is 5 MB." });
+    if (!expectedSize || expectedSize <= 0) return res.status(400).json({ success: false, error: "QR image size is required before upload." });
+    if (expectedSize > MAX_PAYMENT_QR_BYTES) return res.status(413).json({ success: false, error: "QR image is too large. Compress it below 500 KB before upload." });
+    if (!optimized) return res.status(400).json({ success: false, error: "QR image must be resized and compressed before permanent storage." });
+    if ((width && width > MAX_IMAGE_DIMENSION) || (height && height > MAX_IMAGE_DIMENSION)) return res.status(400).json({ success: false, error: "QR image dimensions are too large. Maximum allowed size is 1200 x 1200 pixels." });
+
+    const usage = await getVendorStorageUsage(vendorId);
+    if (Number(usage.used_bytes) + expectedSize > Number(usage.quota_bytes)) {
+      return res.status(409).json({ success: false, error: "Vendor storage quota reached. Upgrade storage before adding another QR image.", usage });
+    }
+
+    const objectKey = `sabsewa-local/vendor-payment-qr/${vendorId}/${Date.now()}-${crypto.randomUUID()}.${safeExtension}`;
+    const client = getS3Client();
+    const command = new PutObjectCommand({
+      Bucket: process.env.AWS_S3_BUCKET,
+      Key: objectKey,
+      ContentType: normalizedContentType,
+      Metadata: {
+        vendor_id: String(vendorId),
+        storage_purpose: "sabsewa_local_payment_qr",
+        original_byte_size: String(originalSize),
+        optimized_byte_size: String(expectedSize),
+      },
+    });
+    const uploadUrl = await getSignedUrl(client, command, { expiresIn: 300 });
+    const publicBaseUrl = process.env.AWS_S3_PUBLIC_BASE_URL || `https://${process.env.AWS_S3_BUCKET}.s3.${process.env.AWS_REGION}.amazonaws.com`;
+    const publicUrl = `${publicBaseUrl.replace(/\/$/, "")}/${objectKey}`;
+
+    const { data: storageFile, error: storageError } = await supabase
+      .from("vendor_storage_files")
+      .insert({
+        vendor_id: vendorId,
+        object_key: objectKey,
+        public_url: publicUrl,
+        original_file_name: fileName,
+        content_type: normalizedContentType,
+        byte_size: expectedSize,
+        purpose: "payment_qr",
+        status: "pending",
+        metadata: { label, upi_id: upiId || null, uploaded_by: uploadedBy || null },
+      })
+      .select()
+      .single();
+    if (storageError) throw storageError;
+
+    return res.json({ success: true, upload_url: uploadUrl, object_key: objectKey, public_url: publicUrl, storage_file_id: storageFile.id, expires_in_seconds: 300 });
+  } catch (err) {
+    return res.status(err.statusCode || 500).json({ success: false, error: err.message });
+  }
+});
+
+router.post("/confirm-payment-qr", async (req, res) => {
+  try {
+    const { vendorId, storageFileId, objectKey, label = "UPI QR", upiId, uploadedBy, makePrimary = true } = req.body;
+    if (!vendorId || (!storageFileId && !objectKey)) return res.status(400).json({ success: false, error: "Vendor id and QR storage reference are required." });
+
+    let query = supabase
+      .from("vendor_storage_files")
+      .update({ status: "active", confirmed_at: new Date().toISOString() })
+      .eq("vendor_id", vendorId)
+      .eq("purpose", "payment_qr")
+      .select()
+      .single();
+    query = storageFileId ? query.eq("id", storageFileId) : query.eq("object_key", objectKey);
+    const { data: file, error: fileError } = await query;
+    if (fileError) throw fileError;
+
+    if (makePrimary) {
+      await supabase
+        .from("vendor_qr_codes")
+        .update({ is_primary: false, status: "replaced", replaced_at: new Date().toISOString() })
+        .eq("vendor_id", vendorId)
+        .eq("is_primary", true)
+        .eq("status", "active");
+    }
+
+    const { data: qrCode, error: qrError } = await supabase
+      .from("vendor_qr_codes")
+      .insert({
+        vendor_id: vendorId,
+        storage_file_id: file.id,
+        label,
+        upi_id: upiId || null,
+        public_url: file.public_url,
+        object_key: file.object_key,
+        content_type: file.content_type,
+        byte_size: Number(file.byte_size || 0),
+        is_primary: Boolean(makePrimary),
+        uploaded_by: uploadedBy || null,
+      })
+      .select()
+      .single();
+    if (qrError) throw qrError;
+
+    const usage = await getVendorStorageUsage(vendorId);
+    return res.json({ success: true, qr_code: qrCode, usage });
+  } catch (err) {
+    return res.status(err.statusCode || 500).json({ success: false, error: err.message });
+  }
+});
 router.post("/confirm-product-image", async (req, res) => {
   try {
     const { vendorId, storageFileId, objectKey } = req.body;
@@ -801,3 +960,4 @@ router.get("/vendor/:vendor_id/usage", async (req, res) => {
 });
 
 export default router;
+

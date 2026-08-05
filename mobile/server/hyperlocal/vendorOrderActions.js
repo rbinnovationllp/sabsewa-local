@@ -1,6 +1,7 @@
-import express from "express";
+﻿import express from "express";
 import { supabase } from "../connection.js";
 import { writeOrderAuditLog } from "../audit/orderAudit.js";
+import { notifyCustomerOrderDispatched } from "../notifications/dispatchNotificationService.js";
 
 const router = express.Router();
 
@@ -168,7 +169,7 @@ async function verifyVendor(req, res, next) {
     if (order.vendor_id !== vendor_id) {
       return res.status(403).json({
         success: false,
-        message: "Not allowed—Vendor mismatch",
+        message: "Not allowedâ€”Vendor mismatch",
       });
     }
 
@@ -577,6 +578,18 @@ router.post("/status", verifyVendor, async (req, res) => {
   if (error)
     return res.status(500).json({ success: false, error: error.message });
 
+  let dispatchNotification = null;
+  if (new_status === "out_for_delivery") {
+    try {
+      dispatchNotification = await notifyCustomerOrderDispatched(order_id, {
+        actorUserId: actor_user_id || null,
+        source: "vendor_status_out_for_delivery",
+      });
+    } catch (notificationError) {
+      dispatchNotification = { error: notificationError.message };
+    }
+  }
+
   await writeOrderAuditLog({
     orderId: order_id,
     vendorId: req.order.vendor_id,
@@ -584,7 +597,7 @@ router.post("/status", verifyVendor, async (req, res) => {
     action: "vendor_order_status_change",
     fromStatus: req.order.status,
     toStatus: new_status,
-    metadata: {},
+    metadata: { dispatch_notification: dispatchNotification },
     req,
   });
 
@@ -593,7 +606,9 @@ router.post("/status", verifyVendor, async (req, res) => {
     message: `Order marked as ${new_status}`,
     order: data,
     vendor_advance_wallet: null,
+    dispatch_notification: dispatchNotification,
   });
 });
 
 export default router;
+

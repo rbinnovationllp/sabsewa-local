@@ -1,4 +1,4 @@
-import { useRouter } from "expo-router";
+﻿import { useRouter } from "expo-router";
 import React from "react";
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import BrandHeader from "@/components/BrandHeader";
@@ -98,5 +98,7 @@ const styles = StyleSheet.create({
   },
   profileText: { color: "#424242", fontWeight: "800" },
 });
+
+
 
 

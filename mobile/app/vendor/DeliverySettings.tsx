@@ -12,6 +12,7 @@ export default function VendorDeliverySettingsScreen() {
   const [settings, setSettings] = useState({
     free_delivery_min_order: "500",
     delivery_fee_below_min: "30",
+    minimum_delivery_order_value: "0",
     service_radius_meters: "500",
     estimated_delivery_min_minutes: "30",
     estimated_delivery_max_minutes: "60",
@@ -33,6 +34,7 @@ export default function VendorDeliverySettingsScreen() {
       setSettings({
         free_delivery_min_order: String(json.settings.free_delivery_min_order ?? 500),
         delivery_fee_below_min: String(json.settings.delivery_fee_below_min ?? 30),
+        minimum_delivery_order_value: String(json.settings.minimum_delivery_order_value ?? 0),
         service_radius_meters: String(json.settings.service_radius_meters ?? 500),
         estimated_delivery_min_minutes: String(json.settings.estimated_delivery_min_minutes ?? 30),
         estimated_delivery_max_minutes: String(json.settings.estimated_delivery_max_minutes ?? 60),
@@ -85,6 +87,9 @@ export default function VendorDeliverySettingsScreen() {
 
       <Text style={styles.label}>Delivery fee below that value</Text>
       <TextInput style={styles.input} keyboardType="decimal-pad" value={settings.delivery_fee_below_min} onChangeText={(v) => setValue("delivery_fee_below_min", v)} />
+
+      <Text style={styles.label}>Optional minimum order for delivery acceptance</Text>
+      <TextInput style={styles.input} keyboardType="decimal-pad" value={settings.minimum_delivery_order_value} onChangeText={(v) => setValue("minimum_delivery_order_value", v)} />
 
       <Text style={styles.label}>Service radius in metres</Text>
       <TextInput style={styles.input} keyboardType="number-pad" value={settings.service_radius_meters} onChangeText={(v) => setValue("service_radius_meters", v)} />

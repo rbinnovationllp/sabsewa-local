@@ -33,6 +33,7 @@ router.post("/place", async (req, res) => {
       requested_delivery_time = null,
       delivery_charge = null,
       free_delivery_min_order = null,
+      minimum_delivery_order_value = null,
       estimated_delivery_window = null,
       delivery_provider_type = "vendor",
       order_instructions = null,
@@ -79,7 +80,7 @@ router.post("/place", async (req, res) => {
 
     const { data: terminal, error: terminalError } = await supabase
       .from("vendor_terminals")
-      .select("id, vendor_id, status, is_open_today, delivery_available, free_delivery_min_order, delivery_fee_below_min, estimated_delivery_min_minutes, estimated_delivery_max_minutes, delivery_provider_type")
+      .select("id, vendor_id, status, is_open_today, delivery_available, free_delivery_min_order, delivery_fee_below_min, minimum_delivery_order_value, estimated_delivery_min_minutes, estimated_delivery_max_minutes, delivery_provider_type")
       .eq("id", terminal_id)
       .eq("vendor_id", vendor_id)
       .single();
@@ -107,7 +108,7 @@ router.post("/place", async (req, res) => {
     const requestedItemIds = items.map((item) => item.item_id).filter(Boolean);
     const { data: availableItems, error: itemError } = await supabase
       .from("vendor_items")
-      .select("id, item_name, price, price_display_mode, price_unit_label, is_available, available_today, stock_quantity, daily_stock_quantity, stock_status, daily_availability_status, expected_restock_at, master_product_id, product_brand_id, product_variant_id, generic_product_name, brand_name, manufacturer, variant_name, pack_size, pack_unit, mrp, barcode, sku, ean, substitution_policy")
+      .select("id, item_name, price, price_display_mode, price_unit_label, is_available, available_today, stock_quantity, daily_stock_quantity, stock_status, daily_availability_status, expected_restock_at, master_product_id, product_brand_id, product_variant_id, generic_product_name, brand_name, manufacturer, variant_name, pack_size, pack_unit, mrp, mrp_pricing_policy, mrp_discount_percent, barcode, sku, ean, substitution_policy")
       .eq("vendor_id", vendor_id)
       .eq("terminal_id", terminal_id)
       .in("id", requestedItemIds);
@@ -161,6 +162,8 @@ router.post("/place", async (req, res) => {
         pack_size: item.pack_size || null,
         pack_unit: item.pack_unit || null,
         mrp: item.mrp == null ? null : Number(item.mrp),
+        mrp_pricing_policy: item.mrp_pricing_policy || "manual",
+        mrp_discount_percent: item.mrp_discount_percent == null ? 0 : Number(item.mrp_discount_percent),
         barcode: item.barcode || item.ean || item.sku || null,
         master_product_id: item.master_product_id || null,
         product_brand_id: item.product_brand_id || null,
@@ -183,6 +186,13 @@ router.post("/place", async (req, res) => {
     const quoteRequired = verifiedItems.some((item) => item.price_quote_required);
     const total_amount = verifiedItems.reduce((sum, item) => sum + Number(item.line_total || 0), 0);
     const deliveryThresholdSnapshot = Number(free_delivery_min_order ?? terminal.free_delivery_min_order ?? 0);
+    const minimumDeliveryOrderSnapshot = Number(minimum_delivery_order_value ?? terminal.minimum_delivery_order_value ?? 0);
+    if (minimumDeliveryOrderSnapshot > 0 && total_amount < minimumDeliveryOrderSnapshot) {
+      return res.status(409).json({
+        success: false,
+        message: `This vendor accepts delivery orders from Rs ${minimumDeliveryOrderSnapshot.toFixed(2)}. Please add Rs ${(minimumDeliveryOrderSnapshot - total_amount).toFixed(2)} more.`,
+      });
+    }
     const deliveryChargeSnapshot = delivery_charge == null
       ? (total_amount >= deliveryThresholdSnapshot ? 0 : Number(terminal.delivery_fee_below_min || 0))
       : Number(delivery_charge);
@@ -216,7 +226,9 @@ router.post("/place", async (req, res) => {
           items: verifiedItems,
           total_amount,
           delivery_charge: deliveryChargeSnapshot,
+          delivery_charge_original: deliveryChargeSnapshot,
           free_delivery_min_order: deliveryThresholdSnapshot,
+          minimum_delivery_order_value: minimumDeliveryOrderSnapshot,
           estimated_delivery_window: estimatedDeliveryWindowSnapshot,
           delivery_provider_type: deliveryProviderSnapshot,
           customer_address,

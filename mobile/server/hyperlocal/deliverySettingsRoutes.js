@@ -6,11 +6,12 @@ const router = express.Router();
 function validateSettings(body) {
   const freeDeliveryMinOrder = Number(body.free_delivery_min_order ?? 0);
   const deliveryFeeBelowMin = Number(body.delivery_fee_below_min ?? 0);
+  const minimumDeliveryOrderValue = Number(body.minimum_delivery_order_value ?? 0);
   const serviceRadiusMeters = Number(body.service_radius_meters ?? 500);
   const minMinutes = Number(body.estimated_delivery_min_minutes ?? 30);
   const maxMinutes = Number(body.estimated_delivery_max_minutes ?? 60);
 
-  if (freeDeliveryMinOrder < 0 || deliveryFeeBelowMin < 0) {
+  if (freeDeliveryMinOrder < 0 || deliveryFeeBelowMin < 0 || minimumDeliveryOrderValue < 0) {
     throw new Error("Delivery amounts cannot be negative.");
   }
   if (serviceRadiusMeters < 100 || serviceRadiusMeters > 1000) {
@@ -23,6 +24,7 @@ function validateSettings(body) {
   return {
     free_delivery_min_order: freeDeliveryMinOrder,
     delivery_fee_below_min: deliveryFeeBelowMin,
+    minimum_delivery_order_value: minimumDeliveryOrderValue,
     service_radius_meters: serviceRadiusMeters,
     estimated_delivery_min_minutes: minMinutes,
     estimated_delivery_max_minutes: maxMinutes,
@@ -36,7 +38,7 @@ function validateSettings(body) {
 router.get("/terminal/:terminalId", async (req, res) => {
   const { data, error } = await supabase
     .from("vendor_terminals")
-    .select("id, vendor_id, free_delivery_min_order, delivery_fee_below_min, service_radius_meters, estimated_delivery_min_minutes, estimated_delivery_max_minutes, delivery_available, pickup_available, delivery_provider_type")
+    .select("id, vendor_id, free_delivery_min_order, delivery_fee_below_min, minimum_delivery_order_value, service_radius_meters, estimated_delivery_min_minutes, estimated_delivery_max_minutes, delivery_available, pickup_available, delivery_provider_type")
     .eq("id", req.params.terminalId)
     .maybeSingle();
 
@@ -51,7 +53,7 @@ router.post("/terminal/:terminalId", async (req, res) => {
 
     const { data: before, error: loadError } = await supabase
       .from("vendor_terminals")
-      .select("id, vendor_id, free_delivery_min_order, delivery_fee_below_min, service_radius_meters, estimated_delivery_min_minutes, estimated_delivery_max_minutes, delivery_available, pickup_available, delivery_provider_type")
+      .select("id, vendor_id, free_delivery_min_order, delivery_fee_below_min, minimum_delivery_order_value, service_radius_meters, estimated_delivery_min_minutes, estimated_delivery_max_minutes, delivery_available, pickup_available, delivery_provider_type")
       .eq("id", req.params.terminalId)
       .maybeSingle();
 

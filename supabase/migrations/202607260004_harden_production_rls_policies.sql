@@ -1,4 +1,4 @@
-﻿-- SabSewa Local production RLS hardening.
+-- SabSewa Local production RLS hardening.
 -- Apply after all earlier SabSewa Local migrations.
 -- Sensitive writes remain backend-service-role only unless explicitly allowed here.
 

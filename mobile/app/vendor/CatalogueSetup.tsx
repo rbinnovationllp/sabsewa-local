@@ -7,6 +7,7 @@ import { apiUrl } from "@/lib/backend";
 import { optimizeProductImage, validatePickedProductImage } from "@/lib/imageUploadPolicy";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/AuthProvider";
+import { useLanguage } from "@/providers/LanguageProvider";
 
 const CATEGORIES = [
   ["", "All"],
@@ -17,8 +18,13 @@ const CATEGORIES = [
   ["bakery", "Bakery"],
   ["beverages", "Beverages"],
   ["household", "Household"],
+  ["household-essentials", "Household Essentials"],
   ["personal-care", "Personal care"],
   ["packaged-food", "Packaged food"],
+  ["pharmacy", "Pharmacy"],
+  ["stationery", "Stationery"],
+  ["hardware", "Hardware"],
+  ["tiffin", "Tiffin"],
   ["other", "Other"],
 ];
 
@@ -26,6 +32,16 @@ const PRICE_MODES = [
   ["show_price", "Show price"],
   ["hide_price", "Ask vendor"],
   ["market_price", "Market price"],
+];
+
+const MRP_POLICIES = [
+  ["manual", "Manual price"],
+  ["mrp", "Sell at MRP"],
+  ["mrp_discount_5", "MRP - 5%"],
+  ["mrp_discount_10", "MRP - 10%"],
+  ["mrp_discount_15", "MRP - 15%"],
+  ["mrp_discount_20", "MRP - 20%"],
+  ["mrp_discount_custom", "Custom discount"],
 ];
 
 const RIGHTS_TEXT =
@@ -44,11 +60,14 @@ export default function CatalogueSetupScreen() {
   const router = useRouter();
   const params: any = useLocalSearchParams();
   const { user } = useAuth();
+  const { language } = useLanguage();
 
   const [vendorId, setVendorId] = useState<string | null>((params.vendor as string) || null);
   const [terminalId, setTerminalId] = useState<string | null>((params.terminal as string) || null);
   const [terminals, setTerminals] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
+  const [suggestions, setSuggestions] = useState<any[]>([]);
+  const [suggestionSource, setSuggestionSource] = useState("");
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [vendorItems, setVendorItems] = useState<any[]>([]);
   const [search, setSearch] = useState("");
@@ -60,6 +79,8 @@ export default function CatalogueSetupScreen() {
   const [availableToday, setAvailableToday] = useState(true);
   const [defaultPriceMode, setDefaultPriceMode] = useState<"show_price" | "hide_price" | "market_price">("hide_price");
   const [defaultPrice, setDefaultPrice] = useState("");
+  const [defaultMrpPolicy, setDefaultMrpPolicy] = useState("manual");
+  const [defaultMrpDiscount, setDefaultMrpDiscount] = useState("5");
   const [defaultUnit, setDefaultUnit] = useState("");
   const [defaultStock, setDefaultStock] = useState("");
   const [defaultMaxQty, setDefaultMaxQty] = useState("");
@@ -94,6 +115,13 @@ export default function CatalogueSetupScreen() {
   }, [search, category, brandFilter]);
 
   useEffect(() => {
+    const handle = setTimeout(() => {
+      loadSmartSuggestions();
+    }, 450);
+    return () => clearTimeout(handle);
+  }, [search, category, language, vendorId, user?.id]);
+
+  useEffect(() => {
     if (vendorId) loadVendorItems(vendorId);
   }, [vendorId, terminalId]);
 
@@ -124,6 +152,7 @@ export default function CatalogueSetupScreen() {
     if (search.trim()) query.set("search", search.trim());
     if (category) query.set("category", category);
     if (brandFilter.trim()) query.set("brand", brandFilter.trim());
+    if (language) query.set("language", language);
 
     try {
       const response = await fetch(apiUrl(`/api/catalog/setup/master-products?${query.toString()}`));
@@ -132,6 +161,32 @@ export default function CatalogueSetupScreen() {
       setProducts(json.products || []);
     } catch (error) {
       Alert.alert("Catalogue", error instanceof Error ? error.message : "Unable to load master products.");
+    }
+  }
+
+  async function loadSmartSuggestions() {
+    if (!search.trim() || search.trim().length < 2) {
+      setSuggestions([]);
+      setSuggestionSource("");
+      return;
+    }
+    const query = new URLSearchParams({
+      search: search.trim(),
+      language: String(language || "en"),
+    });
+    if (category) query.set("category", category);
+    if (vendorId) query.set("vendor_id", vendorId);
+    if (user?.id) query.set("user_id", user.id);
+    try {
+      const response = await fetch(apiUrl(`/api/catalog/setup/suggestions?${query.toString()}`));
+      const json = await response.json();
+      if (response.ok && json.success) {
+        setSuggestions(json.suggestions || []);
+        setSuggestionSource(json.source || "");
+      }
+    } catch {
+      setSuggestions([]);
+      setSuggestionSource("");
     }
   }
 
@@ -158,13 +213,22 @@ export default function CatalogueSetupScreen() {
       Alert.alert("Select products", "Choose one or more catalogue products before adding them to your store.");
       return;
     }
-    if (defaultPriceMode === "show_price" && !defaultPrice.trim()) {
+    if (defaultMrpPolicy === "manual" && defaultPriceMode === "show_price" && !defaultPrice.trim()) {
       Alert.alert("Price needed", "Enter a selling price or choose Ask vendor / Market price.");
       return;
     }
 
     setSaving(true);
     try {
+      const discountFromPolicy =
+        defaultMrpPolicy === "mrp_discount_custom"
+          ? defaultMrpDiscount
+          : defaultMrpPolicy.replace("mrp_discount_", "");
+      const mrpPricingPolicy = defaultMrpPolicy === "mrp"
+        ? "mrp"
+        : defaultMrpPolicy.startsWith("mrp_discount")
+          ? "mrp_discount"
+          : "manual";
       const response = await fetch(apiUrl("/api/catalog/setup/add-master-products"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -177,6 +241,8 @@ export default function CatalogueSetupScreen() {
             available_today: availableToday,
             price_display_mode: defaultPriceMode,
             price: defaultPrice,
+            mrp_pricing_policy: mrpPricingPolicy,
+            mrp_discount_percent: mrpPricingPolicy === "mrp_discount" ? discountFromPolicy : 0,
             pack_unit: defaultUnit,
             price_unit_label: defaultUnit,
             stock_quantity: defaultStock,
@@ -363,8 +429,20 @@ export default function CatalogueSetupScreen() {
             </TouchableOpacity>
           ))}
         </View>
+        <Text style={styles.label}>Branded product pricing policy</Text>
+        <Text style={styles.muted}>For products with MRP in the master catalogue, the selling price can update automatically when MRP changes.</Text>
+        <View style={styles.wrap}>
+          {MRP_POLICIES.map(([value, label]) => (
+            <TouchableOpacity key={value} style={[styles.chip, defaultMrpPolicy === value && styles.chipActive]} onPress={() => setDefaultMrpPolicy(value)}>
+              <Text style={[styles.chipText, defaultMrpPolicy === value && styles.chipTextActive]}>{label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        {defaultMrpPolicy === "mrp_discount_custom" ? (
+          <TextInput style={styles.input} placeholder="Custom MRP discount %" keyboardType="numeric" value={defaultMrpDiscount} onChangeText={setDefaultMrpDiscount} />
+        ) : null}
         <View style={styles.row}>
-          <TextInput style={[styles.input, styles.flex]} placeholder="Price, optional" keyboardType="numeric" value={defaultPrice} onChangeText={setDefaultPrice} />
+          <TextInput style={[styles.input, styles.flex]} placeholder={defaultMrpPolicy === "manual" ? "Price, optional" : "Manual fallback price"} keyboardType="numeric" value={defaultPrice} onChangeText={setDefaultPrice} />
           <TextInput style={[styles.input, styles.flex]} placeholder="Unit, e.g. kg/pack" value={defaultUnit} onChangeText={setDefaultUnit} />
         </View>
         <View style={styles.row}>
@@ -375,6 +453,25 @@ export default function CatalogueSetupScreen() {
         <TouchableOpacity style={[styles.primaryBtn, saving && styles.disabled]} onPress={addSelectedProducts} disabled={saving}>
           <Text style={styles.primaryText}>{saving ? "Saving..." : `Add selected items to my store (${selectedCount})`}</Text>
         </TouchableOpacity>
+
+        {suggestions.length > 0 ? (
+          <View style={styles.suggestionBox}>
+            <Text style={styles.suggestionTitle}>
+              {suggestionSource === "gemini_catalogue_assist" ? "Gemini-assisted matches" : "Suggested catalogue matches"}
+            </Text>
+            <Text style={styles.muted}>Tap a suggestion to select it for your store.</Text>
+            {suggestions.map((product) => {
+              const isSelected = Boolean(selected[product.id]);
+              return (
+                <TouchableOpacity key={product.id} style={[styles.suggestionRow, isSelected && styles.selectedCard]} onPress={() => toggleProduct(product.id)}>
+                  <Text style={styles.productTitle}>{productName(product)}</Text>
+                  <Text style={styles.muted}>{product.suggestion_reason || "Matched from product name, synonym or local name."}</Text>
+                  {product.local_name_hint ? <Text style={styles.muted}>Local name: {product.local_name_hint}</Text> : null}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        ) : null}
 
         {products.map((product) => {
           const isSelected = Boolean(selected[product.id]);
@@ -389,8 +486,11 @@ export default function CatalogueSetupScreen() {
               <View style={{ flex: 1 }}>
                 <Text style={styles.productTitle}>{productName(product)}</Text>
                 <Text style={styles.muted}>{product.category} / {product.subcategory}</Text>
+                {product.product_description ? <Text style={styles.muted}>{product.product_description}</Text> : null}
                 <Text style={styles.muted}>{localNames(product) || "English/Hindi/Kannada names can be added during moderation."}</Text>
                 <Text style={styles.muted}>Units: {(product.common_units || []).join(", ") || "piece"}</Text>
+                {product.mrp ? <Text style={styles.mrpText}>MRP: Rs {Number(product.mrp).toFixed(2)}</Text> : null}
+                {product.is_branded ? <Text style={styles.muted}>Branded item: supports MRP-based pricing policy</Text> : null}
               </View>
             </TouchableOpacity>
           );
@@ -473,7 +573,7 @@ export default function CatalogueSetupScreen() {
           <TouchableOpacity key={item.id} style={styles.myItem} onPress={() => router.push(`/vendor/EditItem?id=${item.id}&vendor=${vendorId}` as any)}>
             <Text style={styles.productTitle}>{[item.generic_product_name || item.item_name, item.brand_name, item.variant_name].filter(Boolean).join(" - ")}</Text>
             <Text style={styles.muted}>
-              {item.available_today === false ? "Not available today" : "Available today"} | {item.price_display_mode === "show_price" ? `Rs ${item.price}` : "Price hidden/quote required"} | {item.listing_review_status || "approved"}
+              {item.available_today === false ? "Not available today" : "Available today"} | {item.price_display_mode === "show_price" ? `Rs ${item.price}` : "Price hidden/quote required"} | {item.mrp_pricing_policy && item.mrp_pricing_policy !== "manual" ? `${item.mrp_pricing_policy} ${item.mrp_discount_percent || 0}%` : "manual price"} | {item.listing_review_status || "approved"}
             </Text>
           </TouchableOpacity>
         ))}
@@ -506,12 +606,16 @@ const styles = StyleSheet.create({
   secondaryText: { color: "#1166ff", textAlign: "center", fontWeight: "900" },
   productCard: { flexDirection: "row", gap: 10, borderWidth: 1, borderColor: "#e5e7eb", borderRadius: 8, padding: 10, marginTop: 10 },
   selectedCard: { borderColor: "#1166ff", backgroundColor: "#eff6ff" },
+  suggestionBox: { borderWidth: 1, borderColor: "#bbf7d0", backgroundColor: "#f0fdf4", borderRadius: 8, padding: 10, marginTop: 12 },
+  suggestionTitle: { color: "#166534", fontWeight: "900", marginBottom: 4 },
+  suggestionRow: { borderTopWidth: 1, borderTopColor: "#bbf7d0", paddingTop: 8, marginTop: 8 },
   checkbox: { width: 26, height: 26, borderRadius: 7, borderWidth: 1, borderColor: "#94a3b8", alignItems: "center", justifyContent: "center" },
   checkboxActive: { backgroundColor: "#1166ff", borderColor: "#1166ff" },
   checkText: { color: "#fff", fontWeight: "900" },
   placeholder: { width: 64, height: 64, borderRadius: 8, borderWidth: 1, borderColor: "#d1d5db", backgroundColor: "#f8fafc", alignItems: "center", justifyContent: "center" },
   placeholderText: { color: "#64748b", fontSize: 10, textAlign: "center", fontWeight: "800" },
   productTitle: { fontSize: 15, fontWeight: "900", color: "#111827" },
+  mrpText: { color: "#0f766e", fontWeight: "900", fontSize: 12, marginTop: 2 },
   muted: { color: "#6b7280", fontSize: 12, lineHeight: 18 },
   duplicateBox: { borderWidth: 1, borderColor: "#fed7aa", backgroundColor: "#fff7ed", borderRadius: 8, padding: 10, marginBottom: 10 },
   duplicateTitle: { color: "#9a3412", fontWeight: "900", marginBottom: 6 },

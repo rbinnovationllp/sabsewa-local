@@ -31,6 +31,7 @@ import deviceAuthRouter from "./auth/deviceRoutes.js";
 import vendorDirectoryRouter from "./company/vendorDirectoryRoutes.js";
 import { getPaymentReadiness } from "./payments/paymentEnvironment.js";
 import razorpayWebhookRouter from "./payments/razorpayWebhookRoutes.js";
+import supabaseWebhookRouter from "./webhooks/supabaseWebhookRoutes.js";
 import webPushRouter from "./notifications/webPushRoutes.js";
 import settlementRouter from "./settlement/settlementRoutes.js";
 import { createRateLimiter, securityHeaders } from "./security/apiSecurity.js";
@@ -43,6 +44,8 @@ const app = express();
 app.use(securityHeaders);
 app.use(cors({ origin: process.env.CORS_ORIGIN?.split(",") || true }));
 app.use("/api/payments", razorpayWebhookRouter);
+app.use("/api/webhooks", razorpayWebhookRouter);
+app.use("/api/webhooks", supabaseWebhookRouter);
 app.use(createRateLimiter({ windowMs: 60 * 1000, max: Number(process.env.API_RATE_LIMIT_PER_MINUTE || 180), keyPrefix: "sabsewa" }));
 app.use(express.json({ limit: "2mb" }));
 

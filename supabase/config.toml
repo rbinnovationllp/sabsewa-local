@@ -28,3 +28,15 @@ enabled = true
 
 [edge_runtime]
 enabled = true
+
+[functions.razorpay-create-platform-order]
+verify_jwt = false
+
+[functions.razorpay-verify-platform-payment]
+verify_jwt = false
+
+[functions.razorpay-webhook]
+verify_jwt = false
+
+[functions.razorpay-create-platform-refund]
+verify_jwt = false

@@ -1,5 +1,8 @@
 import express from "express";
 import { supabase } from "../connection.js";
+import { genAI, geminiModel } from "../gemini/geminiClient.js";
+import { extractJsonObject } from "../gemini/json.js";
+import { writeGeminiAuditLog } from "../gemini/auditLog.js";
 
 const router = express.Router();
 
@@ -11,8 +14,15 @@ const ALLOWED_CATEGORIES = new Set([
   "bakery",
   "beverages",
   "household",
+  "household-essentials",
   "personal-care",
   "packaged-food",
+  "pharmacy",
+  "stationery",
+  "hardware",
+  "medical",
+  "tiffin",
+  "restaurant",
   "other",
 ]);
 
@@ -32,6 +42,61 @@ function numberOrNull(value) {
   if (value === null || value === undefined || value === "") return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function clampDiscount(value) {
+  const parsed = numberOrNull(value);
+  if (parsed === null) return 0;
+  return Math.min(Math.max(parsed, 0), 95);
+}
+
+function mrpPrice(sourceMrp, policy, discountPercent) {
+  const mrp = numberOrNull(sourceMrp);
+  if (!mrp || mrp <= 0) return null;
+  if (policy === "mrp") return Number(mrp.toFixed(2));
+  if (policy === "mrp_discount") return Number((mrp * (1 - clampDiscount(discountPercent) / 100)).toFixed(2));
+  return null;
+}
+
+function productHaystack(product) {
+  return normalize([
+    product.standard_title,
+    product.category,
+    product.subcategory,
+    product.brand_name,
+    product.pack_size,
+    ...(product.common_units || []),
+    ...(product.search_keywords || []),
+    ...(product.alternative_spellings || []),
+    ...Object.values(product.local_names || {}).flat(),
+  ].join(" "));
+}
+
+function scoreProduct(product, terms) {
+  const haystack = productHaystack(product);
+  return terms.reduce((total, term) => total + (haystack.includes(term) ? 1 : 0), 0);
+}
+
+function publicProduct(product, extra = {}) {
+  return {
+    id: product.id,
+    standard_title: product.standard_title,
+    category: product.category,
+    subcategory: product.subcategory,
+    product_description: product.product_description || null,
+    generic_image_url: product.generic_image_url || null,
+    mrp: product.mrp == null ? null : Number(product.mrp),
+    is_branded: Boolean(product.is_branded || product.brand_name || product.mrp),
+    local_names: product.local_names || {},
+    common_units: product.common_units || [],
+    brand_name: product.brand_name || null,
+    pack_size: product.pack_size || null,
+    search_keywords: product.search_keywords || [],
+    alternative_spellings: product.alternative_spellings || [],
+    image_status: product.image_status || "image_pending",
+    is_active: product.is_active !== false,
+    ...extra,
+  };
 }
 
 async function validateVendorTerminal(vendorId, terminalId) {
@@ -66,10 +131,11 @@ router.get("/setup/master-products", async (req, res) => {
     const search = clean(req.query.search);
     const category = clean(req.query.category);
     const brand = clean(req.query.brand);
+    const language = clean(req.query.language);
 
     let query = supabase
       .from("master_product_catalog")
-      .select("id, standard_title, category, subcategory, local_names, common_units, brand_name, pack_size, search_keywords, alternative_spellings, image_status, is_active")
+      .select("id, standard_title, category, subcategory, product_description, generic_image_url, mrp, is_branded, local_names, common_units, brand_name, pack_size, search_keywords, alternative_spellings, image_status, is_active")
       .eq("is_active", true)
       .order("category")
       .order("subcategory")
@@ -78,17 +144,120 @@ router.get("/setup/master-products", async (req, res) => {
 
     if (category) query = query.eq("category", category);
     if (brand) query = query.ilike("brand_name", `%${brand}%`);
-    if (search) {
-      const escaped = search.replace(/[,%]/g, " ");
-      query = query.or(
-        `standard_title.ilike.%${escaped}%,subcategory.ilike.%${escaped}%,brand_name.ilike.%${escaped}%`
-      );
-    }
-
     const { data, error } = await query;
     if (error) throw error;
 
-    return res.json({ success: true, products: data || [] });
+    const terms = normalize(search).split(" ").filter((term) => term.length >= 2);
+    const products = search && terms.length
+      ? (data || [])
+          .map((product) => publicProduct(product, { match_score: scoreProduct(product, terms), language }))
+          .filter((product) => product.match_score > 0 || normalize(product.standard_title).includes(normalize(search)))
+          .sort((a, b) => b.match_score - a.match_score || a.standard_title.localeCompare(b.standard_title))
+      : (data || []).map((product) => publicProduct(product, { language }));
+
+    return res.json({ success: true, products });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+router.get("/setup/suggestions", async (req, res) => {
+  try {
+    const search = clean(req.query.search);
+    const category = clean(req.query.category);
+    const language = clean(req.query.language || "en");
+    const vendorId = clean(req.query.vendor_id);
+    const userId = clean(req.query.user_id);
+
+    if (search.length < 2) {
+      return res.json({ success: true, suggestions: [], source: "empty" });
+    }
+
+    const terms = normalize(search).split(" ").filter((term) => term.length >= 2).slice(0, 8);
+    let query = supabase
+      .from("master_product_catalog")
+      .select("id, standard_title, category, subcategory, product_description, generic_image_url, mrp, is_branded, local_names, common_units, brand_name, pack_size, search_keywords, alternative_spellings, image_status, is_active")
+      .eq("is_active", true)
+      .limit(300);
+
+    if (category) query = query.eq("category", category);
+    const { data, error } = await query;
+    if (error) throw error;
+
+    const deterministic = (data || [])
+      .map((product) => publicProduct(product, {
+        match_score: scoreProduct(product, terms),
+        suggestion_reason: "Matched product name, category, local name or synonym.",
+      }))
+      .filter((product) => product.match_score > 0)
+      .sort((a, b) => b.match_score - a.match_score || a.standard_title.localeCompare(b.standard_title))
+      .slice(0, 12);
+
+    if (!process.env.GEMINI_API_KEY || deterministic.length === 0) {
+      return res.json({ success: true, suggestions: deterministic, source: "catalogue_match" });
+    }
+
+    const prompt = `You are helping an Indian local-shop vendor search a master product catalogue.
+Return strict JSON only:
+{"suggestions":[{"id":"catalogue uuid","reason":"short reason","local_name_hint":"short local synonym if useful"}]}
+Rules:
+- Select only ids from the candidate list.
+- Prefer common Indian grocery, dairy, pharmacy, stationery, hardware, household, fruit and vegetable names.
+- Support spelling mistakes, Hindi/Hinglish/Kannada/local names, synonyms and common variants.
+- Do not invent unavailable product ids.
+Vendor search: ${search}
+Preferred language: ${language}
+Candidates: ${JSON.stringify(deterministic.slice(0, 20).map((product) => ({
+  id: product.id,
+  title: product.standard_title,
+  category: product.category,
+  subcategory: product.subcategory,
+  local_names: product.local_names,
+  keywords: product.search_keywords,
+  spellings: product.alternative_spellings,
+})))}`;
+
+    let geminiSuggestions = [];
+    try {
+      const response = await genAI.models.generateContent({
+        model: geminiModel,
+        contents: prompt,
+        config: { temperature: 0.2, maxOutputTokens: 512 },
+      });
+      const parsed = extractJsonObject(response.text || "{}");
+      const byId = new Map(deterministic.map((product) => [product.id, product]));
+      geminiSuggestions = (parsed.suggestions || [])
+        .map((suggestion) => {
+          const product = byId.get(String(suggestion.id));
+          if (!product) return null;
+          return {
+            ...product,
+            suggestion_reason: clean(suggestion.reason) || product.suggestion_reason,
+            local_name_hint: clean(suggestion.local_name_hint) || null,
+            gemini_ranked: true,
+          };
+        })
+        .filter(Boolean)
+        .slice(0, 8);
+
+      await writeGeminiAuditLog({
+        agentType: "catalogue_product_suggestion",
+        inputType: "text",
+        inputSummary: search.slice(0, 200),
+        model: geminiModel,
+        responseJson: { suggestion_count: geminiSuggestions.length, language },
+        userId,
+        vendorId,
+      });
+    } catch (error) {
+      console.warn("Gemini catalogue suggestions fallback", error?.message || error);
+    }
+
+    return res.json({
+      success: true,
+      suggestions: geminiSuggestions.length ? geminiSuggestions : deterministic.slice(0, 8),
+      source: geminiSuggestions.length ? "gemini_catalogue_assist" : "catalogue_match",
+    });
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message });
   }
@@ -105,7 +274,7 @@ router.get("/setup/vendor-items", async (req, res) => {
 
     let query = supabase
       .from("vendor_items")
-      .select("id, vendor_id, terminal_id, master_product_id, product_variant_id, item_name, generic_product_name, brand_name, variant_name, pack_size, pack_unit, price, price_display_mode, available_today, is_available, stock_status, stock_quantity, daily_availability_status, listing_review_status, image_reference_type, item_pic")
+      .select("id, vendor_id, terminal_id, master_product_id, product_variant_id, item_name, generic_product_name, brand_name, variant_name, pack_size, pack_unit, mrp, mrp_pricing_policy, mrp_discount_percent, master_mrp_snapshot, price, price_display_mode, available_today, is_available, stock_status, stock_quantity, daily_availability_status, listing_review_status, image_reference_type, item_pic")
       .eq("vendor_id", vendorId)
       .order("created_at", { ascending: false })
       .limit(500);
@@ -140,7 +309,7 @@ router.post("/setup/add-master-products", async (req, res) => {
     const uniqueIds = [...new Set(productIds.map(clean).filter(Boolean))].slice(0, 100);
     const { data: products, error: productError } = await supabase
       .from("master_product_catalog")
-      .select("id, standard_title, category, subcategory, brand_name, pack_size, common_units, image_status")
+      .select("id, standard_title, category, subcategory, brand_name, pack_size, common_units, image_status, mrp, is_branded, generic_image_url")
       .in("id", uniqueIds)
       .eq("is_active", true);
 
@@ -164,36 +333,56 @@ router.post("/setup/add-master-products", async (req, res) => {
     const priceMode = ["show_price", "hide_price", "market_price"].includes(defaults.price_display_mode)
       ? defaults.price_display_mode
       : "hide_price";
+    const requestedMrpPolicy = ["manual", "mrp", "mrp_discount"].includes(defaults.mrp_pricing_policy)
+      ? defaults.mrp_pricing_policy
+      : "manual";
+    const requestedDiscount = clampDiscount(defaults.mrp_discount_percent);
     const stockStatus = defaults.available_today === false ? "temporarily_unavailable" : "in_stock";
 
     const rows = products
       .filter((product) => !existingProductIds.has(product.id))
-      .map((product) => ({
-        vendor_id: vendorId,
-        terminal_id: terminalId || null,
-        master_product_id: product.id,
-        item_name: product.standard_title,
-        generic_product_name: product.standard_title,
-        brand_name: clean(defaults.brand_name) || product.brand_name || null,
-        variant_name: clean(defaults.variant_name) || null,
-        pack_size: numberOrNull(defaults.pack_size) || numberOrNull(product.pack_size),
-        pack_unit: clean(defaults.pack_unit) || product.common_units?.[0] || null,
-        price: numberOrNull(defaults.price) || 0,
-        price_display_mode: priceMode,
-        price_unit_label: clean(defaults.price_unit_label) || clean(defaults.pack_unit) || product.common_units?.[0] || null,
-        stock_quantity: numberOrNull(defaults.stock_quantity),
-        daily_stock_quantity: numberOrNull(defaults.stock_quantity),
-        max_order_quantity: numberOrNull(defaults.max_order_quantity),
-        available_today: defaults.available_today !== false,
-        is_available: defaults.available_today !== false,
-        daily_availability_status: defaults.available_today === false ? "temporarily_unavailable" : "available",
-        stock_status: stockStatus,
-        listing_review_status: "approved",
-        image_reference_type: product.image_status === "approved_shared_image" ? "master_shared" : "image_pending",
-        price_updated_at: new Date().toISOString(),
-        price_updated_by: actorUserId || null,
-        daily_availability_updated_at: new Date().toISOString(),
-      }));
+      .map((product) => {
+        const policyAllowed = requestedMrpPolicy !== "manual" && (product.is_branded || product.brand_name || product.mrp);
+        const mrpPolicy = policyAllowed ? requestedMrpPolicy : "manual";
+        const autoPrice = mrpPrice(product.mrp, mrpPolicy, requestedDiscount);
+        const manualPrice = numberOrNull(defaults.price) || 0;
+        return {
+          vendor_id: vendorId,
+          terminal_id: terminalId || null,
+          master_product_id: product.id,
+          item_name: product.standard_title,
+          generic_product_name: product.standard_title,
+          brand_name: clean(defaults.brand_name) || product.brand_name || null,
+          variant_name: clean(defaults.variant_name) || null,
+          pack_size: numberOrNull(defaults.pack_size) || numberOrNull(product.pack_size),
+          pack_unit: clean(defaults.pack_unit) || product.common_units?.[0] || null,
+          mrp: numberOrNull(product.mrp),
+          mrp_pricing_policy: mrpPolicy,
+          mrp_discount_percent: mrpPolicy === "mrp_discount" ? requestedDiscount : 0,
+          master_mrp_snapshot: numberOrNull(product.mrp),
+          price: autoPrice ?? manualPrice,
+          price_display_mode: autoPrice !== null ? "show_price" : priceMode,
+          price_unit_label: clean(defaults.price_unit_label) || clean(defaults.pack_unit) || product.common_units?.[0] || null,
+          stock_quantity: numberOrNull(defaults.stock_quantity),
+          daily_stock_quantity: numberOrNull(defaults.stock_quantity),
+          max_order_quantity: numberOrNull(defaults.max_order_quantity),
+          available_today: defaults.available_today !== false,
+          is_available: defaults.available_today !== false,
+          daily_availability_status: defaults.available_today === false ? "temporarily_unavailable" : "available",
+          stock_status: stockStatus,
+          listing_review_status: "approved",
+          image_reference_type: product.generic_image_url || product.image_status === "approved_shared_image" ? "master_shared" : "image_pending",
+          item_pic: product.generic_image_url || null,
+          discount_label: mrpPolicy === "mrp"
+            ? "Selling at MRP"
+            : mrpPolicy === "mrp_discount"
+              ? `${requestedDiscount}% off MRP`
+              : null,
+          price_updated_at: new Date().toISOString(),
+          price_updated_by: actorUserId || null,
+          daily_availability_updated_at: new Date().toISOString(),
+        };
+      });
 
     if (rows.length === 0) {
       return res.json({ success: true, added_count: 0, skipped_count: products.length, items: [] });

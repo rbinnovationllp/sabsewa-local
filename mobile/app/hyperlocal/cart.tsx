@@ -68,12 +68,14 @@ export default function SabSewaLocalCartScreen() {
   );
   const hasQuoteItems = lines.some((line) => line.price_quote_required);
   const freeDeliveryMin = Number(deliverySettings?.free_delivery_min_order ?? 0);
+  const minimumDeliveryOrderValue = Number(deliverySettings?.minimum_delivery_order_value ?? 0);
   const deliveryFee = deliverySettings?.delivery_available === false
     ? 0
     : total >= freeDeliveryMin
       ? 0
       : Number(deliverySettings?.delivery_fee_below_min ?? 0);
   const amountForFreeDelivery = Math.max(0, freeDeliveryMin - total);
+  const amountForMinimumDelivery = Math.max(0, minimumDeliveryOrderValue - total);
   const totalPayable = total + deliveryFee;
   const deliveryWindow = deliverySettings
     ? `${deliverySettings.estimated_delivery_min_minutes ?? 30}-${deliverySettings.estimated_delivery_max_minutes ?? 60} minutes`
@@ -114,7 +116,7 @@ export default function SabSewaLocalCartScreen() {
     if (!terminalId) return;
     const { data } = await supabase
       .from("vendor_terminals")
-      .select("free_delivery_min_order, delivery_fee_below_min, estimated_delivery_min_minutes, estimated_delivery_max_minutes, delivery_available, pickup_available, delivery_provider_type")
+      .select("free_delivery_min_order, delivery_fee_below_min, minimum_delivery_order_value, estimated_delivery_min_minutes, estimated_delivery_max_minutes, delivery_available, pickup_available, delivery_provider_type")
       .eq("id", terminalId)
       .maybeSingle();
     setDeliverySettings(data || null);
@@ -209,6 +211,12 @@ export default function SabSewaLocalCartScreen() {
       return;
     }
 
+    if (minimumDeliveryOrderValue > 0 && total < minimumDeliveryOrderValue) {
+      setNotice(`This vendor accepts delivery orders from Rs ${minimumDeliveryOrderValue.toFixed(2)}. Add Rs ${amountForMinimumDelivery.toFixed(2)} more to place this delivery order.`);
+      Alert.alert("Minimum delivery order", `Please add Rs ${amountForMinimumDelivery.toFixed(2)} more to meet this vendor's delivery minimum.`);
+      return;
+    }
+
     if (!address.trim() || !phone.trim()) {
       setNotice("Enter delivery address and phone number before placing the order.");
       Alert.alert("Delivery details required", "Please enter address and phone.");
@@ -242,6 +250,7 @@ export default function SabSewaLocalCartScreen() {
         payment_method: paymentMethod,
         delivery_charge: deliveryFee,
         free_delivery_min_order: freeDeliveryMin,
+        minimum_delivery_order_value: minimumDeliveryOrderValue,
         estimated_delivery_window: deliveryWindow,
         delivery_provider_type: deliverySettings?.delivery_provider_type || "vendor",
       };
@@ -352,8 +361,15 @@ export default function SabSewaLocalCartScreen() {
           <Text style={styles.deliveryLabel}>{t("delivery.freeThreshold")}</Text>
           <Text style={styles.deliveryValue}>Rs {freeDeliveryMin.toFixed(2)}</Text>
         </View>
+        {minimumDeliveryOrderValue > 0 && amountForMinimumDelivery > 0 ? (
+          <Text style={styles.minimumHint}>
+            Current cart value is Rs {total.toFixed(2)}. This vendor accepts delivery orders from Rs {minimumDeliveryOrderValue.toFixed(2)}. Add Rs {amountForMinimumDelivery.toFixed(2)} more to place this delivery order.
+          </Text>
+        ) : null}
         {amountForFreeDelivery > 0 ? (
-          <Text style={styles.freeHint}>{t("delivery.amountForFree", { amount: `Rs ${amountForFreeDelivery.toFixed(2)}` })}</Text>
+          <Text style={styles.freeHint}>
+            Your current order value is Rs {total.toFixed(2)}. This vendor offers free delivery on orders of Rs {freeDeliveryMin.toFixed(2)} or above. A delivery charge of Rs {deliveryFee.toFixed(2)} may apply. {t("delivery.amountForFree", { amount: `Rs ${amountForFreeDelivery.toFixed(2)}` })}
+          </Text>
         ) : null}
         <View style={styles.deliveryRow}>
           <Text style={styles.deliveryLabel}>{t("delivery.estimatedWindow")}</Text>
@@ -541,6 +557,7 @@ const styles = StyleSheet.create({
   deliveryLabel: { color: "#1e3a8a", fontWeight: "800", flex: 1 },
   deliveryValue: { color: "#111827", fontWeight: "700", textAlign: "right" },
   deliveryTotal: { color: "#0f766e", fontWeight: "900", textAlign: "right" },
+  minimumHint: { color: "#b45309", fontWeight: "800", marginBottom: 7 },
   freeHint: { color: "#1d4ed8", fontWeight: "800", marginBottom: 7 },
   safetyText: { color: "#7c2d12", backgroundColor: "#fff7ed", borderRadius: 8, padding: 10, lineHeight: 18, fontSize: 12, marginTop: 6 },
   disabled: { opacity: 0.55 },

@@ -14,6 +14,8 @@ export default function VendorOrdersScreen() {
   const [orders, setOrders] = useState([]);
   const [rejectionReasons, setRejectionReasons] = useState<Record<string, string>>({});
   const [quotePrices, setQuotePrices] = useState<Record<string, Record<string, string>>>({});
+  const [deliveryOverrides, setDeliveryOverrides] = useState<Record<string, string>>({});
+  const [deliveryOverrideReasons, setDeliveryOverrideReasons] = useState<Record<string, string>>({});
 
   useEffect(() => {
     fetchOrders();
@@ -174,6 +176,39 @@ export default function VendorOrdersScreen() {
     fetchOrders();
   }
 
+  async function overrideDeliveryCharge(order: any) {
+    const value = deliveryOverrides[order.id];
+    const nextCharge = Number(value);
+
+    if (!Number.isFinite(nextCharge) || nextCharge < 0) {
+      Alert.alert("Delivery charge", "Enter a valid delivery charge amount. Use 0 to waive delivery.");
+      return;
+    }
+
+    const response = await fetch(apiUrl("/api/vendor/orders/delivery-charge-override"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        order_id: order.id,
+        vendor_id: vendorId,
+        actor_user_id: user?.id,
+        override_delivery_charge: nextCharge,
+        override_reason: deliveryOverrideReasons[order.id] || "Vendor goodwill adjustment",
+      }),
+    });
+
+    const json = await response.json();
+    if (!response.ok || !json.success) {
+      Alert.alert("Override failed", json.error || json.message || "Unable to update delivery charge.");
+      return;
+    }
+
+    Alert.alert("Delivery charge updated", "The order delivery charge has been adjusted.");
+    setDeliveryOverrides((current) => ({ ...current, [order.id]: "" }));
+    setDeliveryOverrideReasons((current) => ({ ...current, [order.id]: "" }));
+    fetchOrders();
+  }
+
   return (
     <ScrollView style={styles.container}>
       <Text style={styles.heading}>Incoming Orders 📦</Text>
@@ -241,6 +276,43 @@ export default function VendorOrdersScreen() {
           {order.details_unlocked ? null : (
             <Text style={styles.amount}>Items: {order.item_count || 0}</Text>
           )}
+
+          <View style={styles.deliveryPanel}>
+            <Text style={styles.deliveryTitle}>Delivery charge</Text>
+            <Text style={styles.lockedText}>
+              Current: Rs {Number(order.delivery_charge || 0).toFixed(2)}
+              {order.delivery_charge_override_amount != null
+                ? ` | Vendor adjusted from Rs ${Number(order.delivery_charge_original || 0).toFixed(2)}`
+                : ""}
+            </Text>
+            {["pending", "accepted", "packed"].includes(order.status) ? (
+              <>
+                <TextInput
+                  style={styles.reasonInput}
+                  placeholder="New delivery charge, use 0 to waive"
+                  keyboardType="numeric"
+                  value={deliveryOverrides[order.id] || ""}
+                  onChangeText={(text) =>
+                    setDeliveryOverrides((current) => ({ ...current, [order.id]: text }))
+                  }
+                />
+                <TextInput
+                  style={styles.reasonInput}
+                  placeholder="Reason, optional"
+                  value={deliveryOverrideReasons[order.id] || ""}
+                  onChangeText={(text) =>
+                    setDeliveryOverrideReasons((current) => ({ ...current, [order.id]: text }))
+                  }
+                />
+                <TouchableOpacity
+                  style={styles.overrideBtn}
+                  onPress={() => overrideDeliveryCharge(order)}
+                >
+                  <Text style={styles.btnTxt}>Update Delivery Charge</Text>
+                </TouchableOpacity>
+              </>
+            ) : null}
+          </View>
           <Text>Status: {order.status}</Text>
 
           {/* TRACK RIDER BUTTON */}
@@ -366,6 +438,16 @@ const styles = StyleSheet.create({
   itemMeta: { color: "#555", marginTop: 2 },
 
   amount: { fontSize: 18, fontWeight: "900", marginVertical: 5 },
+  deliveryPanel: {
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    borderRadius: 10,
+    padding: 10,
+    marginTop: 10,
+    marginBottom: 8,
+  },
+  deliveryTitle: { fontWeight: "900", color: "#0f172a", marginBottom: 4 },
 
   btnRow: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 10 },
   reasonInput: {
@@ -386,6 +468,7 @@ const styles = StyleSheet.create({
 
   acceptBtn: { backgroundColor: "green", padding: 10, borderRadius: 8 },
   quoteBtn: { backgroundColor: "#0f766e", padding: 10, borderRadius: 8 },
+  overrideBtn: { backgroundColor: "#0ea5e9", padding: 10, borderRadius: 8, marginTop: 6, alignItems: "center" },
   rejectBtn: { backgroundColor: "red", padding: 10, borderRadius: 8 },
   packedBtn: { backgroundColor: "#005bbb", padding: 10, borderRadius: 8 },
   outBtn: { backgroundColor: "#f5a623", padding: 10, borderRadius: 8 },

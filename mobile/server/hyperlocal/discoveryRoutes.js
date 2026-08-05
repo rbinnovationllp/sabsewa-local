@@ -71,6 +71,8 @@ function vendorCard({ vendor, terminal, items, distanceM }) {
       pack_size: item.pack_size || null,
       pack_unit: item.pack_unit || item.price_unit_label || item.unit || null,
       mrp: item.mrp == null ? null : Number(item.mrp),
+      mrp_pricing_policy: item.mrp_pricing_policy || "manual",
+      mrp_discount_percent: item.mrp_discount_percent == null ? 0 : Number(item.mrp_discount_percent),
       barcode: item.barcode || item.ean || item.sku || null,
       stock_status: item.stock_status || "in_stock",
       daily_availability_status: item.daily_availability_status || "available",
@@ -126,7 +128,7 @@ router.get("/vendors", async (req, res) => {
         .eq("status", "active"),
       supabase
         .from("vendor_items")
-        .select("id, vendor_id, terminal_id, item_name, item_pic, price, price_display_mode, price_unit_label, unit, is_available, available_today, stock_status, daily_availability_status, expected_restock_at, generic_product_name, brand_name, manufacturer, variant_name, pack_size, pack_unit, mrp, barcode, sku, ean")
+        .select("id, vendor_id, terminal_id, item_name, item_pic, price, price_display_mode, price_unit_label, unit, is_available, available_today, stock_status, daily_availability_status, expected_restock_at, generic_product_name, brand_name, manufacturer, variant_name, pack_size, pack_unit, mrp, mrp_pricing_policy, mrp_discount_percent, barcode, sku, ean")
         .in("vendor_id", vendorIds)
         .eq("is_available", true)
         .eq("available_today", true)

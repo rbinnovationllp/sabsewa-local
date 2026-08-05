@@ -61,6 +61,12 @@ function limitedOrderSummary(order) {
     price_quote_status: order.price_quote_status || "not_required",
     vendor_price_quote: order.vendor_price_quote || null,
     quoted_total_amount: order.quoted_total_amount || null,
+    delivery_charge: order.delivery_charge == null ? 0 : Number(order.delivery_charge),
+    delivery_charge_original: order.delivery_charge_original == null ? null : Number(order.delivery_charge_original),
+    delivery_charge_override_amount: order.delivery_charge_override_amount == null ? null : Number(order.delivery_charge_override_amount),
+    delivery_charge_override_reason: order.delivery_charge_override_reason || null,
+    free_delivery_min_order: order.free_delivery_min_order == null ? 0 : Number(order.free_delivery_min_order),
+    minimum_delivery_order_value: order.minimum_delivery_order_value == null ? 0 : Number(order.minimum_delivery_order_value),
     item_count: items.reduce((sum, item) => sum + Number(item.qty || item.quantity || 1), 0),
     summary_items: summaryItems,
     has_more_items: items.length > 3,
@@ -158,7 +164,7 @@ async function verifyVendor(req, res, next) {
 
     const { data: order, error } = await supabase
       .from("hyperlocal_orders")
-      .select("id, vendor_id, status, partial_fulfillment_status, price_quote_required, price_quote_status")
+      .select("id, vendor_id, status, total_amount, delivery_charge, partial_fulfillment_status, price_quote_required, price_quote_status")
       .eq("id", order_id)
       .single();
 
@@ -493,6 +499,65 @@ router.post("/price-quote-response", async (req, res) => {
   });
 
   return res.json({ success: true, order: data });
+});
+
+router.post("/delivery-charge-override", verifyVendor, async (req, res) => {
+  try {
+    const { order_id, override_delivery_charge, override_reason, actor_user_id } = req.body;
+
+    if (!["pending", "accepted", "packed"].includes(req.order.status)) {
+      return res.status(400).json({
+        success: false,
+        message: "Delivery charge can be adjusted only before the order goes out for delivery.",
+      });
+    }
+
+    const nextCharge = Number(override_delivery_charge);
+    if (!Number.isFinite(nextCharge) || nextCharge < 0) {
+      return res.status(400).json({ success: false, message: "Enter a valid delivery charge." });
+    }
+
+    const originalCharge = Number(req.order.delivery_charge || 0);
+    const { data, error } = await supabase
+      .from("hyperlocal_orders")
+      .update({
+        delivery_charge_original: originalCharge,
+        delivery_charge: nextCharge,
+        delivery_charge_override_amount: nextCharge,
+        delivery_charge_override_reason: override_reason || "Vendor delivery charge adjustment",
+        delivery_charge_overridden_by: actor_user_id || null,
+        delivery_charge_overridden_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", order_id)
+      .select()
+      .single();
+
+    if (error) return res.status(500).json({ success: false, error: error.message });
+
+    await writeOrderAuditLog({
+      orderId: order_id,
+      vendorId: req.order.vendor_id,
+      actorUserId: actor_user_id,
+      action: "vendor_delivery_charge_override",
+      fromStatus: req.order.status,
+      toStatus: req.order.status,
+      metadata: {
+        previous_delivery_charge: originalCharge,
+        new_delivery_charge: nextCharge,
+        reason: override_reason || null,
+      },
+      req,
+    });
+
+    return res.json({
+      success: true,
+      message: "Delivery charge updated for this order.",
+      order: vendorOrderView(data),
+    });
+  } catch (error) {
+    return res.status(400).json({ success: false, error: error.message });
+  }
 });
 
 /**

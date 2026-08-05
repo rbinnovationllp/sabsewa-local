@@ -1,4 +1,4 @@
-﻿-- Vendor QR payment profiles, direct settlement, credit privacy and storage plans.
+-- Vendor QR payment profiles, direct settlement, credit privacy and storage plans.
 -- Customers pay vendors directly; SabSewa Local keeps only minimal accounting
 -- records after successful settlement.
 

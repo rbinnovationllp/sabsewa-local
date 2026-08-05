@@ -38,6 +38,7 @@ const secretMarkers = [
   "AWS_SECRET_ACCESS_KEY",
   "RAZORPAY_KEY_SECRET",
   "RAZORPAY_WEBHOOK_SECRET",
+  "WEB_PUSH_VAPID_PRIVATE_KEY",
   "service_role",
 ];
 
@@ -92,6 +93,9 @@ if (combinedText.includes("http://localhost:5001") || combinedText.includes("127
 }
 if (combinedText.includes("SabSewa-Alert") || combinedText.includes("sabsewa-alert")) {
   fail("incorrect SabSewa-Alert project reference found in production bundle");
+}
+if (combinedText.includes("replace_with_public_vapid_key_when_web_push_is_enabled")) {
+  fail("placeholder web push VAPID public key found in production bundle");
 }
 
 for (const marker of secretMarkers) {

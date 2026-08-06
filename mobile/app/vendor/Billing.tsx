@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Alert, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import BrandHeader from "@/components/BrandHeader";
 import { apiUrl, authenticatedFetch } from "@/lib/backend";
@@ -65,15 +65,42 @@ export default function VendorBillingScreen() {
       const json = await response.json();
       if (!response.ok || !json.success) throw new Error(json.error || "Unable to create Razorpay order.");
 
+      // 1. Web & PWA Razorpay Modal Handling
+      if (Platform.OS === "web") {
+        if (typeof window !== "undefined" && !(window as any).Razorpay) {
+          throw new Error("Razorpay Web SDK not loaded. Please refresh the page and try again.");
+        }
+
+        const options = {
+          key: json.key_id,
+          amount: json.razorpay_order.amount,
+          currency: json.razorpay_order.currency || "INR",
+          name: "SabSewa Local",
+          description,
+          order_id: json.razorpay_order.id,
+          handler: async function (payment: any) {
+            await verifyAndRefresh(payment.razorpay_order_id, payment.razorpay_payment_id, payment.razorpay_signature);
+          },
+          theme: { color: "#1166ff" },
+        };
+
+        const rzp = new (window as any).Razorpay(options);
+        rzp.open();
+        setPaying(false);
+        return;
+      }
+
+      // 2. Mobile Native Checkout via react-native-razorpay
       let RazorpayCheckout: any = null;
       try {
-        RazorpayCheckout = require("react-native-razorpay");
+        RazorpayCheckout = require("react-native-razorpay").default || require("react-native-razorpay");
       } catch {
         RazorpayCheckout = null;
       }
 
       if (!RazorpayCheckout) {
         Alert.alert("Razorpay SDK required", `Razorpay order created: ${json.razorpay_order.id}`);
+        setPaying(false);
         return;
       }
 
@@ -87,19 +114,7 @@ export default function VendorBillingScreen() {
         theme: { color: "#1166ff" },
       });
 
-      const verifyResponse = await authenticatedFetch(`/api/vendor/billing/${vendorId}/verify-platform-payment`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          razorpay_order_id: payment.razorpay_order_id,
-          razorpay_payment_id: payment.razorpay_payment_id,
-          razorpay_signature: payment.razorpay_signature,
-        }),
-      });
-      const verifyJson = await verifyResponse.json();
-      if (!verifyResponse.ok || !verifyJson.success) throw new Error(verifyJson.error || "Payment verification failed.");
-      Alert.alert(verifyJson.test_mode ? "Test payment recorded" : "Payment successful", verifyJson.message || "Platform payment was verified.");
-      await loadBilling(vendorId);
+      await verifyAndRefresh(payment.razorpay_order_id, payment.razorpay_payment_id, payment.razorpay_signature);
     } catch (error) {
       Alert.alert("Payment", error instanceof Error ? error.message : "Payment could not be completed.");
     } finally {
@@ -107,10 +122,26 @@ export default function VendorBillingScreen() {
     }
   }
 
+  async function verifyAndRefresh(orderId: string, paymentId: string, signature: string) {
+    const verifyResponse = await authenticatedFetch(`/api/vendor/billing/${vendorId}/verify-platform-payment`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        razorpay_order_id: orderId,
+        razorpay_payment_id: paymentId,
+        razorpay_signature: signature,
+      }),
+    });
+    const verifyJson = await verifyResponse.json();
+    if (!verifyResponse.ok || !verifyJson.success) throw new Error(verifyJson.error || "Payment verification failed.");
+    Alert.alert(verifyJson.test_mode ? "Test payment recorded" : "Payment successful", verifyJson.message || "Platform payment was verified.");
+    await loadBilling(vendorId);
+  }
+
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator />
+        <ActivityIndicator size="large" color="#1166ff" />
         <Text style={styles.muted}>Loading vendor billing...</Text>
       </View>
     );
@@ -136,8 +167,8 @@ export default function VendorBillingScreen() {
         <Text style={styles.section}>Onboarding Charges</Text>
         <Text style={styles.muted}>Fee: Rs {Number(onboarding?.onboarding_fee || 0).toFixed(2)} | Deposit: Rs {Number(onboarding?.security_deposit || 0).toFixed(2)} | Tax: Rs {Number(onboarding?.tax_amount || 0).toFixed(2)}</Text>
         <Text style={styles.total}>Total: Rs {Number(onboarding?.total_payable || 0).toFixed(2)}</Text>
-        <TouchableOpacity style={styles.primaryBtn} onPress={() => pay("onboarding", null, "Vendor onboarding fee and security deposit")} disabled={paying || onboarding?.payment_status === "payment_completed"}>
-          <Text style={styles.primaryText}>{onboarding?.payment_status === "payment_completed" ? "Onboarding Paid" : "Pay Onboarding"}</Text>
+        <TouchableOpacity style={[styles.primaryBtn, paying && styles.disabled]} onPress={() => pay("onboarding", null, "Vendor onboarding fee and security deposit")} disabled={paying || onboarding?.payment_status === "payment_completed"}>
+          <Text style={styles.primaryText}>{onboarding?.payment_status === "payment_completed" ? "Onboarding Paid" : paying ? "Opening Razorpay..." : "Pay Onboarding"}</Text>
         </TouchableOpacity>
       </View>
 
@@ -158,7 +189,7 @@ export default function VendorBillingScreen() {
               <Text style={styles.muted}>{plan.description}</Text>
               <Text style={styles.total}>{rupees(amount)}</Text>
               <Text style={styles.muted}>Listings: {plan.product_listing_limit || "Custom"} | Storage: {plan.storage_allowance_bytes ? `${Math.round(plan.storage_allowance_bytes / 1048576)} MB` : "Custom"} | AI: {plan.ai_tool_access ? "Yes" : "No"}</Text>
-              <TouchableOpacity style={styles.secondaryBtn} onPress={() => pay("subscription", plan.id, `${plan.plan_name} subscription`)} disabled={paying}>
+              <TouchableOpacity style={[styles.secondaryBtn, paying && styles.disabled]} onPress={() => pay("subscription", plan.id, `${plan.plan_name} subscription`)} disabled={paying}>
                 <Text style={styles.secondaryText}>Select Plan</Text>
               </TouchableOpacity>
             </View>
@@ -173,7 +204,7 @@ export default function VendorBillingScreen() {
             <Text style={styles.title}>{plan.title}</Text>
             <Text style={styles.muted}>Adds {Math.round(Number(plan.quota_bytes || 0) / 1073741824)} GB storage</Text>
             <Text style={styles.total}>Rs {Number(plan.price_inr || 0).toFixed(2)}</Text>
-            <TouchableOpacity style={styles.secondaryBtn} onPress={() => pay("storage_addon", plan.id, `Storage add-on ${plan.title}`)} disabled={paying}>
+            <TouchableOpacity style={[styles.secondaryBtn, paying && styles.disabled]} onPress={() => pay("storage_addon", plan.id, `Storage add-on ${plan.title}`)} disabled={paying}>
               <Text style={styles.secondaryText}>Buy Storage</Text>
             </TouchableOpacity>
           </View>
@@ -187,7 +218,7 @@ export default function VendorBillingScreen() {
             <Text style={styles.title}>{product.title}</Text>
             <Text style={styles.muted}>{product.description}</Text>
             <Text style={styles.total}>{rupees(product.base_amount_paise)}</Text>
-            <TouchableOpacity style={styles.secondaryBtn} onPress={() => pay(product.charge_type, product.id, product.title)} disabled={paying}>
+            <TouchableOpacity style={[styles.secondaryBtn, paying && styles.disabled]} onPress={() => pay(product.charge_type, product.id, product.title)} disabled={paying}>
               <Text style={styles.secondaryText}>Buy</Text>
             </TouchableOpacity>
           </View>
@@ -240,4 +271,5 @@ const styles = StyleSheet.create({
   secondaryBtn: { borderWidth: 1, borderColor: "#1166ff", borderRadius: 8, padding: 11, marginTop: 10, backgroundColor: "#fff" },
   secondaryText: { color: "#1166ff", fontWeight: "900", textAlign: "center" },
   historyRow: { borderTopWidth: 1, borderTopColor: "#e5e7eb", paddingVertical: 10 },
+  disabled: { opacity: 0.6 },
 });

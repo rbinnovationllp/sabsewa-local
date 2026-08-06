@@ -4,95 +4,72 @@ import BrandHeader from "@/components/BrandHeader";
 import { authenticatedFetch } from "@/lib/backend";
 import { useAuth } from "@/providers/AuthProvider";
 
-function money(value: unknown) {
-  return `Rs ${Number(value || 0).toFixed(2)}`;
-}
-
 export default function VendorFeeRulesScreen() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [categories, setCategories] = useState<any[]>([]);
   const [feeRules, setFeeRules] = useState<any[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState("other");
-  const [categoryName, setCategoryName] = useState("");
-  const [onboardingFee, setOnboardingFee] = useState("");
-  const [securityDeposit, setSecurityDeposit] = useState("");
-  const [orderCharge, setOrderCharge] = useState("");
-  const [taxRate, setTaxRate] = useState("0");
+
+  // Form state
+  const [selectedCategory, setSelectedCategory] = useState("");
+  const [onboardingFee, setOnboardingFee] = useState("500");
+  const [securityDeposit, setSecurityDeposit] = useState("5000");
+  const [perOrderCharge, setPerOrderCharge] = useState("10");
+  const [taxRate, setTaxRate] = useState("18");
 
   useEffect(() => {
-    loadConfig();
-  }, []);
+    loadAdminConfig();
+  }, [user?.id]);
 
-  async function loadConfig() {
+  async function loadAdminConfig() {
     setLoading(true);
     try {
       const response = await authenticatedFetch("/api/vendor/onboarding/admin/config");
       const json = await response.json();
-      if (!response.ok || !json.success) throw new Error(json.error || "Unable to load configuration.");
+      if (!response.ok || !json.success) throw new Error(json.error || "Failed to fetch fee configuration.");
+      
       setCategories(json.categories || []);
       setFeeRules(json.fee_rules || []);
-      const first = json.fee_rules?.[0];
-      if (first) selectRule(first.category_slug, json.fee_rules, json.categories);
+      if (json.categories?.length > 0) {
+        setSelectedCategory(json.categories[0].slug);
+      }
     } catch (error) {
-      Alert.alert("Fee rules", error instanceof Error ? error.message : "Unable to load fee rules.");
+      Alert.alert("Admin Config", error instanceof Error ? error.message : "Unable to load configurations.");
     } finally {
       setLoading(false);
     }
   }
 
-  function selectRule(categorySlug: string, rules = feeRules, nextCategories = categories) {
-    const rule = rules.find((item) => item.category_slug === categorySlug);
-    const category = nextCategories.find((item) => item.slug === categorySlug);
-    setSelectedCategory(categorySlug);
-    setCategoryName(category?.display_name || categorySlug);
-    setOnboardingFee(String(rule?.onboarding_fee_amount ?? ""));
-    setSecurityDeposit(String(rule?.security_deposit_amount ?? "5000"));
-    setOrderCharge(String(rule?.per_completed_order_charge ?? ""));
-    setTaxRate(String(rule?.tax_rate_percent ?? "0"));
-  }
-
-  async function saveCategoryAndRule() {
-    if (!selectedCategory.trim() || !categoryName.trim()) {
-      Alert.alert("Category required", "Enter a category slug and display name.");
+  async function saveFeeRule() {
+    if (!selectedCategory) {
+      Alert.alert("Category Required", "Please select a business category.");
       return;
     }
+
     setSaving(true);
     try {
-      const categoryResponse = await authenticatedFetch("/api/vendor/onboarding/admin/categories", {
+      const response = await authenticatedFetch("/api/vendor/onboarding/admin/fee-rules", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          slug: selectedCategory.trim().toLowerCase(),
-          display_name: categoryName.trim(),
+          category_slug: selectedCategory,
+          onboarding_fee_amount: Number(onboardingFee),
+          security_deposit_amount: Number(securityDeposit),
+          per_completed_order_charge: Number(perOrderCharge),
+          tax_rate_percent: Number(taxRate),
+          currency: "INR",
           actor_user_id: user?.id || null,
         }),
       });
-      const categoryJson = await categoryResponse.json();
-      if (!categoryResponse.ok || !categoryJson.success) throw new Error(categoryJson.error || "Category update failed.");
 
-      const ruleResponse = await authenticatedFetch("/api/vendor/onboarding/admin/fee-rules", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          category_slug: selectedCategory.trim().toLowerCase(),
-          onboarding_fee_amount: onboardingFee,
-          security_deposit_amount: securityDeposit,
-          per_completed_order_charge: orderCharge,
-          tax_rate_percent: taxRate,
-          onboarding_fee_refundable: false,
-          security_deposit_refundable: true,
-          actor_user_id: user?.id || null,
-        }),
-      });
-      const ruleJson = await ruleResponse.json();
-      if (!ruleResponse.ok || !ruleJson.success) throw new Error(ruleJson.error || "Fee rule update failed.");
+      const json = await response.json();
+      if (!response.ok || !json.success) throw new Error(json.error || "Failed to update fee rule.");
 
-      Alert.alert("Saved", "Vendor fee configuration updated.");
-      await loadConfig();
+      Alert.alert("Fee Rule Saved", "Category fee rule updated successfully.");
+      await loadAdminConfig();
     } catch (error) {
-      Alert.alert("Fee rules", error instanceof Error ? error.message : "Unable to save fee rules.");
+      Alert.alert("Save Error", error instanceof Error ? error.message : "Could not save fee rule.");
     } finally {
       setSaving(false);
     }
@@ -101,63 +78,110 @@ export default function VendorFeeRulesScreen() {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator />
-        <Text style={styles.muted}>Loading fee configuration...</Text>
+        <ActivityIndicator size="large" color="#1166ff" />
+        <Text style={styles.muted}>Loading fee rules...</Text>
       </View>
     );
   }
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <BrandHeader compact subtitle="Company Master CRM" />
+      <BrandHeader compact subtitle="Company Administration" />
       <Text style={styles.heading}>Vendor Fee Rules</Text>
 
-      <View style={styles.ruleGrid}>
-        {feeRules.map((rule) => (
-          <TouchableOpacity key={rule.id} style={[styles.ruleCard, selectedCategory === rule.category_slug && styles.ruleActive]} onPress={() => selectRule(rule.category_slug)}>
-            <Text style={styles.ruleTitle}>{rule.category_slug}</Text>
-            <Text style={styles.muted}>Onboarding {money(rule.onboarding_fee_amount)}</Text>
-            <Text style={styles.muted}>Deposit {money(rule.security_deposit_amount)}</Text>
-            <Text style={styles.muted}>Completed order {money(rule.per_completed_order_charge)}</Text>
-          </TouchableOpacity>
-        ))}
+      <View style={styles.panel}>
+        <Text style={styles.section}>Update Fee Policy</Text>
+
+        <Text style={styles.label}>Select Category</Text>
+        <View style={styles.chipRow}>
+          {categories.map((cat) => (
+            <TouchableOpacity
+              key={cat.slug}
+              style={[styles.chip, selectedCategory === cat.slug && styles.chipActive]}
+              onPress={() => setSelectedCategory(cat.slug)}
+            >
+              <Text style={[styles.chipText, selectedCategory === cat.slug && styles.chipTextActive]}>
+                {cat.display_name || cat.slug}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <Text style={styles.label}>Onboarding Fee (Rs)</Text>
+        <TextInput
+          style={styles.input}
+          value={onboardingFee}
+          onChangeText={setOnboardingFee}
+          keyboardType="numeric"
+          placeholder="500"
+        />
+
+        <Text style={styles.label}>Security Deposit (Rs)</Text>
+        <TextInput
+          style={styles.input}
+          value={securityDeposit}
+          onChangeText={setSecurityDeposit}
+          keyboardType="numeric"
+          placeholder="5000"
+        />
+
+        <Text style={styles.label}>Per Completed Order Charge (Rs)</Text>
+        <TextInput
+          style={styles.input}
+          value={perOrderCharge}
+          onChangeText={setPerOrderCharge}
+          keyboardType="numeric"
+          placeholder="10"
+        />
+
+        <Text style={styles.label}>Tax Rate (%)</Text>
+        <TextInput
+          style={styles.input}
+          value={taxRate}
+          onChangeText={setTaxRate}
+          keyboardType="numeric"
+          placeholder="18"
+        />
+
+        <TouchableOpacity style={[styles.primaryBtn, saving && styles.disabled]} onPress={saveFeeRule} disabled={saving}>
+          <Text style={styles.primaryText}>{saving ? "Saving Rule..." : "Save Category Rule"}</Text>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.panel}>
-        <Text style={styles.section}>Edit Category and Active Fee Rule</Text>
-        <TextInput style={styles.input} value={selectedCategory} onChangeText={setSelectedCategory} placeholder="category slug" autoCapitalize="none" />
-        <TextInput style={styles.input} value={categoryName} onChangeText={setCategoryName} placeholder="display name" />
-        <View style={styles.row}>
-          <TextInput style={[styles.input, styles.flex]} value={onboardingFee} onChangeText={setOnboardingFee} placeholder="onboarding fee" keyboardType="numeric" />
-          <TextInput style={[styles.input, styles.flex]} value={securityDeposit} onChangeText={setSecurityDeposit} placeholder="security deposit" keyboardType="numeric" />
-        </View>
-        <View style={styles.row}>
-          <TextInput style={[styles.input, styles.flex]} value={orderCharge} onChangeText={setOrderCharge} placeholder="per completed order" keyboardType="numeric" />
-          <TextInput style={[styles.input, styles.flex]} value={taxRate} onChangeText={setTaxRate} placeholder="tax %" keyboardType="numeric" />
-        </View>
-        <TouchableOpacity style={[styles.saveBtn, saving && styles.disabled]} onPress={saveCategoryAndRule} disabled={saving}>
-          <Text style={styles.saveText}>{saving ? "Saving..." : "Save Fee Rule"}</Text>
-        </TouchableOpacity>
+        <Text style={styles.section}>Active Fee Rules</Text>
+        {feeRules.length === 0 ? <Text style={styles.muted}>No active fee rules configured.</Text> : null}
+        {feeRules.map((rule) => (
+          <View key={rule.id || rule.category_slug} style={styles.ruleCard}>
+            <Text style={styles.ruleTitle}>{String(rule.category_slug).toUpperCase()}</Text>
+            <Text style={styles.muted}>Onboarding Fee: Rs {rule.onboarding_fee_amount}</Text>
+            <Text style={styles.muted}>Security Deposit: Rs {rule.security_deposit_amount}</Text>
+            <Text style={styles.muted}>Per-Order Charge: Rs {rule.per_completed_order_charge}</Text>
+            <Text style={styles.muted}>Tax: {rule.tax_rate_percent}%</Text>
+          </View>
+        ))}
       </View>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { paddingTop: 70, paddingHorizontal: 20, paddingBottom: 48, backgroundColor: "#fff" },
+  container: { paddingTop: 60, paddingHorizontal: 20, paddingBottom: 48, backgroundColor: "#fff" },
   center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 8 },
-  heading: { fontSize: 26, fontWeight: "900", color: "#111827", marginBottom: 14 },
-  ruleGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 16 },
-  ruleCard: { width: "48%", minWidth: 220, flexGrow: 1, borderWidth: 1, borderColor: "#e5e7eb", borderRadius: 8, padding: 12, backgroundColor: "#fff" },
-  ruleActive: { borderColor: "#1166ff", backgroundColor: "#eff6ff" },
+  heading: { fontSize: 28, fontWeight: "900", color: "#111827", marginBottom: 14 },
+  panel: { borderWidth: 1, borderColor: "#e5e7eb", borderRadius: 8, padding: 14, marginBottom: 14, backgroundColor: "#fff" },
+  section: { fontSize: 18, fontWeight: "900", color: "#111827", marginBottom: 12 },
+  label: { fontSize: 14, fontWeight: "700", color: "#374151", marginTop: 10, marginBottom: 4 },
+  input: { borderWidth: 1, borderColor: "#cbd5e1", borderRadius: 8, padding: 12, backgroundColor: "#fff" },
+  chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginVertical: 6 },
+  chip: { borderWidth: 1, borderColor: "#cbd5e1", borderRadius: 8, paddingVertical: 8, paddingHorizontal: 12 },
+  chipActive: { backgroundColor: "#1166ff", borderColor: "#1166ff" },
+  chipText: { color: "#374151", fontWeight: "700" },
+  chipTextActive: { color: "#fff" },
+  primaryBtn: { backgroundColor: "#1166ff", borderRadius: 8, padding: 14, marginTop: 18 },
+  primaryText: { color: "#fff", textAlign: "center", fontWeight: "900" },
+  ruleCard: { borderWidth: 1, borderColor: "#e5e7eb", borderRadius: 8, padding: 12, marginTop: 8, backgroundColor: "#f9fafb" },
   ruleTitle: { fontWeight: "900", color: "#111827", marginBottom: 4 },
   muted: { color: "#6b7280", fontSize: 12, lineHeight: 18 },
-  panel: { borderWidth: 1, borderColor: "#e5e7eb", borderRadius: 8, padding: 14, backgroundColor: "#fff" },
-  section: { fontSize: 18, fontWeight: "900", color: "#111827", marginBottom: 10 },
-  row: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
-  flex: { flex: 1, minWidth: 130 },
-  input: { borderWidth: 1, borderColor: "#cbd5e1", borderRadius: 8, padding: 12, marginBottom: 10, backgroundColor: "#fff" },
-  saveBtn: { backgroundColor: "#1166ff", borderRadius: 8, padding: 14 },
-  saveText: { color: "#fff", fontWeight: "900", textAlign: "center" },
   disabled: { opacity: 0.6 },
 });

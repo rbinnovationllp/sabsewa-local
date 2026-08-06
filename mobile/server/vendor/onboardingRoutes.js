@@ -1,4 +1,5 @@
 ﻿import express from "express";
+import Razorpay from "razorpay";
 import { supabase } from "../connection.js";
 import { getRazorpayMode } from "../payments/paymentEnvironment.js";
 import { requireRole, requireUserJwt } from "../security/apiSecurity.js";
@@ -7,6 +8,89 @@ import { getVendorOnboardingSummary } from "./onboardingPolicyService.js";
 
 const router = express.Router();
 const requireAdmin = [requireUserJwt(supabase), requireRole(["admin", "company_admin", "super_admin"])];
+
+// Initialize Razorpay instance
+const razorpay = new Razorpay({
+  key_id: process.env.RAZORPAY_KEY_ID,
+  key_secret: process.env.RAZORPAY_KEY_SECRET,
+});
+
+/**
+ * @route POST /api/vendor/onboarding/:vendor_id/create-razorpay-order
+ * @desc Dynamically calculates Onboarding Fee + Security Deposit based on vendor category and creates Razorpay Order
+ */
+router.post("/:vendor_id/create-razorpay-order", async (req, res) => {
+  try {
+    const { vendor_id } = req.params;
+
+    // 1. Fetch vendor profile and category
+    const { data: vendor, error: vendorError } = await supabase
+      .from("vendors")
+      .select("id, public_vendor_id, category, shop_name, phone_number, email")
+      .eq("id", vendor_id)
+      .single();
+
+    if (vendorError || !vendor) {
+      return res.status(404).json({ success: false, error: "Vendor profile not found." });
+    }
+
+    const categorySlug = String(vendor.category || "other").toLowerCase();
+
+    // 2. Fetch active fee rule for the vendor's category from database
+    const { data: feeRule } = await supabase
+      .from("vendor_fee_rules")
+      .select("onboarding_fee_amount, security_deposit_amount, tax_rate_percent, onboarding_fee_refundable, security_deposit_refundable")
+      .eq("category_slug", categorySlug)
+      .eq("is_active", true)
+      .is("effective_to", null)
+      .maybeSingle();
+
+    // Dynamically retrieve fee values or fall back to defaults (Rs 500 Onboarding Fee + Rs 5,000 Security Deposit)
+    const onboardingFee = feeRule?.onboarding_fee_amount ?? 500;
+    const securityDeposit = feeRule?.security_deposit_amount ?? 5000;
+    const taxRatePercent = feeRule?.tax_rate_percent ?? 0;
+
+    const taxAmount = Math.round((onboardingFee * taxRatePercent) / 100);
+    const totalAmountInRupees = onboardingFee + securityDeposit + taxAmount;
+    const totalAmountInPaise = Math.round(totalAmountInRupees * 100);
+
+    // 3. Create dynamic order on Razorpay
+    const options = {
+      amount: totalAmountInPaise,
+      currency: "INR",
+      receipt: `onb_${vendor_id.slice(0, 8)}_${Date.now()}`,
+      notes: {
+        internal_vendor_id: vendor.id,
+        vendor_id: vendor.public_vendor_id || vendor.id,
+        payment_purpose: "vendor_initial_activation",
+        category_slug: categorySlug,
+        onboarding_fee: String(onboardingFee),
+        security_deposit: String(securityDeposit),
+        tax_amount: String(taxAmount),
+      },
+    };
+
+    const order = await razorpay.orders.create(options);
+
+    return res.json({
+      success: true,
+      order_id: order.id,
+      amount: order.amount,
+      currency: order.currency,
+      key_id: process.env.RAZORPAY_KEY_ID,
+      breakdown: {
+        category_slug: categorySlug,
+        onboarding_fee: onboardingFee,
+        security_deposit: securityDeposit,
+        tax_amount: taxAmount,
+        tax_rate_percent: taxRatePercent,
+        total_payable: totalAmountInRupees,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
 
 router.get("/:vendor_id/summary", async (req, res) => {
   try {

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { useRouter } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import BrandHeader from "@/components/BrandHeader";
 import { apiUrl } from "@/lib/backend";
 import { supabase } from "@/lib/supabase";
@@ -44,6 +45,11 @@ export default function VendorOnboardingScreen() {
         .single();
       if (error || !vendorData) throw new Error("Vendor profile was not found.");
       setVendor(vendorData);
+
+      // Persist registered vendor mobile number locally for automatic login prefill
+      if (vendorData.phone_number || user.phone) {
+        await AsyncStorage.setItem("registered_vendor_phone", vendorData.phone_number || user.phone || "");
+      }
 
       const response = await fetch(apiUrl(`/api/vendor/onboarding/${vendorData.id}/summary`));
       const json = await response.json();
@@ -186,7 +192,7 @@ export default function VendorOnboardingScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { paddingTop: 70, paddingHorizontal: 20, paddingBottom: 48, backgroundColor: "#fff" },
+  container: { paddingTop: 20, paddingHorizontal: 20, paddingBottom: 48, backgroundColor: "#fff" },
   center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 8 },
   heading: { fontSize: 28, fontWeight: "900", color: "#111827", marginBottom: 14 },
   panel: { borderWidth: 1, borderColor: "#e5e7eb", borderRadius: 8, padding: 14, marginBottom: 14, backgroundColor: "#fff" },

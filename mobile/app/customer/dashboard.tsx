@@ -1,15 +1,24 @@
 ﻿import { useRouter } from "expo-router";
 import React from "react";
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import BrandHeader from "@/components/BrandHeader";
 
 export default function CustomerDashboard() {
   const router = useRouter();
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={{ padding: 20 }}>
-
+    <ScrollView style={styles.container} contentContainerStyle={{ padding: 20, paddingTop: 10 }}>
       <BrandHeader subtitle="Order nearby products and local services from verified vendors" />
+
+      {/* Quick Home Redirect */}
+      <TouchableOpacity 
+        style={styles.homeBanner}
+        onPress={() => router.push("/" as any)}
+      >
+        <Ionicons name="storefront-sharp" size={18} color="#0f766e" />
+        <Text style={styles.homeBannerText}>Browse Marketplace Home</Text>
+      </TouchableOpacity>
 
       {/* SERVICE CARDS */}
       <View style={styles.grid}>
@@ -61,13 +70,24 @@ export default function CustomerDashboard() {
       <TouchableOpacity style={styles.profileBtn} onPress={() => router.push("/customer/profile")}>
         <Text style={styles.profileText}>My Profile</Text>
       </TouchableOpacity>
-
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { backgroundColor: "#ffffff" },
+  homeBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#ecfeff",
+    borderWidth: 1,
+    borderColor: "#99f6e4",
+    padding: 12,
+    borderRadius: 10,
+    marginBottom: 16,
+  },
+  homeBannerText: { color: "#0f766e", fontWeight: "800", fontSize: 14 },
   grid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between" },
 
   card: {
@@ -98,7 +118,3 @@ const styles = StyleSheet.create({
   },
   profileText: { color: "#424242", fontWeight: "800" },
 });
-
-
-
-

@@ -1,6 +1,9 @@
 import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
-import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, Image } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Ionicons } from "@expo/vector-icons";
+
 import BrandHeader from "@/components/BrandHeader";
 import LanguageSelector from "@/components/LanguageSelector";
 import { supabase } from "@/lib/supabase";
@@ -22,11 +25,12 @@ function sanitizeGreetingName(value?: string | null) {
 export default function HomeScreen() {
   const router = useRouter();
   const { user, loading, signOut } = useAuth();
-  const { t, setLanguage, isLanguageAvailable } = useLanguage();
+  const { t, setLanguage, isLanguageAvailable, language } = useLanguage();
   const [profileName, setProfileName] = useState("");
   const role = user?.user_metadata?.role;
   const isCustomer = role === "customer";
   const isVendor = role === "vendor";
+
   const categoryKeys = [
     "category.grocery",
     "category.vegetables",
@@ -35,10 +39,12 @@ export default function HomeScreen() {
     "category.medical",
     "category.tiffin",
   ];
+
   const displayName = useMemo(
     () => sanitizeGreetingName(profileName || user?.user_metadata?.preferred_name || user?.user_metadata?.full_name),
     [profileName, user?.user_metadata?.full_name, user?.user_metadata?.preferred_name]
   );
+
   const greeting = loading || !user
     ? ""
     : isVendor
@@ -49,8 +55,21 @@ export default function HomeScreen() {
     ? t("home.customerGreeting", { name: displayName })
     : t("home.customerGreetingGeneric");
 
+  // Load language preference persistently
   useEffect(() => {
     let active = true;
+    async function loadStoredLanguage() {
+      try {
+        const savedLang = await AsyncStorage.getItem("user_language");
+        if (savedLang && isLanguageAvailable(savedLang as any) && savedLang !== language) {
+          setLanguage(savedLang as any);
+        }
+      } catch (e) {
+        console.error("Failed to load persistent language", e);
+      }
+    }
+    loadStoredLanguage();
+
     async function loadProfile() {
       if (!user?.id) {
         setProfileName("");
@@ -61,13 +80,17 @@ export default function HomeScreen() {
         .select("full_name, preferred_language")
         .eq("user_id", user.id)
         .maybeSingle();
+
       if (!active) return;
       setProfileName(sanitizeGreetingName(data?.full_name));
+
       const preferredLanguage = data?.preferred_language;
       if (preferredLanguage && isLanguageAvailable(preferredLanguage as any)) {
         setLanguage(preferredLanguage as any);
+        await AsyncStorage.setItem("user_language", preferredLanguage);
       }
     }
+
     loadProfile();
     return () => {
       active = false;
@@ -118,6 +141,50 @@ export default function HomeScreen() {
         ))}
       </View>
 
+      {/* Modern Blinkit/Zepto Showcase Item */}
+      <View style={styles.showcaseSection}>
+        <Text style={styles.showcaseTitle}>Fresh Local Produce Near You</Text>
+        <View style={styles.productCard}>
+          <View style={styles.imageContainer}>
+            <Image 
+              source={{ uri: "https://images.unsplash.com/photo-1604977042946-1eecc30f269e?q=80&w=600" }} 
+              style={styles.productImage} 
+            />
+            <View style={styles.distanceBadge}>
+              <Ionicons name="location-sharp" size={12} color="#fff" />
+              <Text style={styles.distanceText}>600m away</Text>
+            </View>
+            <TouchableOpacity style={styles.favoriteBtn}>
+              <Ionicons name="heart-outline" size={18} color="#ef4444" />
+            </TouchableOpacity>
+          </View>
+          <View style={styles.productDetails}>
+            <Text style={styles.vendorName}>Shree Ram Veggies • ⭐ 4.8</Text>
+            <Text style={styles.productTitle}>Crisp Fresh Cucumber (खीरा)</Text>
+            <Text style={styles.freshnessTag}>🌱 Fresh Harvest Today</Text>
+            
+            <View style={styles.unitSelector}>
+              <TouchableOpacity style={[styles.unitChip, styles.activeUnitChip]}>
+                <Text style={styles.activeUnitText}>500g</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.unitChip}>
+                <Text style={styles.unitText}>1 kg</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.priceRow}>
+              <View>
+                <Text style={styles.price}>₹20 <Text style={styles.mrp}>₹30</Text></Text>
+                <Text style={styles.unitMeta}>₹40 / kg</Text>
+              </View>
+              <TouchableOpacity style={styles.addToCartBtn} onPress={() => router.push("/customer/discover" as any)}>
+                <Text style={styles.addToCartText}>ADD</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </View>
+
       <View style={styles.panel}>
         <Text style={styles.panelTitle}>{isCustomer ? t("home.welcomeBack") : t("home.shopNearbyTitle")}</Text>
         <Text style={styles.panelText}>{t("home.shopNearbyText")}</Text>
@@ -129,9 +196,6 @@ export default function HomeScreen() {
             <View style={styles.actionGrid}>
               <TouchableOpacity style={styles.secondaryButton} onPress={() => router.push("/customer/GeminiOrder" as any)}>
                 <Text style={styles.secondaryText}>{t("home.orderAgain")}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.secondaryButton} onPress={() => router.push("/customer/GeminiOrder" as any)}>
-                <Text style={styles.secondaryText}>{t("home.recentShops")}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.secondaryButton} onPress={() => router.push("/customer/track" as any)}>
                 <Text style={styles.secondaryText}>{t("home.myOrders")}</Text>
@@ -181,27 +245,17 @@ export default function HomeScreen() {
           </>
         )}
       </View>
-
-      <View style={styles.panel}>
-        <Text style={styles.panelTitle}>{t("home.verifiedVendors")}</Text>
-        <Text style={styles.panelText}>{t("home.verifiedVendorsText")}</Text>
-      </View>
-
-      <View style={styles.panel}>
-        <Text style={styles.panelTitle}>{t("home.popularProducts")}</Text>
-        <Text style={styles.panelText}>{t("home.popularProductsText")}</Text>
-      </View>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#ffffff" },
-  content: { padding: 20, paddingTop: 64, paddingBottom: 40 },
+  content: { padding: 20, paddingTop: 16, paddingBottom: 40 },
   hero: {
     borderWidth: 1,
     borderColor: "#dbeafe",
-    borderRadius: 8,
+    borderRadius: 12,
     padding: 16,
     marginBottom: 14,
     backgroundColor: "#f8fbff",
@@ -225,6 +279,61 @@ const styles = StyleSheet.create({
   },
   greetingText: { color: "#0f766e", fontSize: 18, fontWeight: "900", lineHeight: 24 },
   switchText: { color: "#1166ff", fontWeight: "900", marginTop: 8 },
+  
+  // Showcase Card Styles
+  showcaseSection: { marginBottom: 16 },
+  showcaseTitle: { fontSize: 18, fontWeight: "800", color: "#1f2937", marginBottom: 10 },
+  productCard: {
+    flexDirection: "row",
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    borderRadius: 12,
+    backgroundColor: "#fff",
+    padding: 10,
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+  },
+  imageContainer: { position: "relative", width: 110, height: 110 },
+  productImage: { width: "100%", height: "100%", borderRadius: 8 },
+  distanceBadge: {
+    position: "absolute",
+    bottom: 4,
+    left: 4,
+    backgroundColor: "rgba(15, 118, 110, 0.9)",
+    borderRadius: 4,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+  },
+  distanceText: { color: "#fff", fontSize: 9, fontWeight: "700" },
+  favoriteBtn: {
+    position: "absolute",
+    top: 4,
+    right: 4,
+    backgroundColor: "rgba(255,255,255,0.9)",
+    borderRadius: 12,
+    padding: 4,
+  },
+  productDetails: { flex: 1, marginLeft: 12, justifyContent: "space-between" },
+  vendorName: { fontSize: 11, color: "#6b7280", fontWeight: "600" },
+  productTitle: { fontSize: 15, fontWeight: "800", color: "#111827", marginTop: 2 },
+  freshnessTag: { fontSize: 11, color: "#16a34a", fontWeight: "700", marginTop: 2 },
+  unitSelector: { flexDirection: "row", gap: 6, marginTop: 6 },
+  unitChip: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4, borderWidth: 1, borderColor: "#cbd5e1" },
+  activeUnitChip: { backgroundColor: "#0f766e", borderColor: "#0f766e" },
+  unitText: { fontSize: 11, color: "#475569", fontWeight: "600" },
+  activeUnitText: { fontSize: 11, color: "#fff", fontWeight: "700" },
+  priceRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end", marginTop: 6 },
+  price: { fontSize: 16, fontWeight: "900", color: "#0f766e" },
+  mrp: { fontSize: 12, color: "#9ca3af", textDecorationLine: "line-through" },
+  unitMeta: { fontSize: 10, color: "#6b7280" },
+  addToCartBtn: { backgroundColor: "#15803d", paddingHorizontal: 16, paddingVertical: 6, borderRadius: 6 },
+  addToCartText: { color: "#fff", fontWeight: "900", fontSize: 13 },
+
   panel: {
     borderWidth: 1,
     borderColor: "#e5e7eb",

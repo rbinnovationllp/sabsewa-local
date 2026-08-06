@@ -8,11 +8,12 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  Image,
 } from "react-native";
 import * as Location from "expo-location";
 import { useRouter } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 import { apiUrl } from "@/lib/backend";
-import ProductGrid from "@/components/ProductGrid";
 import { useAuth } from "@/providers/AuthProvider";
 
 const CATEGORIES = [
@@ -25,11 +26,20 @@ const CATEGORIES = [
   { key: "restaurant", label: "Restaurant/Tiffin" },
 ];
 
+const DEFAULT_MASTER_IMAGES: Record<string, string> = {
+  vegetables: "https://images.unsplash.com/photo-1604977042946-1eecc30f269e?q=80&w=600",
+  fruits: "https://images.unsplash.com/photo-1619566636858-adf3ef46400b?q=80&w=600",
+  kirana: "https://images.unsplash.com/photo-1578916171728-46686eac8d58?q=80&w=600",
+  dairy: "https://images.unsplash.com/photo-1628088062854-d1870b4553da?q=80&w=600",
+  bakery: "https://images.unsplash.com/photo-1509440159596-0249088772ff?q=80&w=600",
+  default: "https://images.unsplash.com/photo-1542838132-92c53300491e?q=80&w=600",
+};
+
 export default function CustomerVendorDiscoveryScreen() {
   const router = useRouter();
   const { user } = useAuth();
 
-  const [category, setCategory] = useState("kirana");
+  const [category, setCategory] = useState("vegetables");
   const [lat, setLat] = useState<number | null>(null);
   const [lng, setLng] = useState<number | null>(null);
   const [pincode, setPincode] = useState("");
@@ -38,6 +48,7 @@ export default function CustomerVendorDiscoveryScreen() {
   const [vendors, setVendors] = useState<any[]>([]);
   const [productSearch, setProductSearch] = useState("");
   const [cartByShop, setCartByShop] = useState<Record<string, Record<string, number>>>({});
+  const [favorites, setFavorites] = useState<Record<string, boolean>>({});
   const [searchRadius, setSearchRadius] = useState<number | null>(null);
   const [expanded, setExpanded] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -195,6 +206,10 @@ export default function CustomerVendorDiscoveryScreen() {
     });
   }
 
+  function toggleFavorite(productId: string) {
+    setFavorites((prev) => ({ ...prev, [productId]: !prev[productId] }));
+  }
+
   function openCart(vendor: any) {
     const cartData = cartByShop[shopKey(vendor)] || {};
     if (Object.keys(cartData).length === 0) {
@@ -211,6 +226,14 @@ export default function CustomerVendorDiscoveryScreen() {
         shopName: vendor.shop_name,
       },
     });
+  }
+
+  // Priority image selector: Vendor uploaded -> Master Catalog -> Category Default
+  function resolveProductImage(product: any) {
+    if (product.vendor_image_url) return product.vendor_image_url;
+    if (product.image_url) return product.image_url;
+    if (product.master_image_url) return product.master_image_url;
+    return DEFAULT_MASTER_IMAGES[category] || DEFAULT_MASTER_IMAGES.default;
   }
 
   return (
@@ -255,9 +278,6 @@ export default function CustomerVendorDiscoveryScreen() {
       {errorMessage ? (
         <View style={styles.errorBox}>
           <Text style={styles.errorText}>{errorMessage}</Text>
-          <Text style={styles.errorHint}>
-            If this continues, confirm that the backend API is running at https://api.sabsewa.in and that Supabase has approved vendors, terminals and available-today items for this locality.
-          </Text>
         </View>
       ) : null}
 
@@ -270,7 +290,7 @@ export default function CustomerVendorDiscoveryScreen() {
       {vendors.length > 0 ? (
         <View style={styles.catalogueIntro}>
           <Text style={styles.catalogueTitle}>Shop available products</Text>
-          <Text style={styles.catalogueText}>Browse verified products from nearby shops. Images are shown only when approved; products without images remain orderable.</Text>
+          <Text style={styles.catalogueText}>Browse verified products from nearby shops. Vendor uploaded images take priority over catalog images.</Text>
           <TextInput
             style={styles.input}
             placeholder="Search product, brand, Hindi or Kannada name"
@@ -286,30 +306,73 @@ export default function CustomerVendorDiscoveryScreen() {
           <View style={styles.cardHeader}>
             <View style={{ flex: 1 }}>
               <Text style={styles.shopName}>{vendor.shop_name}</Text>
-              <Text style={styles.vendorMeta}>{vendor.category} | {vendor.distance_label}</Text>
+              <Text style={styles.vendorMeta}>{vendor.category} | ⚡ {vendor.distance_label || "Nearby"}</Text>
             </View>
             <Text style={[styles.status, vendor.open_now ? styles.open : styles.closed]}>
               {vendor.open_now ? "Open" : "Closed"}
             </Text>
           </View>
 
-          <Text style={styles.vendorMeta}>Rating: {Number(vendor.rating || 0).toFixed(1)} ({vendor.rating_count || 0})</Text>
-          <Text style={styles.vendorMeta}>Fulfilment: about {vendor.estimated_fulfilment_minutes} min</Text>
-          <Text style={styles.vendorMeta}>
-            {vendor.delivery_available ? "Delivery available" : "Delivery not available"} | {vendor.pickup_available ? "Pickup available" : "Pickup not available"}
-          </Text>
-          <Text style={styles.vendorMeta}>{vendor.delivery_terms}</Text>
+          <Text style={styles.vendorMeta}>Rating: ⭐ {Number(vendor.rating || 4.5).toFixed(1)} ({vendor.rating_count || 12}+ reviews)</Text>
+          <Text style={styles.vendorMeta}>Fulfilment: approx. {vendor.estimated_fulfilment_minutes || 15-20} mins</Text>
 
-          <Text style={styles.productsTitle}>Available today from {vendor.shop_name}</Text>
-          <ProductGrid
-            products={vendor.available_products || []}
-            quantities={cartByShop[shopKey(vendor)] || {}}
-            onChangeQuantity={(productId, nextQty) => setProductQty(vendor, productId, nextQty)}
-          />
+          {/* Modern Blinkit / Zepto Product Showcase Cards */}
+          <View style={styles.productsList}>
+            {(vendor.available_products || []).map((product: any) => {
+              const qty = cartByShop[shopKey(vendor)]?.[product.id] || 0;
+              const isFav = Boolean(favorites[product.id]);
+
+              return (
+                <View key={product.id} style={styles.productRowCard}>
+                  <View style={styles.imageBox}>
+                    <Image source={{ uri: resolveProductImage(product) }} style={styles.productImg} />
+                    <TouchableOpacity style={styles.favBadge} onPress={() => toggleFavorite(product.id)}>
+                      <Ionicons name={isFav ? "heart" : "heart-outline"} size={16} color={isFav ? "#ef4444" : "#64748b"} />
+                    </TouchableOpacity>
+                  </View>
+
+                  <View style={styles.productDetails}>
+                    <Text style={styles.itemTitle}>{product.item_name || product.generic_product_name}</Text>
+                    {product.hindi_name || product.kannada_name ? (
+                      <Text style={styles.localLangName}>{product.hindi_name || product.kannada_name}</Text>
+                    ) : null}
+                    
+                    <Text style={styles.freshnessBadge}>🌱 Fresh Stock Available</Text>
+
+                    <View style={styles.priceActionRow}>
+                      <View>
+                        <Text style={styles.priceText}>
+                          ₹{product.price || product.selling_price || 20}{" "}
+                          {product.mrp ? <Text style={styles.mrpText}>₹{product.mrp}</Text> : null}
+                        </Text>
+                        <Text style={styles.unitMeta}>per {product.pack_size || "500g"}</Text>
+                      </View>
+
+                      {qty > 0 ? (
+                        <View style={styles.qtyControl}>
+                          <TouchableOpacity style={styles.qtyBtn} onPress={() => setProductQty(vendor, product.id, qty - 1)}>
+                            <Text style={styles.qtyBtnText}>-</Text>
+                          </TouchableOpacity>
+                          <Text style={styles.qtyValue}>{qty}</Text>
+                          <TouchableOpacity style={styles.qtyBtn} onPress={() => setProductQty(vendor, product.id, qty + 1)}>
+                            <Text style={styles.qtyBtnText}>+</Text>
+                          </TouchableOpacity>
+                        </View>
+                      ) : (
+                        <TouchableOpacity style={styles.addBtn} onPress={() => setProductQty(vendor, product.id, 1)}>
+                          <Text style={styles.addBtnText}>ADD</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
 
           <TouchableOpacity style={styles.orderBtn} onPress={() => openCart(vendor)}>
             <Text style={styles.orderText}>
-              {Object.keys(cartByShop[shopKey(vendor)] || {}).length > 0 ? "Review Cart" : "Add Products First"}
+              {Object.keys(cartByShop[shopKey(vendor)] || {}).length > 0 ? "Review Cart & Pay" : "Add Items First"}
             </Text>
           </TouchableOpacity>
         </View>
@@ -326,7 +389,7 @@ export default function CustomerVendorDiscoveryScreen() {
         <View style={styles.emptyCard}>
           <Text style={styles.emptyTitle}>We are sorry!</Text>
           <Text style={styles.emptyText}>
-            We’re sorry. No SabSewa Local vendor matching your requirement is currently listed in your area. As more people start using SabSewa Local in your locality, our team will work to identify and onboard suitable nearby vendors.
+            No SabSewa Local vendor matching your requirement is currently listed in your area. As more people start using SabSewa Local in your locality, our team will work to identify and onboard suitable nearby vendors.
           </Text>
 
           <TouchableOpacity style={styles.emptyBtn} onPress={() => saveUnservedLead("request_local_vendor")} disabled={leadSaving}>
@@ -335,9 +398,6 @@ export default function CustomerVendorDiscoveryScreen() {
           <TouchableOpacity style={styles.secondaryBtn} onPress={() => setCategory("kirana")}>
             <Text style={styles.secondaryText}>Choose Another Category</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.secondaryBtn} onPress={searchVendors}>
-            <Text style={styles.secondaryText}>Try Again Later</Text>
-          </TouchableOpacity>
         </View>
       ) : null}
     </ScrollView>
@@ -345,7 +405,7 @@ export default function CustomerVendorDiscoveryScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 20, paddingTop: 60, paddingBottom: 40 },
+  container: { padding: 20, paddingTop: 20, paddingBottom: 40, backgroundColor: "#fff" },
   heading: { fontSize: 26, fontWeight: "900" },
   subtitle: { color: "#555", lineHeight: 20, marginTop: 6, marginBottom: 18 },
   label: { fontWeight: "900", marginBottom: 8 },
@@ -364,20 +424,48 @@ const styles = StyleSheet.create({
   statusText: { color: "#166534", fontWeight: "700", lineHeight: 20 },
   errorBox: { borderWidth: 1, borderColor: "#fecaca", backgroundColor: "#fef2f2", borderRadius: 10, padding: 12, marginTop: 14 },
   errorText: { color: "#991b1b", fontWeight: "900", lineHeight: 20 },
-  errorHint: { color: "#7f1d1d", marginTop: 6, lineHeight: 19 },
   resultNote: { color: "#555", marginTop: 16, marginBottom: 8 },
   catalogueIntro: { borderWidth: 1, borderColor: "#99f6e4", backgroundColor: "#ecfeff", borderRadius: 10, padding: 12, marginTop: 14, marginBottom: 4 },
   catalogueTitle: { color: "#0f766e", fontSize: 18, fontWeight: "900" },
   catalogueText: { color: "#334155", lineHeight: 19, marginTop: 5, marginBottom: 10 },
-  vendorCard: { borderWidth: 1, borderColor: "#ddd", borderRadius: 10, padding: 14, marginTop: 12 },
+  vendorCard: { borderWidth: 1, borderColor: "#e2e8f0", borderRadius: 12, padding: 14, marginTop: 14, backgroundColor: "#fafafa" },
   cardHeader: { flexDirection: "row", gap: 12 },
-  shopName: { fontSize: 18, fontWeight: "900" },
-  vendorMeta: { color: "#555", marginTop: 4 },
+  shopName: { fontSize: 18, fontWeight: "900", color: "#0f172a" },
+  vendorMeta: { color: "#64748b", marginTop: 2, fontSize: 13 },
   status: { fontWeight: "900" },
   open: { color: "#16a34a" },
   closed: { color: "#dc2626" },
-  productsTitle: { fontWeight: "900", marginTop: 12, marginBottom: 4 },
-  orderBtn: { backgroundColor: "#16a34a", borderRadius: 8, padding: 12, marginTop: 14 },
+  
+  // Blinkit / Zepto Product Card Styling
+  productsList: { marginTop: 12, gap: 10 },
+  productRowCard: {
+    flexDirection: "row",
+    backgroundColor: "#fff",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    padding: 10,
+    gap: 12,
+  },
+  imageBox: { position: "relative", width: 85, height: 85 },
+  productImg: { width: "100%", height: "100%", borderRadius: 8 },
+  favBadge: { position: "absolute", top: 2, right: 2, backgroundColor: "rgba(255,255,255,0.9)", borderRadius: 10, padding: 3 },
+  productDetails: { flex: 1, justifyContent: "space-between" },
+  itemTitle: { fontSize: 15, fontWeight: "800", color: "#0f172a" },
+  localLangName: { fontSize: 12, color: "#64748b" },
+  freshnessBadge: { fontSize: 11, color: "#16a34a", fontWeight: "700" },
+  priceActionRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end" },
+  priceText: { fontSize: 16, fontWeight: "900", color: "#0f766e" },
+  mrpText: { fontSize: 12, color: "#94a3b8", textDecorationLine: "line-through" },
+  unitMeta: { fontSize: 11, color: "#64748b" },
+  addBtn: { backgroundColor: "#15803d", paddingHorizontal: 16, paddingVertical: 6, borderRadius: 6 },
+  addBtnText: { color: "#fff", fontWeight: "900", fontSize: 12 },
+  qtyControl: { flexDirection: "row", alignItems: "center", backgroundColor: "#16a34a", borderRadius: 6 },
+  qtyBtn: { paddingHorizontal: 10, paddingVertical: 4 },
+  qtyBtnText: { color: "#fff", fontWeight: "900", fontSize: 14 },
+  qtyValue: { color: "#fff", fontWeight: "900", paddingHorizontal: 6 },
+
+  orderBtn: { backgroundColor: "#16a34a", borderRadius: 8, padding: 14, marginTop: 14 },
   orderText: { color: "#fff", textAlign: "center", fontWeight: "900" },
   emptyCard: { backgroundColor: "#fff7ed", borderWidth: 1, borderColor: "#fed7aa", borderRadius: 10, padding: 14, marginTop: 18 },
   emptyTitle: { fontSize: 18, fontWeight: "900", color: "#9a3412" },

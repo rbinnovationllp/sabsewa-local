@@ -1,4 +1,5 @@
 import * as SecureStore from "expo-secure-store";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { Platform } from "react-native";
 import {
@@ -42,10 +43,16 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
 
   async function restoreLanguage() {
     try {
-      const saved =
-        Platform.OS === "web"
-          ? globalThis.localStorage?.getItem(STORAGE_KEY)
-          : await SecureStore.getItemAsync(STORAGE_KEY);
+      let saved: string | null = null;
+      if (Platform.OS === "web") {
+        saved = globalThis.localStorage?.getItem(STORAGE_KEY) || null;
+      } else {
+        saved = await SecureStore.getItemAsync(STORAGE_KEY);
+        if (!saved) {
+          saved = await AsyncStorage.getItem(STORAGE_KEY);
+        }
+      }
+
       if (saved && FUNCTIONAL_LANGUAGES.includes(saved as SabSewaLanguageCode)) {
         setLanguageState(saved as SabSewaLanguageCode);
       }
@@ -54,14 +61,20 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  function persistLanguage(nextLanguage: SabSewaLanguageCode) {
+  async function persistLanguage(nextLanguage: SabSewaLanguageCode) {
     if (!FUNCTIONAL_LANGUAGES.includes(nextLanguage)) return;
     setLanguageState(nextLanguage);
-    if (Platform.OS === "web") {
-      globalThis.localStorage?.setItem(STORAGE_KEY, nextLanguage);
-      return;
+
+    try {
+      if (Platform.OS === "web") {
+        globalThis.localStorage?.setItem(STORAGE_KEY, nextLanguage);
+        return;
+      }
+      await SecureStore.setItemAsync(STORAGE_KEY, nextLanguage);
+      await AsyncStorage.setItem(STORAGE_KEY, nextLanguage);
+    } catch (e) {
+      console.warn("Could not save language choice", e);
     }
-    SecureStore.setItemAsync(STORAGE_KEY, nextLanguage).catch(() => {});
   }
 
   const value = useMemo(

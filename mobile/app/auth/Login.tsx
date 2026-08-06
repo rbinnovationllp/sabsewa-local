@@ -1,5 +1,4 @@
-﻿// app/auth/login.tsx
-import React, { useState } from "react";
+﻿import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -10,6 +9,7 @@ import {
   Alert,
   Platform,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { loadPendingRegistrationDraft, clearPendingRegistrationDraft } from "@/lib/pendingRegistration";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useAuth } from "@/providers/AuthProvider";
@@ -38,12 +38,13 @@ export default function LoginScreen() {
 
   const [phone, setPhone] = useState(params.phone ? String(params.phone) : "");
   const [email, setEmail] = useState(params.email ? String(params.email) : "");
-  
+  const [savedPhone, setSavedPhone] = useState<string | null>(null);
+
   const initialMethod = String(params.method || (params.email ? "email_otp" : "phone"));
   const [method, setMethod] = useState<"phone" | "email_otp">(
     initialMethod === "email_otp" && EMAIL_OTP_ENABLED ? "email_otp" : "phone"
   );
-  
+
   const [otpSent, setOtpSent] = useState(params.otpSent === "1" || params.registering === "1");
   const [token, setToken] = useState("");
   const [trustDevice, setTrustDevice] = useState(true);
@@ -51,6 +52,22 @@ export default function LoginScreen() {
 
   const [submitLoading, setSubmitLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Load remembered registered phone number on component load
+  useEffect(() => {
+    async function loadStoredPhone() {
+      try {
+        const stored = await AsyncStorage.getItem("registered_vendor_phone");
+        if (stored && !phone) {
+          setSavedPhone(stored);
+          setPhone(stored);
+        }
+      } catch (e) {
+        console.warn("Error reading stored vendor phone", e);
+      }
+    }
+    loadStoredPhone();
+  }, []);
 
   function isRegistrationSaveError(err: any) {
     const message = String(err?.message || err || "").toLowerCase();
@@ -68,7 +85,6 @@ export default function LoginScreen() {
     ].some((needle) => message.includes(needle));
   }
 
-  // Safe navigation helper for Web and Mobile
   const navigateTo = (path: string) => {
     try {
       router.replace(path as any);
@@ -79,7 +95,6 @@ export default function LoginScreen() {
     }
   };
 
-  // 1. SEND OTP
   async function handleSendOTP() {
     setError(null);
     setTechnicalError(null);
@@ -113,6 +128,9 @@ export default function LoginScreen() {
       const { error } = await signInWithOtp(normalizedPhone);
       if (error) throw error;
 
+      // Save phone number locally for future sessions
+      await AsyncStorage.setItem("registered_vendor_phone", normalizedPhone);
+
       setPhone(normalizedPhone);
       setOtpSent(true);
     } catch (err: any) {
@@ -133,7 +151,6 @@ export default function LoginScreen() {
     }
   }
 
-  // 2. VERIFY OTP + ROUTE USER
   async function handleVerifyOTP() {
     setError(null);
     setTechnicalError(null);
@@ -141,8 +158,6 @@ export default function LoginScreen() {
 
     try {
       const normalizedEmail = String(email || "").trim().toLowerCase();
-      
-      // Clean raw phone to avoid duplicate country code addition during verification
       const rawPhone = String(phone || "").trim();
       const normalizedPhone = method === "email_otp" ? "" : normalizeIndianPhone(rawPhone);
 
@@ -162,8 +177,7 @@ export default function LoginScreen() {
 
       const user = data.user;
       const metadata = user?.user_metadata || {};
-      
-      // Attempt lookup by normalizedPhone, raw phone, and without '+' prefix
+
       const registrationKey = method === "email_otp" ? normalizedEmail : normalizedPhone;
       const altKey1 = normalizedPhone.startsWith("+") ? normalizedPhone.replace("+", "") : "+" + normalizedPhone;
       const altKey2 = rawPhone;
@@ -189,7 +203,6 @@ export default function LoginScreen() {
         clearPendingRegistrationDraft(altKey2);
       }
 
-      // Fetch Profile to get role
       const res = await fetch(
         `${process.env.EXPO_PUBLIC_SUPABASE_URL}/rest/v1/user_profiles?user_id=eq.${data.user?.id}`,
         {
@@ -224,7 +237,6 @@ export default function LoginScreen() {
         }
       }
 
-      // Direct navigation handling across Web and Native
       if (params.registering === "1" && role === "customer") {
         if (Platform.OS === "web") {
           navigateTo("/customer/discover");
@@ -247,7 +259,6 @@ export default function LoginScreen() {
         return;
       }
 
-      // Redirect user based on role
       navigateTo(routeUser(role));
     } catch (err: any) {
       const diagnosticId = makeDiagnosticId();
@@ -259,6 +270,13 @@ export default function LoginScreen() {
     }
   }
 
+  function handleUseAnotherAccount() {
+    setSavedPhone(null);
+    setPhone("");
+    setEmail("");
+    setOtpSent(false);
+  }
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>{t("auth.loginTitle")}</Text>
@@ -268,73 +286,92 @@ export default function LoginScreen() {
 
       {!otpSent ? (
         <>
-          <View style={styles.modeRow}>
-            <TouchableOpacity
-              style={[styles.modeChip, method === "email_otp" && styles.modeChipSelected, !EMAIL_OTP_ENABLED && styles.modeChipDisabled]}
-              onPress={() => {
-                if (!EMAIL_OTP_ENABLED) {
-                  setError(t("auth.emailOtpUnavailable"));
-                  return;
-                }
-                setMethod("email_otp");
-                setError(null);
-              }}
-            >
-              <Text style={[styles.modeText, method === "email_otp" && styles.modeTextSelected]}>
-                {EMAIL_OTP_ENABLED ? t("auth.methodEmailOtp") : t("auth.methodEmailOtpUnavailable")}
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.modeChip, method === "phone" && styles.modeChipSelected, !PHONE_AUTH_ENABLED && styles.modeChipDisabled]}
-              onPress={() => {
-                if (!PHONE_AUTH_ENABLED) {
-                  setError(t("auth.phoneRegistrationUnavailable"));
-                  return;
-                }
-                setMethod("phone");
-                setError(null);
-              }}
-            >
-              <Text style={[styles.modeText, method === "phone" && styles.modeTextSelected]}>{t("auth.methodPhone")}</Text>
-            </TouchableOpacity>
-          </View>
-
-          {method === "email_otp" ? (
-            <>
-              <Text style={styles.label}>{t("auth.emailAddress")}</Text>
-              <TextInput
-                style={styles.input}
-                placeholder={t("auth.enterEmail")}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                value={email}
-                onChangeText={setEmail}
-              />
-            </>
+          {savedPhone ? (
+            <View style={styles.savedAccountBox}>
+              <Text style={styles.savedAccountTitle}>Registered Account Found</Text>
+              <Text style={styles.savedPhoneText}>{maskPhone(savedPhone)}</Text>
+              <TouchableOpacity style={styles.button} onPress={handleSendOTP} disabled={submitLoading}>
+                {submitLoading ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.buttonText}>Send OTP to {maskPhone(savedPhone)}</Text>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.switchAccountBtn} onPress={handleUseAnotherAccount}>
+                <Text style={styles.switchAccountText}>Use another number / account</Text>
+              </TouchableOpacity>
+            </View>
           ) : (
             <>
-              <Text style={styles.label}>{t("auth.phoneNumber")}</Text>
-              <TextInput
-                style={styles.input}
-                placeholder={t("auth.enterMobile")}
-                keyboardType="phone-pad"
-                value={phone}
-                onChangeText={setPhone}
-              />
+              <View style={styles.modeRow}>
+                <TouchableOpacity
+                  style={[styles.modeChip, method === "email_otp" && styles.modeChipSelected, !EMAIL_OTP_ENABLED && styles.modeChipDisabled]}
+                  onPress={() => {
+                    if (!EMAIL_OTP_ENABLED) {
+                      setError(t("auth.emailOtpUnavailable"));
+                      return;
+                    }
+                    setMethod("email_otp");
+                    setError(null);
+                  }}
+                >
+                  <Text style={[styles.modeText, method === "email_otp" && styles.modeTextSelected]}>
+                    {EMAIL_OTP_ENABLED ? t("auth.methodEmailOtp") : t("auth.methodEmailOtpUnavailable")}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modeChip, method === "phone" && styles.modeChipSelected, !PHONE_AUTH_ENABLED && styles.modeChipDisabled]}
+                  onPress={() => {
+                    if (!PHONE_AUTH_ENABLED) {
+                      setError(t("auth.phoneRegistrationUnavailable"));
+                      return;
+                    }
+                    setMethod("phone");
+                    setError(null);
+                  }}
+                >
+                  <Text style={[styles.modeText, method === "phone" && styles.modeTextSelected]}>{t("auth.methodPhone")}</Text>
+                </TouchableOpacity>
+              </View>
+
+              {method === "email_otp" ? (
+                <>
+                  <Text style={styles.label}>{t("auth.emailAddress")}</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder={t("auth.enterEmail")}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    value={email}
+                    onChangeText={setEmail}
+                  />
+                </>
+              ) : (
+                <>
+                  <Text style={styles.label}>{t("auth.phoneNumber")}</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder={t("auth.enterMobile")}
+                    keyboardType="phone-pad"
+                    value={phone}
+                    onChangeText={setPhone}
+                  />
+                </>
+              )}
+
+              <TouchableOpacity
+                style={styles.button}
+                onPress={handleSendOTP}
+                disabled={submitLoading}
+              >
+                {submitLoading ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.buttonText}>{method === "email_otp" ? t("auth.sendEmailOtp") : t("auth.sendOtp")}</Text>
+                )}
+              </TouchableOpacity>
             </>
           )}
-
-          <TouchableOpacity
-            style={styles.button}
-            onPress={handleSendOTP}
-            disabled={submitLoading}
-          >
-            {submitLoading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.buttonText}>{method === "email_otp" ? t("auth.sendEmailOtp") : t("auth.sendOtp")}</Text>
-            )}
-          </TouchableOpacity>
         </>
       ) : (
         <>
@@ -361,11 +398,6 @@ export default function LoginScreen() {
               <Text style={styles.trustText}>{t("auth.trustDeviceText")}</Text>
             </View>
           </TouchableOpacity>
-          {!PHONE_AUTH_ENABLED ? (
-            <TouchableOpacity style={styles.resendBtn} onPress={() => router.push({ pathname: "/auth/Register", params: { role: params.role || "customer", method: EMAIL_OTP_ENABLED ? "email_otp" : "email_password" } } as any)}>
-              <Text style={styles.resendText}>{t("auth.registerWithEmail")}</Text>
-            </TouchableOpacity>
-          ) : null}
 
           <TouchableOpacity
             style={styles.button}
@@ -388,9 +420,6 @@ export default function LoginScreen() {
           <TouchableOpacity style={styles.resendBtn} onPress={() => { setOtpSent(false); setToken(""); }}>
             <Text style={styles.resendText}>{t("auth.changeMobile")}</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.resendBtn} onPress={() => router.push({ pathname: "/auth/Register", params: { role: params.role || "customer", method: EMAIL_OTP_ENABLED ? "email_otp" : "email_password" } } as any)}>
-            <Text style={styles.resendText}>{t("auth.registerWithEmail")}</Text>
-          </TouchableOpacity>
         </>
       )}
 
@@ -403,8 +432,6 @@ export default function LoginScreen() {
     </View>
   );
 }
-
-/* ---------------------------- STYLES ---------------------------- */
 
 const styles = StyleSheet.create({
   container: {
@@ -455,6 +482,18 @@ const styles = StyleSheet.create({
     color: "#1e88e5",
     fontWeight: "800",
   },
+  savedAccountBox: {
+    borderWidth: 1,
+    borderColor: "#bbf7d0",
+    backgroundColor: "#f0fdf4",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+  },
+  savedAccountTitle: { fontSize: 14, fontWeight: "800", color: "#166534" },
+  savedPhoneText: { fontSize: 20, fontWeight: "900", color: "#0f766e", marginVertical: 8 },
+  switchAccountBtn: { marginTop: 12, alignItems: "center" },
+  switchAccountText: { color: "#1e88e5", fontWeight: "700", fontSize: 13 },
   modeRow: { flexDirection: "row", gap: 8, marginBottom: 12 },
   modeChip: { flex: 1, borderWidth: 1, borderColor: "#cbd5e1", borderRadius: 10, padding: 10, alignItems: "center" },
   modeChipSelected: { backgroundColor: "#1e88e5", borderColor: "#1e88e5" },

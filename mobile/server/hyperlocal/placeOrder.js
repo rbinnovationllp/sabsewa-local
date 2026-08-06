@@ -1,6 +1,7 @@
 import express from "express";
 import { supabase } from "../connection.js";
 import { assertVendorCanReceiveOrders } from "../securityWallet/securityWalletService.js";
+import { assertVendorCanReceiveOrdersByStatus } from "../vendor/onboardingPolicyService.js";
 import {
   assertCreditOrderAllowed,
   recordCreditPurchase,
@@ -62,19 +63,7 @@ router.post("/place", async (req, res) => {
       });
     }
 
-    if (vendor.status !== "approved") {
-      return res.status(409).json({
-        success: false,
-        message: "This shop is not verified or active for customer orders.",
-      });
-    }
-
-    if (vendor.verification_status && !["approved", "verified"].includes(String(vendor.verification_status))) {
-      return res.status(409).json({
-        success: false,
-        message: "This shop has not completed business verification.",
-      });
-    }
+    await assertVendorCanReceiveOrdersByStatus(vendor_id);
 
     await assertVendorCanReceiveOrders(vendor_id);
 

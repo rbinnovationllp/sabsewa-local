@@ -12,10 +12,13 @@ Deno.serve(async (request) => {
 
     return proxyJsonToBackend(
       request,
-      `/api/vendor/security-wallet/${encodeURIComponent(vendorId)}/topup-order`,
+      `/api/vendor/billing/${encodeURIComponent(vendorId)}/platform-order`,
       {
         ...body,
-        payment_scope: "platform_payment_vendor_to_sabsewa",
+        charge_type: body.charge_type || body.chargeType || body.billing_charge_type || "onboarding",
+        reference_id: body.reference_id || body.referenceId || null,
+        billing_cycle: body.billing_cycle || body.billingCycle || "monthly",
+        payment_scope: "vendor_to_sabsewa_platform_payment",
         customer_order_payment: false,
       },
     );
@@ -24,4 +27,3 @@ Deno.serve(async (request) => {
     return jsonResponse({ success: false, error: error instanceof Error ? error.message : String(error) }, 500);
   }
 });
-

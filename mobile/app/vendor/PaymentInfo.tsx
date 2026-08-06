@@ -4,7 +4,7 @@ import * as ImagePicker from "expo-image-picker";
 import { useLocalSearchParams } from "expo-router";
 import { useAuth } from "@/providers/AuthProvider";
 import { apiUrl } from "@/lib/backend";
-import { optimizeProductImage, validatePickedProductImage } from "@/lib/imageUploadPolicy";
+import { optimizeQrImage, validatePickedProductImage } from "@/lib/imageUploadPolicy";
 
 const METHOD_OPTIONS = [
   { key: "vendor_qr", label: "UPI QR" },
@@ -76,7 +76,7 @@ export default function VendorPaymentInfoScreen() {
 
   async function uploadQrIfSelected() {
     if (!qrAsset) return null;
-    const optimized = await optimizeProductImage(qrAsset);
+    const optimized = await optimizeQrImage(qrAsset);
     const fileName = qrAsset.fileName || qrAsset.uri.split("/").pop() || `payment-qr-${Date.now()}.jpg`;
     const contentType = optimized.contentType || qrAsset.mimeType || "image/jpeg";
 

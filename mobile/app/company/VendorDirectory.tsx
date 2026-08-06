@@ -8,10 +8,12 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { apiUrl } from "@/lib/backend";
+import { authenticatedFetch } from "@/lib/backend";
 import BrandHeader from "@/components/BrandHeader";
+import { useAuth } from "@/providers/AuthProvider";
 
 export default function CompanyVendorDirectoryScreen() {
+  const { user } = useAuth();
   const [search, setSearch] = useState("");
   const [vendors, setVendors] = useState<any[]>([]);
 
@@ -19,7 +21,7 @@ export default function CompanyVendorDirectoryScreen() {
     const query = new URLSearchParams();
     if (search.trim()) query.set("search", search.trim());
 
-    const response = await fetch(apiUrl(`/api/company/vendors?${query.toString()}`));
+    const response = await authenticatedFetch(`/api/company/vendors?${query.toString()}`);
     const json = await response.json();
 
     if (!response.ok || !json.success) {
@@ -28,6 +30,34 @@ export default function CompanyVendorDirectoryScreen() {
     }
 
     setVendors(json.vendors || []);
+  }
+
+  async function updateKyc(vendorId: string, status: string) {
+    const response = await authenticatedFetch(`/api/vendor/onboarding/${vendorId}/kyc-status`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status, actor_user_id: user?.id || null, reason: "Company CRM verification update" }),
+    });
+    const json = await response.json();
+    if (!response.ok || !json.success) {
+      Alert.alert("KYC update failed", json.error || "Unable to update KYC.");
+      return;
+    }
+    await searchVendors();
+  }
+
+  async function activateVendor(vendorId: string) {
+    const response = await authenticatedFetch(`/api/vendor/onboarding/${vendorId}/activate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ actor_user_id: user?.id || null, reason: "Company CRM final activation" }),
+    });
+    const json = await response.json();
+    if (!response.ok || !json.success) {
+      Alert.alert("Activation failed", json.error || "Unable to activate vendor.");
+      return;
+    }
+    await searchVendors();
   }
 
   return (
@@ -55,6 +85,18 @@ export default function CompanyVendorDirectoryScreen() {
           <Text style={styles.muted}>Owner: {vendor.owner_name || "N/A"}</Text>
           <Text style={styles.muted}>Phone: {vendor.phone || "N/A"}</Text>
           <Text style={styles.muted}>Location: {vendor.city_code || "UNK"}-{vendor.locality_code || "GEN"}</Text>
+          <Text style={styles.statusLine}>Lifecycle: {vendor.status || "registered"} | KYC: {vendor.kyc_status || "kyc_not_started"} | Payment: {vendor.onboarding_payment_status || "payment_pending"}</Text>
+          <View style={styles.actionRow}>
+            <TouchableOpacity style={styles.smallBtn} onPress={() => updateKyc(vendor.id, "kyc_under_review")}>
+              <Text style={styles.smallBtnText}>Review KYC</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.smallBtn} onPress={() => updateKyc(vendor.id, "kyc_verified")}>
+              <Text style={styles.smallBtnText}>Verify KYC</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.smallBtn, styles.activateBtn]} onPress={() => activateVendor(vendor.id)}>
+              <Text style={styles.smallBtnText}>Activate</Text>
+            </TouchableOpacity>
+          </View>
           {(vendor.terminals || []).map((terminal: any) => (
             <View key={terminal.id} style={styles.terminalRow}>
               <Text style={styles.terminalName}>{terminal.terminal_name}</Text>
@@ -78,6 +120,11 @@ const styles = StyleSheet.create({
   cardTitle: { fontWeight: "900", fontSize: 16 },
   vendorCode: { marginTop: 4, fontWeight: "900", color: "#1166ff" },
   muted: { color: "#666", marginTop: 3 },
+  statusLine: { marginTop: 8, color: "#111827", fontWeight: "800" },
+  actionRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10 },
+  smallBtn: { backgroundColor: "#475569", borderRadius: 8, paddingVertical: 9, paddingHorizontal: 10 },
+  activateBtn: { backgroundColor: "#16a34a" },
+  smallBtnText: { color: "#fff", fontWeight: "900", fontSize: 12 },
   terminalRow: { marginTop: 10, borderTopWidth: 1, borderTopColor: "#eee", paddingTop: 8 },
   terminalName: { fontWeight: "800" },
 });

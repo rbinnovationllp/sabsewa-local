@@ -52,7 +52,9 @@ function vendorCard({ vendor, terminal, items, distanceM }) {
     category: vendor.category,
     distance_m: Math.round(distanceM),
     distance_label: distanceM < 1000 ? `${Math.round(distanceM)} m` : `${(distanceM / 1000).toFixed(1)} km`,
-    open_now: vendor.status === "approved" && terminal.status === "active" && terminal.is_open_today !== false,
+    open_now: vendor.status === "active" && terminal.status === "active" && terminal.is_open_today !== false,
+    verified_vendor: vendor.public_verification_badge === true,
+    verification_status: vendor.kyc_status || "kyc_not_started",
     operating_hours: terminal.operating_hours || {},
     delivery_available: terminal.delivery_available !== false && vendor.delivery_available !== false,
     pickup_available: terminal.pickup_available !== false && vendor.pickup_available !== false,
@@ -108,8 +110,10 @@ router.get("/vendors", async (req, res) => {
 
     const { data: vendors, error: vendorError } = await supabase
       .from("vendors")
-      .select("*")
-      .eq("status", "approved");
+      .select("id, public_vendor_id, shop_name, category, status, kyc_status, onboarding_payment_status, public_verification_badge, delivery_available, pickup_available, delivery_terms, rating, rating_count, estimated_fulfilment_minutes, max_service_radius_m, city_code, locality_code, address")
+      .eq("status", "active")
+      .eq("kyc_status", "kyc_verified")
+      .eq("onboarding_payment_status", "payment_completed");
 
     if (vendorError) throw vendorError;
 
@@ -123,7 +127,7 @@ router.get("/vendors", async (req, res) => {
     const [{ data: terminals, error: terminalError }, { data: items, error: itemError }] = await Promise.all([
       supabase
         .from("vendor_terminals")
-        .select("*")
+        .select("id, vendor_id, public_terminal_id, terminal_name, status, is_open_today, operating_hours, delivery_available, pickup_available, estimated_fulfilment_minutes, lat, lng, city, phone")
         .in("vendor_id", vendorIds)
         .eq("status", "active"),
       supabase
@@ -162,7 +166,7 @@ router.get("/vendors", async (req, res) => {
         const vendorMaxRadius = Math.min(Number(vendor.max_service_radius_m || MAX_RADIUS_M), MAX_RADIUS_M);
         if (distanceM > vendorMaxRadius) continue;
       } else if (pincode || locality) {
-        const cityText = String(terminal.city || vendor.city || "").toLowerCase();
+        const cityText = String(terminal.city || vendor.city_code || "").toLowerCase();
         const addressText = String(vendor.address || "").toLowerCase();
         const localityText = locality.toLowerCase();
         if (localityText && !cityText.includes(localityText) && !addressText.includes(localityText)) continue;

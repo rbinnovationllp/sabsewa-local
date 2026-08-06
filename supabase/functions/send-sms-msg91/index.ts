@@ -22,8 +22,16 @@ function getRequiredSecret(name: string) {
   return value;
 }
 
+function isEnabled(value: string | undefined) {
+  return ["1", "true", "yes", "on"].includes(String(value || "").trim().toLowerCase());
+}
+
 function validateHookRequest(request: Request) {
-  const expectedSecret = Deno.env.get("SUPABASE_SEND_SMS_HOOK_SECRET");
+  const expectedSecret =
+    Deno.env.get("SABSEWA_SEND_SMS_HOOK_SECRET") ||
+    Deno.env.get("SMS_HOOK_SECRET") ||
+    Deno.env.get("SUPABASE_SEND_SMS_HOOK_SECRET");
+
   if (!expectedSecret) return;
 
   const suppliedSecret =
@@ -70,6 +78,28 @@ Deno.serve(async (request) => {
         status: 400,
         headers: { "content-type": "application/json" },
       });
+    }
+
+    if (isEnabled(Deno.env.get("SABSEWA_OTP_TEST_MODE"))) {
+      const allowedPhones = String(Deno.env.get("SABSEWA_OTP_TEST_PHONES") || "")
+        .split(",")
+        .map((value) => value.trim())
+        .filter(Boolean);
+
+      if (allowedPhones.length > 0 && !allowedPhones.includes(phone)) {
+        return new Response(JSON.stringify({ error: "OTP test mode is restricted to configured test numbers" }), {
+          status: 400,
+          headers: { "content-type": "application/json" },
+        });
+      }
+
+      console.warn("SabSewa OTP TEST MODE: use this OTP only for development testing", {
+        phone: maskPhone(phone),
+        userId: event.user?.id || null,
+        otp,
+      });
+
+      return new Response(null, { status: 200 });
     }
 
     const authKey = getRequiredSecret("MSG91_AUTH_KEY");

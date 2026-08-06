@@ -36,12 +36,24 @@ export default function CompanyCrmHome() {
         <Text style={styles.buttonText}>Vendor Directory</Text>
       </TouchableOpacity>
 
+      <TouchableOpacity style={styles.button} onPress={() => router.push("/company/VendorFeeRules" as any)}>
+        <Text style={styles.buttonText}>Vendor Fee Rules</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity style={styles.button} onPress={() => router.push("/company/Billing" as any)}>
+        <Text style={styles.buttonText}>Billing Portal</Text>
+      </TouchableOpacity>
+
       <TouchableOpacity style={styles.button} onPress={() => router.push("/company/WalletDisputes" as any)}>
         <Text style={styles.buttonText}>Wallet Disputes</Text>
       </TouchableOpacity>
 
       <TouchableOpacity style={styles.button} onPress={() => router.push("/company/UnservedAreaLeads" as any)}>
         <Text style={styles.buttonText}>Unserved Area Leads</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity style={styles.button} onPress={() => router.push("/company/PartnerApplications" as any)}>
+        <Text style={styles.buttonText}>Partner Applications</Text>
       </TouchableOpacity>
 
       <TouchableOpacity style={styles.button} onPress={() => router.push("/company/DataRecovery" as any)}>

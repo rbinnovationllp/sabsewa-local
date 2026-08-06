@@ -3,6 +3,7 @@ import { supabase } from "../connection.js";
 import { genAI, geminiModel } from "../gemini/geminiClient.js";
 import { extractJsonObject } from "../gemini/json.js";
 import { writeGeminiAuditLog } from "../gemini/auditLog.js";
+import { assertVendorCanPublishProducts } from "../vendor/onboardingPolicyService.js";
 
 const router = express.Router();
 
@@ -110,6 +111,18 @@ async function validateVendorTerminal(vendorId, terminalId) {
     return { ok: false, status: 404, error: "Vendor profile was not found." };
   }
 
+  try {
+    await assertVendorCanPublishProducts(vendorId);
+  } catch (error) {
+    return {
+      ok: false,
+      status: error.statusCode || 403,
+      error: error.message,
+      onboarding_required: error.onboarding_required || true,
+      payment_summary: error.payment_summary || null,
+    };
+  }
+
   if (terminalId) {
     const { data: terminal, error: terminalError } = await supabase
       .from("vendor_terminals")
@@ -124,6 +137,15 @@ async function validateVendorTerminal(vendorId, terminalId) {
   }
 
   return { ok: true };
+}
+
+function validationErrorResponse(res, validation) {
+  return res.status(validation.status).json({
+    success: false,
+    error: validation.error,
+    onboarding_required: validation.onboarding_required || false,
+    payment_summary: validation.payment_summary || null,
+  });
 }
 
 router.get("/setup/master-products", async (req, res) => {
@@ -270,7 +292,7 @@ router.get("/setup/vendor-items", async (req, res) => {
     if (!vendorId) return res.status(400).json({ success: false, error: "Vendor ID is required." });
 
     const validation = await validateVendorTerminal(vendorId, terminalId);
-    if (!validation.ok) return res.status(validation.status).json({ success: false, error: validation.error });
+    if (!validation.ok) return validationErrorResponse(res, validation);
 
     let query = supabase
       .from("vendor_items")
@@ -304,7 +326,7 @@ router.post("/setup/add-master-products", async (req, res) => {
     }
 
     const validation = await validateVendorTerminal(vendorId, terminalId);
-    if (!validation.ok) return res.status(validation.status).json({ success: false, error: validation.error });
+    if (!validation.ok) return validationErrorResponse(res, validation);
 
     const uniqueIds = [...new Set(productIds.map(clean).filter(Boolean))].slice(0, 100);
     const { data: products, error: productError } = await supabase
@@ -499,7 +521,7 @@ router.post("/setup/submit-new-product", async (req, res) => {
     }
 
     const validation = await validateVendorTerminal(vendorId, terminalId);
-    if (!validation.ok) return res.status(validation.status).json({ success: false, error: validation.error });
+    if (!validation.ok) return validationErrorResponse(res, validation);
 
     const duplicateResponse = await fetchDuplicateCandidates({
       productName,

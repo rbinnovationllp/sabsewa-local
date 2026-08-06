@@ -655,6 +655,15 @@ router.post("/status", verifyVendor, async (req, res) => {
     }
   }
 
+  let platformCharge = null;
+  if (new_status === "completed") {
+    const { data: chargeData, error: chargeError } = await supabase.rpc("record_platform_order_charge", {
+      p_order_id: order_id,
+      p_actor_user_id: actor_user_id || null,
+    });
+    platformCharge = chargeError ? { error: chargeError.message } : chargeData;
+  }
+
   await writeOrderAuditLog({
     orderId: order_id,
     vendorId: req.order.vendor_id,
@@ -662,7 +671,7 @@ router.post("/status", verifyVendor, async (req, res) => {
     action: "vendor_order_status_change",
     fromStatus: req.order.status,
     toStatus: new_status,
-    metadata: { dispatch_notification: dispatchNotification },
+    metadata: { dispatch_notification: dispatchNotification, platform_charge: platformCharge },
     req,
   });
 
@@ -672,6 +681,7 @@ router.post("/status", verifyVendor, async (req, res) => {
     order: data,
     vendor_advance_wallet: null,
     dispatch_notification: dispatchNotification,
+    platform_charge: platformCharge,
   });
 });
 

@@ -1,5 +1,6 @@
 import express from "express";
 import { supabase } from "../connection.js";
+import { assertVendorCanReceiveOrdersByStatus } from "../vendor/onboardingPolicyService.js";
 
 const router = express.Router();
 
@@ -80,7 +81,7 @@ router.get("/categories", async (_req, res) => {
       })),
     });
   } catch (err) {
-    return res.status(500).json({ success: false, error: err.message });
+    return res.status(err.statusCode || 500).json({ success: false, error: err.message });
   }
 });
 
@@ -139,13 +140,15 @@ router.post("/missing-item-request", async (req, res) => {
 
     const { data: vendor, error: vendorError } = await supabase
       .from("vendors")
-      .select("id, status")
+      .select("id")
       .eq("id", vendor_id)
       .single();
 
-    if (vendorError || !vendor || vendor.status !== "approved") {
+    if (vendorError || !vendor) {
       return res.status(409).json({ success: false, error: "Selected shop is not available for item requests." });
     }
+
+    await assertVendorCanReceiveOrdersByStatus(vendor_id);
 
     if (terminal_id) {
       const { data: terminal, error: terminalError } = await supabase
@@ -182,7 +185,7 @@ router.post("/missing-item-request", async (req, res) => {
     if (error) throw error;
     return res.status(201).json({ success: true, request: data });
   } catch (err) {
-    return res.status(500).json({ success: false, error: err.message });
+    return res.status(err.statusCode || 500).json({ success: false, error: err.message });
   }
 });
 

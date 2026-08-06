@@ -1,9 +1,11 @@
 import express from "express";
 import { supabase } from "../connection.js";
+import { requireRole, requireUserJwt } from "../security/apiSecurity.js";
 
 const router = express.Router();
+const requireAdmin = [requireUserJwt(supabase), requireRole(["admin", "company_admin", "super_admin"])];
 
-router.get("/vendors", async (req, res) => {
+router.get("/vendors", ...requireAdmin, async (req, res) => {
   try {
     const search = String(req.query.search || "").trim();
     const cityCode = String(req.query.city_code || "").trim().toUpperCase();

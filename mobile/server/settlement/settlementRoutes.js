@@ -413,6 +413,12 @@ router.post("/orders/:order_id/settle", async (req, res) => {
       .single();
     if (updateError) throw updateError;
 
+    const { data: platformChargeData, error: platformChargeError } = await supabase.rpc("record_platform_order_charge", {
+      p_order_id: order.id,
+      p_actor_user_id: actor_user_id || null,
+    });
+    const platformCharge = platformChargeError ? { error: platformChargeError.message } : platformChargeData;
+
     await writeOrderAuditLog({
       orderId: order.id,
       vendorId: order.vendor_id,
@@ -421,11 +427,11 @@ router.post("/orders/:order_id/settle", async (req, res) => {
       action: "direct_vendor_payment_settled",
       fromStatus: order.status,
       toStatus: "completed",
-      metadata: { payment_method: method, receipt_number: receipt, customer_pii_redacted: true },
+      metadata: { payment_method: method, receipt_number: receipt, customer_pii_redacted: true, platform_charge: platformCharge },
       req,
     });
 
-    return res.json({ success: true, order: updated, receipt_number: receipt, settlement_status: "complete" });
+    return res.json({ success: true, order: updated, receipt_number: receipt, settlement_status: "complete", platform_charge: platformCharge });
   } catch (error) {
     return res.status(error.statusCode || 500).json({ success: false, error: error.message });
   }
@@ -449,7 +455,7 @@ router.get("/storage/admin/overview", async (_req, res) => {
 
 router.post("/storage/:vendor_id/purchase", async (req, res) => {
   try {
-    const { plan_id, payment_reference, payment_status = "paid" } = req.body;
+    const { plan_id, payment_reference, payment_status = "paid", actor_user_id } = req.body;
     const { data: plan, error: planError } = await supabase
       .from("vendor_storage_plans")
       .select("*")
@@ -458,8 +464,25 @@ router.post("/storage/:vendor_id/purchase", async (req, res) => {
       .single();
     if (planError || !plan) return res.status(404).json({ success: false, error: "Storage plan not found." });
     if (payment_status !== "paid") return res.status(402).json({ success: false, error: "Storage is activated only after successful payment." });
+    if (!payment_reference) return res.status(400).json({ success: false, error: "Verified payment reference is required before allocating storage." });
 
     const now = new Date().toISOString();
+    const { data: existingPurchase, error: existingError } = await supabase
+      .from("vendor_storage_purchases")
+      .select("*")
+      .eq("vendor_id", req.params.vendor_id)
+      .eq("payment_reference", payment_reference)
+      .maybeSingle();
+    if (existingError) throw existingError;
+    if (existingPurchase) {
+      return res.json({
+        success: true,
+        purchase: existingPurchase,
+        idempotent: true,
+        message: "This storage payment reference was already processed.",
+      });
+    }
+
     const { data: purchase, error: purchaseError } = await supabase
       .from("vendor_storage_purchases")
       .insert({
@@ -470,10 +493,26 @@ router.post("/storage/:vendor_id/purchase", async (req, res) => {
         payment_status: "paid",
         payment_reference: payment_reference || null,
         activated_at: now,
+        metadata: { actor_user_id: actor_user_id || null },
       })
       .select()
       .single();
     if (purchaseError) throw purchaseError;
+
+    await supabase.from("vendor_payments").insert({
+      vendor_id: req.params.vendor_id,
+      category_slug: null,
+      charge_type: "additional_storage_purchase",
+      base_amount: Number(plan.price_inr || 0),
+      tax_amount: 0,
+      total_amount: Number(plan.price_inr || 0),
+      gateway_reference: payment_reference,
+      payment_status: "paid",
+      payment_date: now,
+      refundable: false,
+      receipt_number: `STO-${now.slice(0, 10).replace(/-/g, "")}-${String(purchase.id).slice(0, 8).toUpperCase()}`,
+      metadata: { plan_id, quota_bytes: Number(plan.quota_bytes), purchase_id: purchase.id },
+    });
 
     const { data: usage } = await supabase.from("vendor_storage_usage").select("*").eq("vendor_id", req.params.vendor_id).maybeSingle();
     await supabase.from("vendor_storage_usage").upsert({

@@ -1,6 +1,6 @@
 ﻿import { useEffect, useState } from "react";
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { apiUrl } from "@/lib/backend";
 
 function mb(bytes: unknown) {
@@ -13,10 +13,10 @@ function formatLabel(key: string) {
 
 export default function VendorStorageUsageScreen() {
   const params: any = useLocalSearchParams();
+  const router = useRouter();
   const vendorId = params.vendor ? String(params.vendor) : "";
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<any>(null);
-  const [purchasing, setPurchasing] = useState<string | null>(null);
 
   useEffect(() => {
     loadUsage();
@@ -41,23 +41,8 @@ export default function VendorStorageUsageScreen() {
     }
   }
 
-  async function purchasePlan(planId: string) {
-    setPurchasing(planId);
-    try {
-      const response = await fetch(apiUrl(`/api/settlement/storage/${vendorId}/purchase`), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ plan_id: planId, payment_status: "paid", payment_reference: `manual-${Date.now()}` }),
-      });
-      const json = await response.json();
-      if (!response.ok || !json.success) throw new Error(json.error || "Storage purchase failed.");
-      Alert.alert("Storage upgraded", "Additional storage has been activated after successful payment.");
-      await loadUsage();
-    } catch (error) {
-      Alert.alert("Storage purchase", error instanceof Error ? error.message : "Unable to purchase storage.");
-    } finally {
-      setPurchasing(null);
-    }
+  function openBilling() {
+    router.push(`/vendor/Billing?vendor=${vendorId}` as any);
   }
 
   if (loading) {
@@ -105,10 +90,10 @@ export default function VendorStorageUsageScreen() {
 
       <Text style={styles.section}>Upgrade Plans</Text>
       {(data?.storage_plans || []).map((plan: any) => (
-        <TouchableOpacity key={plan.id} style={styles.planCard} onPress={() => purchasePlan(plan.id)} disabled={Boolean(purchasing)}>
+        <TouchableOpacity key={plan.id} style={styles.planCard} onPress={openBilling}>
           <Text style={styles.planTitle}>{plan.title}</Text>
-          <Text style={styles.muted}>Rs {Number(plan.price_inr || 0).toFixed(0)} through platform payment gateway</Text>
-          <Text style={styles.planAction}>{purchasing === plan.id ? "Processing..." : "Buy Storage"}</Text>
+          <Text style={styles.muted}>Rs {Number(plan.price_inr || 0).toFixed(0)} through Razorpay platform billing</Text>
+          <Text style={styles.planAction}>Open Billing</Text>
         </TouchableOpacity>
       ))}
 

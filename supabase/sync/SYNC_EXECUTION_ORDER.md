@@ -38,6 +38,11 @@ The generated full sync script adds safety guards before `CREATE POLICY` and `CR
 30. `202608050004_mrp_pricing_policy_for_bulk_catalogue.sql`
 31. `202608050005_vendor_delivery_policy_and_order_override.sql`
 32. `202608050006_legacy_route_compatibility_tables.sql`
+33. `202608050007_partner_program_applications.sql`
+34. `202608060001_vendor_onboarding_fee_lifecycle.sql`
+35. `202608060002_storage_purchase_idempotency.sql`
+36. `202608060003_vendor_platform_billing_subscriptions.sql`
+37. `202608060004_public_active_vendor_discovery.sql`
 
 ## Latest Feature Coverage Confirmed
 
@@ -47,6 +52,11 @@ The generated full sync script adds safety guards before `CREATE POLICY` and `CR
 - MRP policy pricing/triggers: `202608050004_mrp_pricing_policy_for_bulk_catalogue.sql`
 - Dynamic vendor delivery policy and per-order delivery charge override fields: `202608050005_vendor_delivery_policy_and_order_override.sql`
 - Legacy mounted route compatibility tables and Gemini audit constraint repair: `202608050006_legacy_route_compatibility_tables.sql`
+- Partner With Us applications, referred vendors and commission event records: `202608050007_partner_program_applications.sql`
+- Vendor onboarding lifecycle, KYC, category fee rules, onboarding payments and completed-order platform charges: `202608060001_vendor_onboarding_fee_lifecycle.sql`
+- Storage purchase payment-reference idempotency guard: `202608060002_storage_purchase_idempotency.sql`
+- Vendor platform billing, Razorpay payment attempts, subscriptions, invoices, promotions, refunds, coupons and audit logs: `202608060003_vendor_platform_billing_subscriptions.sql`
+- Public active vendor discovery grants and RLS policies: `202608060004_public_active_vendor_discovery.sql`
 
 ## Manual Pre-Run Backup
 

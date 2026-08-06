@@ -1,6 +1,6 @@
 -- SabSewa Local full Supabase database synchronization script
 -- Generated from supabase/migrations in chronological filename order.
--- Current coverage: project start through 2026-08-05 delivery policy / platform webhooks / catalogue / MRP / QR settlement / legacy route compatibility.
+-- Current coverage: project start through 2026-08-05 partner program / delivery policy / platform webhooks / catalogue / MRP / QR settlement / legacy route compatibility.
 -- Safe rerun intent: tables, columns, indexes, functions use IF EXISTS/IF NOT EXISTS where migrations provide it.
 -- This generated wrapper also drops existing policies/triggers before recreating them to support partially migrated databases.
 -- IMPORTANT: Back up production before running.
@@ -4610,4 +4610,1575 @@ comment on table public.delivery_boys is
 
 comment on table public.vendor_inventory is
   'Compatibility table for legacy /api/inventory routes. New vendor catalog setup should prefer vendor_items and master_product_catalog.';
+
+
+-- ============================================================================
+-- 202608050007_partner_program_applications.sql
+-- ============================================================================
+-- Partner Program applications and revenue-sharing workflow.
+
+create extension if not exists "pgcrypto";
+
+create table if not exists public.partner_applications (
+  id uuid primary key default gen_random_uuid(),
+  applicant_name text not null,
+  partner_type text not null check (partner_type in (
+    'Individual',
+    'Consultant',
+    'Organization',
+    'NGO',
+    'Educational Institution',
+    'Other Stakeholder'
+  )),
+  organization_name text,
+  phone text not null,
+  email text not null,
+  city text not null,
+  state text not null,
+  coverage_area text not null,
+  expected_vendor_reach integer check (expected_vendor_reach is null or expected_vendor_reach >= 0),
+  experience_summary text not null,
+  referral_source text,
+  status text not null default 'pending' check (status in ('pending', 'under_review', 'approved', 'rejected', 'suspended')),
+  revenue_share_percent numeric(5,2) not null default 10.00 check (revenue_share_percent = 10.00),
+  net_revenue_definition text not null default 'Revenue after GST, statutory taxes, payment gateway charges, refunds, chargebacks, discounts and other legally applicable deductions.',
+  terms_version text not null,
+  terms_accepted boolean not null default false,
+  terms_accepted_at timestamptz,
+  acceptance_summary text,
+  reviewed_by uuid,
+  reviewed_at timestamptz,
+  review_notes text,
+  approved_at timestamptz,
+  rejected_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.partner_referred_vendors (
+  id uuid primary key default gen_random_uuid(),
+  partner_application_id uuid not null references public.partner_applications(id) on delete cascade,
+  vendor_id uuid references public.vendors(id) on delete set null,
+  referral_status text not null default 'submitted' check (referral_status in ('submitted', 'verified', 'approved', 'rejected', 'commission_eligible')),
+  verified_by uuid,
+  verified_at timestamptz,
+  notes text,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.partner_commission_events (
+  id uuid primary key default gen_random_uuid(),
+  partner_application_id uuid not null references public.partner_applications(id) on delete cascade,
+  vendor_id uuid references public.vendors(id) on delete set null,
+  gross_revenue numeric(12,2) not null default 0,
+  gst_amount numeric(12,2) not null default 0,
+  statutory_deductions numeric(12,2) not null default 0,
+  payment_gateway_charges numeric(12,2) not null default 0,
+  refunds_and_chargebacks numeric(12,2) not null default 0,
+  other_legal_deductions numeric(12,2) not null default 0,
+  net_revenue numeric(12,2) generated always as (
+    greatest(0, gross_revenue - gst_amount - statutory_deductions - payment_gateway_charges - refunds_and_chargebacks - other_legal_deductions)
+  ) stored,
+  commission_percent numeric(5,2) not null default 10.00 check (commission_percent = 10.00),
+  commission_amount numeric(12,2) generated always as (
+    round((greatest(0, gross_revenue - gst_amount - statutory_deductions - payment_gateway_charges - refunds_and_chargebacks - other_legal_deductions) * commission_percent / 100.0), 2)
+  ) stored,
+  status text not null default 'calculated' check (status in ('calculated', 'approved', 'paid', 'withheld', 'cancelled')),
+  period_start date,
+  period_end date,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_partner_applications_status_created
+  on public.partner_applications(status, created_at desc);
+create index if not exists idx_partner_applications_email
+  on public.partner_applications(lower(email));
+create index if not exists idx_partner_referred_vendors_partner
+  on public.partner_referred_vendors(partner_application_id, referral_status);
+create index if not exists idx_partner_commission_events_partner
+  on public.partner_commission_events(partner_application_id, status, created_at desc);
+
+alter table public.partner_applications enable row level security;
+alter table public.partner_referred_vendors enable row level security;
+alter table public.partner_commission_events enable row level security;
+
+grant insert on public.partner_applications to anon, authenticated;
+grant select, update on public.partner_applications to authenticated;
+grant select, insert, update on public.partner_referred_vendors to authenticated;
+grant select, insert, update on public.partner_commission_events to authenticated;
+
+drop policy if exists "Anyone can submit partner applications" on public.partner_applications;
+drop policy if exists "Anyone can submit partner applications" on public.partner_applications;
+create policy "Anyone can submit partner applications"
+  on public.partner_applications
+  for insert
+  to anon, authenticated
+  with check (
+    terms_accepted = true
+    and revenue_share_percent = 10.00
+    and applicant_name is not null
+    and phone is not null
+    and email is not null
+  );
+
+drop policy if exists "Company admins manage partner applications" on public.partner_applications;
+drop policy if exists "Company admins manage partner applications" on public.partner_applications;
+create policy "Company admins manage partner applications"
+  on public.partner_applications
+  for all
+  to authenticated
+  using (public.is_company_admin())
+  with check (public.is_company_admin());
+
+drop policy if exists "Company admins manage partner referred vendors" on public.partner_referred_vendors;
+drop policy if exists "Company admins manage partner referred vendors" on public.partner_referred_vendors;
+create policy "Company admins manage partner referred vendors"
+  on public.partner_referred_vendors
+  for all
+  to authenticated
+  using (public.is_company_admin())
+  with check (public.is_company_admin());
+
+drop policy if exists "Company admins manage partner commission events" on public.partner_commission_events;
+drop policy if exists "Company admins manage partner commission events" on public.partner_commission_events;
+create policy "Company admins manage partner commission events"
+  on public.partner_commission_events
+  for all
+  to authenticated
+  using (public.is_company_admin())
+  with check (public.is_company_admin());
+
+comment on table public.partner_applications is
+  'Public partner applications for individuals, organizations, consultants, NGOs, educational institutions and stakeholders who help expand SabSewa Local across India.';
+
+comment on column public.partner_applications.revenue_share_percent is
+  'Fixed 10% share of eligible net revenue, subject to company verification, approval, audit and Partner Program Terms.';
+
+comment on column public.partner_applications.net_revenue_definition is
+  'Net revenue excludes GST, statutory taxes, payment gateway charges, refunds, chargebacks, discounts and legally applicable deductions.';
+
+
+
+-- ============================================================
+-- Migration: 202608060001_vendor_onboarding_fee_lifecycle.sql
+-- ============================================================
+
+-- Vendor onboarding, KYC lifecycle, category fee rules and completed-order platform charges.
+-- Run after 202608050007_partner_program_applications.sql.
+
+create extension if not exists "pgcrypto";
+
+do $$
+declare
+  constraint_name text;
+begin
+  for constraint_name in
+    select con.conname
+    from pg_constraint con
+    join pg_class rel on rel.oid = con.conrelid
+    join pg_namespace nsp on nsp.oid = rel.relnamespace
+    where nsp.nspname = 'public'
+      and rel.relname = 'vendors'
+      and con.contype = 'c'
+      and pg_get_constraintdef(con.oid) ilike '%status%'
+  loop
+    execute format('alter table public.vendors drop constraint if exists %I', constraint_name);
+  end loop;
+end $$;
+
+alter table public.vendors
+  add column if not exists lifecycle_status text,
+  add column if not exists kyc_status text not null default 'kyc_not_started',
+  add column if not exists onboarding_payment_status text not null default 'payment_pending',
+  add column if not exists onboarding_completed_at timestamptz,
+  add column if not exists activated_at timestamptz,
+  add column if not exists activated_by uuid,
+  add column if not exists suspended_at timestamptz,
+  add column if not exists suspension_reason text,
+  add column if not exists shop_photo_url text,
+  add column if not exists establishment_year integer,
+  add column if not exists public_verified_representative_name text,
+  add column if not exists public_verification_badge boolean not null default false,
+  add column if not exists public_license_summary jsonb not null default '[]'::jsonb;
+
+update public.vendors
+set lifecycle_status = case
+  when status = 'approved' then 'active'
+  when status = 'suspended' then 'suspended'
+  else 'registered'
+end
+where lifecycle_status is null;
+
+update public.vendors
+set status = lifecycle_status
+where status in ('pending', 'approved', 'suspended')
+  and lifecycle_status in ('registered', 'active', 'suspended');
+
+alter table public.vendors
+  alter column lifecycle_status set default 'registered',
+  alter column lifecycle_status set not null;
+
+alter table public.vendors
+  add constraint vendors_status_lifecycle_check
+  check (status in (
+    'registered',
+    'kyc_pending',
+    'kyc_rejected',
+    'payment_pending',
+    'payment_failed',
+    'payment_completed',
+    'approval_pending',
+    'active',
+    'suspended',
+    'deactivated'
+  ));
+
+alter table public.vendors
+  add constraint vendors_lifecycle_status_check
+  check (lifecycle_status in (
+    'registered',
+    'kyc_pending',
+    'kyc_rejected',
+    'payment_pending',
+    'payment_failed',
+    'payment_completed',
+    'approval_pending',
+    'active',
+    'suspended',
+    'deactivated'
+  ));
+
+alter table public.vendors
+  add constraint vendors_kyc_status_check
+  check (kyc_status in (
+    'kyc_not_started',
+    'kyc_submitted',
+    'kyc_under_review',
+    'additional_information_required',
+    'kyc_verified',
+    'kyc_rejected'
+  ));
+
+alter table public.vendors
+  add constraint vendors_onboarding_payment_status_check
+  check (onboarding_payment_status in (
+    'payment_pending',
+    'payment_failed',
+    'payment_completed',
+    'refunded',
+    'adjusted'
+  ));
+
+update public.vendors
+set kyc_status = 'kyc_verified',
+    onboarding_payment_status = 'payment_completed',
+    public_verification_badge = true,
+    onboarding_completed_at = coalesce(onboarding_completed_at, now()),
+    activated_at = coalesce(activated_at, now())
+where status = 'active';
+
+create table if not exists public.vendor_categories (
+  id uuid primary key default gen_random_uuid(),
+  slug text not null unique,
+  display_name text not null,
+  description text,
+  requires_fssai boolean not null default false,
+  requires_drug_license boolean not null default false,
+  requires_gstin boolean not null default false,
+  requires_trade_license boolean not null default false,
+  is_active boolean not null default true,
+  sort_order integer not null default 100,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+insert into public.vendor_categories
+  (slug, display_name, requires_fssai, requires_drug_license, requires_trade_license, sort_order)
+values
+  ('vegetables', 'Vegetable or Fruit Vendor', false, false, false, 10),
+  ('fruits', 'Vegetable or Fruit Vendor', false, false, false, 11),
+  ('kirana', 'Kirana or General Store', false, false, false, 20),
+  ('grocery', 'Kirana or General Store', false, false, false, 21),
+  ('pharmacy', 'Medical or Pharmacy Shop', false, true, true, 30),
+  ('medical', 'Medical or Pharmacy Shop', false, true, true, 31),
+  ('restaurant', 'Restaurant or Food Outlet', true, false, true, 40),
+  ('tiffin', 'Restaurant or Food Outlet', true, false, false, 41),
+  ('other', 'Other Vendor Category', false, false, false, 999)
+on conflict (slug) do update
+set display_name = excluded.display_name,
+    requires_fssai = excluded.requires_fssai,
+    requires_drug_license = excluded.requires_drug_license,
+    requires_trade_license = excluded.requires_trade_license,
+    updated_at = now();
+
+create table if not exists public.vendor_fee_rules (
+  id uuid primary key default gen_random_uuid(),
+  category_slug text not null references public.vendor_categories(slug) on update cascade,
+  onboarding_fee_amount numeric(12,2) not null check (onboarding_fee_amount >= 0),
+  security_deposit_amount numeric(12,2) not null check (security_deposit_amount >= 0),
+  per_completed_order_charge numeric(12,2) not null check (per_completed_order_charge >= 0),
+  onboarding_fee_refundable boolean not null default false,
+  security_deposit_refundable boolean not null default true,
+  tax_rate_percent numeric(6,3) not null default 0,
+  currency text not null default 'INR',
+  effective_from timestamptz not null default now(),
+  effective_to timestamptz,
+  is_active boolean not null default true,
+  created_by uuid,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  check (effective_to is null or effective_to > effective_from)
+);
+
+create unique index if not exists uq_vendor_fee_rules_one_active
+  on public.vendor_fee_rules(category_slug)
+  where is_active = true and effective_to is null;
+
+insert into public.vendor_fee_rules
+  (category_slug, onboarding_fee_amount, security_deposit_amount, per_completed_order_charge)
+values
+  ('vegetables', 500, 5000, 15),
+  ('fruits', 500, 5000, 15),
+  ('kirana', 1000, 5000, 15),
+  ('grocery', 1000, 5000, 15),
+  ('pharmacy', 2000, 5000, 25),
+  ('medical', 2000, 5000, 25),
+  ('restaurant', 2000, 5000, 25),
+  ('tiffin', 2000, 5000, 25),
+  ('other', 2000, 5000, 25)
+on conflict do nothing;
+
+create table if not exists public.vendor_onboarding (
+  id uuid primary key default gen_random_uuid(),
+  vendor_id uuid not null unique references public.vendors(id) on delete cascade,
+  category_slug text not null references public.vendor_categories(slug) on update cascade,
+  kyc_status text not null default 'kyc_not_started',
+  payment_status text not null default 'payment_pending',
+  approval_status text not null default 'approval_pending',
+  onboarding_fee_amount numeric(12,2) not null default 0,
+  security_deposit_amount numeric(12,2) not null default 0,
+  tax_amount numeric(12,2) not null default 0,
+  total_payable_amount numeric(12,2) not null default 0,
+  fee_rule_id uuid references public.vendor_fee_rules(id) on delete set null,
+  payment_completed_at timestamptz,
+  approved_by uuid,
+  approved_at timestamptz,
+  rejection_reason text,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.vendor_kyc_documents (
+  id uuid primary key default gen_random_uuid(),
+  vendor_id uuid not null references public.vendors(id) on delete cascade,
+  document_type text not null check (document_type in (
+    'aadhaar',
+    'authorisation',
+    'shop_establishment',
+    'trade_license',
+    'gst_certificate',
+    'fssai_license',
+    'drug_license',
+    'shop_photo',
+    'utility_bill',
+    'rent_agreement',
+    'other_business_proof'
+  )),
+  storage_bucket text not null default 'vendor-kyc-private',
+  storage_path text not null,
+  file_name text,
+  mime_type text,
+  file_size_bytes bigint,
+  aadhaar_last4 text,
+  status text not null default 'submitted' check (status in ('submitted', 'under_review', 'verified', 'rejected', 'additional_information_required')),
+  reviewer_user_id uuid,
+  reviewed_at timestamptz,
+  rejection_reason text,
+  public_display_allowed boolean not null default false,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists idx_vendor_kyc_documents_vendor_status
+  on public.vendor_kyc_documents(vendor_id, status, document_type);
+
+create table if not exists public.vendor_kyc_access_audit (
+  id uuid primary key default gen_random_uuid(),
+  vendor_id uuid not null references public.vendors(id) on delete cascade,
+  document_id uuid references public.vendor_kyc_documents(id) on delete set null,
+  accessed_by uuid,
+  access_reason text not null,
+  action text not null default 'view_document',
+  ip_address inet,
+  user_agent text,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.vendor_payments (
+  id uuid primary key default gen_random_uuid(),
+  vendor_id uuid not null references public.vendors(id) on delete cascade,
+  category_slug text,
+  charge_type text not null check (charge_type in (
+    'onboarding_fee',
+    'security_deposit',
+    'subscription_payment',
+    'additional_storage_purchase',
+    'featured_listing_payment',
+    'per_order_platform_charge',
+    'refund',
+    'security_adjustment'
+  )),
+  base_amount numeric(12,2) not null default 0,
+  tax_amount numeric(12,2) not null default 0,
+  total_amount numeric(12,2) not null default 0,
+  currency text not null default 'INR',
+  payment_gateway text,
+  gateway_order_id text,
+  gateway_payment_id text,
+  gateway_signature text,
+  payment_status text not null default 'pending' check (payment_status in ('pending', 'created', 'paid', 'failed', 'refunded', 'cancelled', 'adjusted')),
+  payment_date timestamptz,
+  refundable boolean not null default false,
+  receipt_number text,
+  idempotency_key text,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create unique index if not exists uq_vendor_payments_idempotency
+  on public.vendor_payments(idempotency_key)
+  where idempotency_key is not null;
+
+create index if not exists idx_vendor_payments_vendor_type
+  on public.vendor_payments(vendor_id, charge_type, payment_status, created_at desc);
+
+create table if not exists public.vendor_status_history (
+  id uuid primary key default gen_random_uuid(),
+  vendor_id uuid not null references public.vendors(id) on delete cascade,
+  previous_status text,
+  next_status text not null,
+  changed_by uuid,
+  change_reason text,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.platform_order_charges (
+  id uuid primary key default gen_random_uuid(),
+  order_id uuid not null references public.hyperlocal_orders(id) on delete cascade,
+  vendor_id uuid not null references public.vendors(id) on delete cascade,
+  category_slug text,
+  fee_rule_id uuid references public.vendor_fee_rules(id) on delete set null,
+  charge_amount numeric(12,2) not null check (charge_amount >= 0),
+  tax_amount numeric(12,2) not null default 0,
+  total_amount numeric(12,2) not null check (total_amount >= 0),
+  charge_status text not null default 'recorded' check (charge_status in ('recorded', 'waived', 'reversed')),
+  charged_at timestamptz not null default now(),
+  idempotency_key text not null,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create unique index if not exists uq_platform_order_charges_order
+  on public.platform_order_charges(order_id)
+  where charge_status <> 'reversed';
+
+create unique index if not exists uq_platform_order_charges_idempotency
+  on public.platform_order_charges(idempotency_key);
+
+create index if not exists idx_platform_order_charges_vendor_date
+  on public.platform_order_charges(vendor_id, charged_at desc);
+
+create table if not exists public.audit_logs (
+  id uuid primary key default gen_random_uuid(),
+  actor_user_id uuid,
+  actor_role text,
+  entity_type text not null,
+  entity_id uuid,
+  action text not null,
+  before_data jsonb,
+  after_data jsonb,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+
+alter table public.vendor_categories enable row level security;
+alter table public.vendor_fee_rules enable row level security;
+alter table public.vendor_onboarding enable row level security;
+alter table public.vendor_kyc_documents enable row level security;
+alter table public.vendor_kyc_access_audit enable row level security;
+alter table public.vendor_payments enable row level security;
+alter table public.vendor_status_history enable row level security;
+alter table public.platform_order_charges enable row level security;
+alter table public.audit_logs enable row level security;
+
+drop policy if exists "Public read active vendor categories" on public.vendor_categories;
+create policy "Public read active vendor categories"
+  on public.vendor_categories for select
+  using (is_active = true);
+
+drop policy if exists "Authenticated read active fee rules" on public.vendor_fee_rules;
+create policy "Authenticated read active fee rules"
+  on public.vendor_fee_rules for select
+  to authenticated
+  using (is_active = true);
+
+drop policy if exists "Admins manage vendor fee rules" on public.vendor_fee_rules;
+create policy "Admins manage vendor fee rules"
+  on public.vendor_fee_rules for all
+  to authenticated
+  using (public.is_company_admin())
+  with check (public.is_company_admin());
+
+drop policy if exists "Vendor owners read own onboarding" on public.vendor_onboarding;
+create policy "Vendor owners read own onboarding"
+  on public.vendor_onboarding for select
+  to authenticated
+  using (public.owns_vendor(vendor_id) or public.is_company_admin());
+
+drop policy if exists "Vendor owners read own payments" on public.vendor_payments;
+create policy "Vendor owners read own payments"
+  on public.vendor_payments for select
+  to authenticated
+  using (public.owns_vendor(vendor_id) or public.is_company_admin());
+
+drop policy if exists "Vendor owners read own order charges" on public.platform_order_charges;
+create policy "Vendor owners read own order charges"
+  on public.platform_order_charges for select
+  to authenticated
+  using (public.owns_vendor(vendor_id) or public.is_company_admin());
+
+drop policy if exists "KYC reviewers manage documents" on public.vendor_kyc_documents;
+create policy "KYC reviewers manage documents"
+  on public.vendor_kyc_documents for all
+  to authenticated
+  using (public.is_company_admin())
+  with check (public.is_company_admin());
+
+drop policy if exists "Vendor owners submit own KYC docs" on public.vendor_kyc_documents;
+create policy "Vendor owners submit own KYC docs"
+  on public.vendor_kyc_documents for insert
+  to authenticated
+  with check (public.owns_vendor(vendor_id));
+
+drop policy if exists "Vendor owners read own KYC metadata" on public.vendor_kyc_documents;
+create policy "Vendor owners read own KYC metadata"
+  on public.vendor_kyc_documents for select
+  to authenticated
+  using (public.owns_vendor(vendor_id) or public.is_company_admin());
+
+drop policy if exists "Admins read audit logs" on public.audit_logs;
+create policy "Admins read audit logs"
+  on public.audit_logs for select
+  to authenticated
+  using (public.is_company_admin());
+
+create or replace function public.current_vendor_fee_rule(p_category text)
+returns public.vendor_fee_rules
+language sql
+stable
+as $$
+  select *
+  from public.vendor_fee_rules
+  where is_active = true
+    and effective_to is null
+    and category_slug = coalesce(nullif(lower(p_category), ''), 'other')
+  order by effective_from desc
+  limit 1
+$$;
+
+create or replace function public.vendor_onboarding_payment_summary(p_vendor_id uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_vendor public.vendors%rowtype;
+  v_rule public.vendor_fee_rules%rowtype;
+  v_tax numeric(12,2);
+  v_total numeric(12,2);
+begin
+  select * into v_vendor from public.vendors where id = p_vendor_id;
+  if not found then
+    raise exception 'Vendor not found.';
+  end if;
+
+  select * into v_rule
+  from public.current_vendor_fee_rule(coalesce(v_vendor.category, 'other'));
+
+  if not found then
+    select * into v_rule from public.current_vendor_fee_rule('other');
+  end if;
+
+  v_tax := round((v_rule.onboarding_fee_amount * coalesce(v_rule.tax_rate_percent, 0) / 100.0), 2);
+  v_total := v_rule.onboarding_fee_amount + v_rule.security_deposit_amount + v_tax;
+
+  insert into public.vendor_onboarding (
+    vendor_id,
+    category_slug,
+    kyc_status,
+    payment_status,
+    approval_status,
+    onboarding_fee_amount,
+    security_deposit_amount,
+    tax_amount,
+    total_payable_amount,
+    fee_rule_id
+  )
+  values (
+    p_vendor_id,
+    coalesce(v_rule.category_slug, 'other'),
+    v_vendor.kyc_status,
+    v_vendor.onboarding_payment_status,
+    case when v_vendor.status = 'active' then 'approved' else 'approval_pending' end,
+    v_rule.onboarding_fee_amount,
+    v_rule.security_deposit_amount,
+    v_tax,
+    v_total,
+    v_rule.id
+  )
+  on conflict (vendor_id) do update
+  set category_slug = excluded.category_slug,
+      kyc_status = excluded.kyc_status,
+      payment_status = excluded.payment_status,
+      onboarding_fee_amount = excluded.onboarding_fee_amount,
+      security_deposit_amount = excluded.security_deposit_amount,
+      tax_amount = excluded.tax_amount,
+      total_payable_amount = excluded.total_payable_amount,
+      fee_rule_id = excluded.fee_rule_id,
+      updated_at = now();
+
+  return jsonb_build_object(
+    'vendor_id', p_vendor_id,
+    'category', v_vendor.category,
+    'category_slug', coalesce(v_rule.category_slug, 'other'),
+    'onboarding_fee', v_rule.onboarding_fee_amount,
+    'security_deposit', v_rule.security_deposit_amount,
+    'tax_amount', v_tax,
+    'total_payable', v_total,
+    'currency', v_rule.currency,
+    'onboarding_fee_refundable', v_rule.onboarding_fee_refundable,
+    'security_deposit_refundable', v_rule.security_deposit_refundable,
+    'kyc_status', v_vendor.kyc_status,
+    'payment_status', v_vendor.onboarding_payment_status,
+    'vendor_status', v_vendor.status,
+    'can_publish_products', v_vendor.status = 'active'
+      and v_vendor.kyc_status = 'kyc_verified'
+      and v_vendor.onboarding_payment_status = 'payment_completed'
+  );
+end;
+$$;
+
+create or replace function public.record_vendor_onboarding_payment(
+  p_vendor_id uuid,
+  p_gateway_order_id text,
+  p_gateway_payment_id text,
+  p_gateway_signature text default null,
+  p_metadata jsonb default '{}'::jsonb
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_summary jsonb;
+  v_category text;
+  v_onboarding_fee numeric(12,2);
+  v_security_deposit numeric(12,2);
+  v_tax numeric(12,2);
+  v_total numeric(12,2);
+  v_now timestamptz := now();
+begin
+  v_summary := public.vendor_onboarding_payment_summary(p_vendor_id);
+  v_category := v_summary->>'category_slug';
+  v_onboarding_fee := (v_summary->>'onboarding_fee')::numeric;
+  v_security_deposit := (v_summary->>'security_deposit')::numeric;
+  v_tax := (v_summary->>'tax_amount')::numeric;
+  v_total := (v_summary->>'total_payable')::numeric;
+
+  insert into public.vendor_payments (
+    vendor_id, category_slug, charge_type, base_amount, tax_amount, total_amount,
+    payment_gateway, gateway_order_id, gateway_payment_id, gateway_signature,
+    payment_status, payment_date, refundable, receipt_number, idempotency_key, metadata
+  )
+  values
+    (p_vendor_id, v_category, 'onboarding_fee', v_onboarding_fee, v_tax, v_onboarding_fee + v_tax,
+      'razorpay', p_gateway_order_id, p_gateway_payment_id, p_gateway_signature,
+      'paid', v_now, false, 'SSL-ONB-' || upper(left(p_vendor_id::text, 8)), 'onboarding_fee:' || p_gateway_payment_id, p_metadata),
+    (p_vendor_id, v_category, 'security_deposit', v_security_deposit, 0, v_security_deposit,
+      'razorpay', p_gateway_order_id, p_gateway_payment_id, p_gateway_signature,
+      'paid', v_now, true, 'SSL-SEC-' || upper(left(p_vendor_id::text, 8)), 'security_deposit:' || p_gateway_payment_id, p_metadata)
+  on conflict (idempotency_key) do nothing;
+
+  update public.vendor_onboarding
+  set payment_status = 'payment_completed',
+      payment_completed_at = v_now,
+      updated_at = v_now
+  where vendor_id = p_vendor_id;
+
+  update public.vendors
+  set onboarding_payment_status = 'payment_completed',
+      lifecycle_status = case when kyc_status = 'kyc_verified' then 'approval_pending' else lifecycle_status end,
+      status = case when kyc_status = 'kyc_verified' then 'approval_pending' else status end,
+      onboarding_completed_at = v_now
+  where id = p_vendor_id;
+
+  return public.vendor_onboarding_payment_summary(p_vendor_id);
+end;
+$$;
+
+create or replace function public.record_platform_order_charge(
+  p_order_id uuid,
+  p_actor_user_id uuid default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_order public.hyperlocal_orders%rowtype;
+  v_vendor public.vendors%rowtype;
+  v_rule public.vendor_fee_rules%rowtype;
+  v_existing public.platform_order_charges%rowtype;
+  v_charge numeric(12,2);
+  v_tax numeric(12,2);
+begin
+  select * into v_order
+  from public.hyperlocal_orders
+  where id = p_order_id
+  for update;
+
+  if not found then raise exception 'Order not found.'; end if;
+  if v_order.status <> 'completed' then raise exception 'Platform charge applies only to completed orders.'; end if;
+
+  select * into v_existing
+  from public.platform_order_charges
+  where order_id = p_order_id and charge_status <> 'reversed'
+  limit 1;
+  if found then return to_jsonb(v_existing); end if;
+
+  select * into v_vendor from public.vendors where id = v_order.vendor_id;
+  if not found then raise exception 'Vendor not found.'; end if;
+
+  select * into v_rule from public.current_vendor_fee_rule(coalesce(v_vendor.category, 'other'));
+  if not found then select * into v_rule from public.current_vendor_fee_rule('other'); end if;
+
+  v_charge := greatest(coalesce(v_rule.per_completed_order_charge, 25), case when coalesce(v_rule.category_slug, 'other') = 'other' then 25 else 0 end);
+  v_tax := round((v_charge * coalesce(v_rule.tax_rate_percent, 0) / 100.0), 2);
+
+  insert into public.platform_order_charges (
+    order_id, vendor_id, category_slug, fee_rule_id, charge_amount, tax_amount, total_amount, idempotency_key, metadata
+  )
+  values (
+    p_order_id, v_order.vendor_id, coalesce(v_rule.category_slug, 'other'), v_rule.id,
+    v_charge, v_tax, v_charge + v_tax, 'completed_order_platform_charge:' || p_order_id::text,
+    jsonb_build_object('order_total', v_order.total_amount, 'actor_user_id', p_actor_user_id)
+  )
+  returning * into v_existing;
+
+  insert into public.vendor_payments (
+    vendor_id, category_slug, charge_type, base_amount, tax_amount, total_amount,
+    payment_status, payment_date, refundable, receipt_number, idempotency_key, metadata
+  )
+  values (
+    v_order.vendor_id, coalesce(v_rule.category_slug, 'other'), 'per_order_platform_charge',
+    v_charge, v_tax, v_charge + v_tax, 'paid', now(), false,
+    'SSL-ORD-' || upper(left(p_order_id::text, 8)),
+    'per_order_platform_charge:' || p_order_id::text,
+    jsonb_build_object('order_id', p_order_id, 'direct_customer_payment_to_vendor', true)
+  )
+  on conflict (idempotency_key) do nothing;
+
+  return to_jsonb(v_existing);
+end;
+$$;
+
+revoke all on function public.vendor_onboarding_payment_summary(uuid) from public;
+revoke all on function public.record_vendor_onboarding_payment(uuid, text, text, text, jsonb) from public;
+revoke all on function public.record_platform_order_charge(uuid, uuid) from public;
+grant execute on function public.vendor_onboarding_payment_summary(uuid) to authenticated, service_role;
+grant execute on function public.record_vendor_onboarding_payment(uuid, text, text, text, jsonb) to service_role;
+grant execute on function public.record_platform_order_charge(uuid, uuid) to service_role;
+
+create or replace function public.mask_aadhaar_last4(p_value text)
+returns text
+language sql
+immutable
+as $$
+  select case
+    when p_value is null or length(regexp_replace(p_value, '\D', '', 'g')) < 4 then null
+    else 'XXXX-XXXX-' || right(regexp_replace(p_value, '\D', '', 'g'), 4)
+  end
+$$;
+
+comment on table public.vendor_kyc_documents is 'Private KYC metadata only. Store files in private bucket vendor-kyc-private; do not expose public URLs.';
+comment on column public.vendor_kyc_documents.aadhaar_last4 is 'Store only last four digits for display; never store full Aadhaar here.';
+
+
+
+-- ============================================================
+-- Migration: 202608060002_storage_purchase_idempotency.sql
+-- ============================================================
+
+-- Prevent duplicate storage allocation if the same verified payment reference is processed twice.
+
+create unique index if not exists uq_vendor_storage_purchases_payment_reference
+  on public.vendor_storage_purchases(vendor_id, payment_reference)
+  where payment_reference is not null;
+
+
+
+-- ============================================================
+-- Migration: 202608060003_vendor_platform_billing_subscriptions.sql
+-- ============================================================
+
+-- Centralized vendor-to-SabSewa platform billing and subscription module.
+-- Customer order payments remain direct customer-to-vendor and are intentionally not routed here.
+
+create extension if not exists "pgcrypto";
+
+create sequence if not exists public.vendor_invoice_number_seq start 1;
+
+alter table public.vendor_payments
+  add column if not exists reference_type text,
+  add column if not exists reference_id uuid,
+  add column if not exists base_amount_paise bigint,
+  add column if not exists discount_amount_paise bigint not null default 0,
+  add column if not exists tax_amount_paise bigint,
+  add column if not exists total_amount_paise bigint,
+  add column if not exists razorpay_order_id text,
+  add column if not exists razorpay_payment_id text,
+  add column if not exists signature_verified boolean not null default false,
+  add column if not exists invoice_id uuid,
+  add column if not exists paid_at timestamptz,
+  add column if not exists updated_at timestamptz not null default now();
+
+create table if not exists public.billing_products (
+  id uuid primary key default gen_random_uuid(),
+  product_code text not null unique,
+  charge_type text not null check (charge_type in (
+    'onboarding_fee',
+    'security_deposit',
+    'subscription',
+    'storage_addon',
+    'featured_listing',
+    'promotion',
+    'premium_service',
+    'future_platform_service'
+  )),
+  title text not null,
+  description text,
+  base_amount_paise bigint not null default 0 check (base_amount_paise >= 0),
+  tax_rate_percent numeric(6,3) not null default 0,
+  currency text not null default 'INR',
+  validity_days integer,
+  is_refundable boolean not null default false,
+  is_active boolean not null default true,
+  visibility text not null default 'vendor_visible' check (visibility in ('vendor_visible', 'admin_only', 'hidden')),
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.subscription_plans (
+  id uuid primary key default gen_random_uuid(),
+  plan_code text not null unique,
+  plan_name text not null,
+  description text,
+  monthly_price_paise bigint not null default 0 check (monthly_price_paise >= 0),
+  quarterly_price_paise bigint not null default 0 check (quarterly_price_paise >= 0),
+  annual_price_paise bigint not null default 0 check (annual_price_paise >= 0),
+  tax_rate_percent numeric(6,3) not null default 0,
+  product_listing_limit integer,
+  storage_allowance_bytes bigint,
+  order_limit integer,
+  analytics_access boolean not null default false,
+  featured_listing_credits integer not null default 0,
+  ai_tool_access boolean not null default false,
+  support_level text not null default 'standard',
+  multi_user_access boolean not null default false,
+  grace_period_days integer not null default 7,
+  trial_period_days integer not null default 0,
+  is_active boolean not null default true,
+  is_public boolean not null default true,
+  sort_order integer not null default 100,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.subscription_plan_features (
+  id uuid primary key default gen_random_uuid(),
+  plan_id uuid not null references public.subscription_plans(id) on delete cascade,
+  feature_key text not null,
+  feature_value jsonb not null default 'true'::jsonb,
+  created_at timestamptz not null default now(),
+  unique (plan_id, feature_key)
+);
+
+create table if not exists public.vendor_subscriptions (
+  id uuid primary key default gen_random_uuid(),
+  vendor_id uuid not null references public.vendors(id) on delete cascade,
+  plan_id uuid references public.subscription_plans(id) on delete set null,
+  subscription_status text not null default 'trial' check (subscription_status in (
+    'trial',
+    'active',
+    'grace_period',
+    'expired',
+    'cancelled',
+    'suspended'
+  )),
+  billing_cycle text not null default 'monthly' check (billing_cycle in ('monthly', 'quarterly', 'annual')),
+  starts_at timestamptz,
+  expires_at timestamptz,
+  grace_ends_at timestamptz,
+  auto_renewal_enabled boolean not null default false,
+  auto_renewal_consent_at timestamptz,
+  previous_plan_id uuid references public.subscription_plans(id) on delete set null,
+  pending_plan_id uuid references public.subscription_plans(id) on delete set null,
+  last_payment_id uuid,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create unique index if not exists uq_vendor_subscriptions_one_current
+  on public.vendor_subscriptions(vendor_id)
+  where subscription_status in ('trial', 'active', 'grace_period', 'suspended');
+
+create table if not exists public.vendor_billing_accounts (
+  id uuid primary key default gen_random_uuid(),
+  vendor_id uuid not null unique references public.vendors(id) on delete cascade,
+  legal_name text,
+  billing_address jsonb not null default '{}'::jsonb,
+  gstin text,
+  email text,
+  phone text,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.vendor_invoices (
+  id uuid primary key default gen_random_uuid(),
+  vendor_id uuid not null references public.vendors(id) on delete cascade,
+  invoice_number text not null unique,
+  invoice_type text not null default 'receipt' check (invoice_type in ('invoice', 'receipt', 'credit_note')),
+  legal_entity_name text not null default 'Rashi Bhartiya Innovation LLP',
+  brand_name text not null default 'SabSewa Local',
+  vendor_name text,
+  shop_name text,
+  billing_address jsonb not null default '{}'::jsonb,
+  charge_type text not null,
+  reference_type text,
+  reference_id uuid,
+  base_amount_paise bigint not null default 0,
+  discount_amount_paise bigint not null default 0,
+  tax_amount_paise bigint not null default 0,
+  total_amount_paise bigint not null default 0,
+  currency text not null default 'INR',
+  razorpay_payment_id text,
+  payment_status text not null default 'captured',
+  refundable_classification text not null default 'non_refundable',
+  gst_note text not null default 'GST compliance depends on the company GST configuration in force on the invoice date.',
+  invoice_payload jsonb not null default '{}'::jsonb,
+  issued_at timestamptz not null default now(),
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.vendor_payment_attempts (
+  id uuid primary key default gen_random_uuid(),
+  vendor_id uuid not null references public.vendors(id) on delete cascade,
+  charge_type text not null,
+  reference_type text,
+  reference_id uuid,
+  base_amount_paise bigint not null default 0,
+  discount_amount_paise bigint not null default 0,
+  tax_amount_paise bigint not null default 0,
+  total_amount_paise bigint not null default 0,
+  currency text not null default 'INR',
+  payment_status text not null default 'created' check (payment_status in (
+    'created',
+    'pending',
+    'authorized',
+    'captured',
+    'failed',
+    'cancelled',
+    'refund_pending',
+    'partially_refunded',
+    'refunded'
+  )),
+  razorpay_order_id text unique,
+  razorpay_payment_id text unique,
+  razorpay_signature text,
+  signature_verified boolean not null default false,
+  invoice_id uuid references public.vendor_invoices(id) on delete set null,
+  idempotency_key text not null unique,
+  failure_reason text,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  paid_at timestamptz,
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.razorpay_orders (
+  id uuid primary key default gen_random_uuid(),
+  vendor_id uuid not null references public.vendors(id) on delete cascade,
+  attempt_id uuid references public.vendor_payment_attempts(id) on delete cascade,
+  razorpay_order_id text not null unique,
+  amount_paise bigint not null check (amount_paise >= 0),
+  currency text not null default 'INR',
+  receipt text not null,
+  order_status text not null default 'created',
+  notes jsonb not null default '{}'::jsonb,
+  raw_response jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.vendor_security_deposits (
+  id uuid primary key default gen_random_uuid(),
+  vendor_id uuid not null references public.vendors(id) on delete cascade,
+  deposit_amount_paise bigint not null default 0,
+  amount_held_paise bigint not null default 0,
+  amount_adjusted_paise bigint not null default 0,
+  amount_refunded_paise bigint not null default 0,
+  deposit_status text not null default 'pending' check (deposit_status in (
+    'pending',
+    'held',
+    'partially_adjusted',
+    'refund_requested',
+    'under_review',
+    'refunded',
+    'forfeited'
+  )),
+  payment_id uuid references public.vendor_payment_attempts(id) on delete set null,
+  razorpay_payment_id text,
+  paid_at timestamptz,
+  refund_requested_at timestamptz,
+  refunded_at timestamptz,
+  adjustment_reason text,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create unique index if not exists uq_vendor_security_deposits_active
+  on public.vendor_security_deposits(vendor_id)
+  where deposit_status in ('pending', 'held', 'partially_adjusted', 'refund_requested', 'under_review');
+
+create table if not exists public.vendor_promotions (
+  id uuid primary key default gen_random_uuid(),
+  vendor_id uuid not null references public.vendors(id) on delete cascade,
+  promotion_type text not null,
+  target_area text,
+  target_category text,
+  starts_at timestamptz,
+  ends_at timestamptz,
+  maximum_impressions integer,
+  promotion_status text not null default 'payment_pending' check (promotion_status in (
+    'payment_pending',
+    'active',
+    'completed',
+    'cancelled',
+    'suspended'
+  )),
+  price_paise bigint not null default 0,
+  payment_attempt_id uuid references public.vendor_payment_attempts(id) on delete set null,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.vendor_refunds (
+  id uuid primary key default gen_random_uuid(),
+  vendor_id uuid not null references public.vendors(id) on delete cascade,
+  payment_attempt_id uuid references public.vendor_payment_attempts(id) on delete set null,
+  razorpay_payment_id text,
+  razorpay_refund_id text unique,
+  amount_paise bigint not null check (amount_paise > 0),
+  refund_status text not null default 'refund_pending' check (refund_status in (
+    'refund_pending',
+    'processed',
+    'failed',
+    'cancelled'
+  )),
+  reason text not null,
+  approved_by uuid,
+  metadata jsonb not null default '{}'::jsonb,
+  requested_at timestamptz not null default now(),
+  processed_at timestamptz,
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.billing_discounts (
+  id uuid primary key default gen_random_uuid(),
+  discount_code text not null unique,
+  discount_type text not null check (discount_type in ('fixed', 'percentage')),
+  discount_value_paise bigint,
+  discount_percent numeric(6,3),
+  min_amount_paise bigint not null default 0,
+  starts_at timestamptz,
+  ends_at timestamptz,
+  usage_limit integer,
+  usage_count integer not null default 0,
+  applicable_charge_types text[] not null default '{}',
+  applicable_plan_codes text[] not null default '{}',
+  stackable boolean not null default false,
+  is_active boolean not null default true,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.billing_coupons (
+  id uuid primary key default gen_random_uuid(),
+  coupon_code text not null unique,
+  discount_id uuid references public.billing_discounts(id) on delete cascade,
+  vendor_id uuid references public.vendors(id) on delete cascade,
+  used_at timestamptz,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.billing_audit_logs (
+  id uuid primary key default gen_random_uuid(),
+  actor_user_id uuid,
+  actor_role text,
+  vendor_id uuid references public.vendors(id) on delete set null,
+  entity_type text not null,
+  entity_id uuid,
+  action text not null,
+  before_data jsonb,
+  after_data jsonb,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+
+alter table public.razorpay_webhook_events
+  add column if not exists payload_hash text,
+  add column if not exists vendor_id uuid,
+  add column if not exists processed_result jsonb,
+  add column if not exists processing_error text,
+  add column if not exists processed_at timestamptz;
+
+insert into public.subscription_plans
+  (plan_code, plan_name, description, monthly_price_paise, quarterly_price_paise, annual_price_paise, product_listing_limit, storage_allowance_bytes, order_limit, analytics_access, featured_listing_credits, ai_tool_access, support_level, sort_order)
+values
+  ('free', 'Free', 'Starter access after verified onboarding.', 0, 0, 0, 100, 104857600, 100, false, 0, false, 'standard', 10),
+  ('basic', 'Basic', 'For small local shops starting with digital catalogue and orders.', 19900, 54900, 199900, 500, 268435456, 500, false, 0, false, 'standard', 20),
+  ('growth', 'Growth', 'Higher listing limits, analytics and promotional credits.', 49900, 129900, 499900, 2000, 1073741824, 2000, true, 2, true, 'priority', 30),
+  ('premium', 'Premium', 'Advanced AI tools, featured credits and priority support.', 99900, 269900, 999900, 10000, 5368709120, 10000, true, 8, true, 'priority', 40),
+  ('enterprise', 'Enterprise', 'Custom plan for multi-location vendor operations.', 0, 0, 0, null, null, null, true, 20, true, 'dedicated', 50)
+on conflict (plan_code) do update
+set plan_name = excluded.plan_name,
+    description = excluded.description,
+    monthly_price_paise = excluded.monthly_price_paise,
+    quarterly_price_paise = excluded.quarterly_price_paise,
+    annual_price_paise = excluded.annual_price_paise,
+    product_listing_limit = excluded.product_listing_limit,
+    storage_allowance_bytes = excluded.storage_allowance_bytes,
+    order_limit = excluded.order_limit,
+    analytics_access = excluded.analytics_access,
+    featured_listing_credits = excluded.featured_listing_credits,
+    ai_tool_access = excluded.ai_tool_access,
+    support_level = excluded.support_level,
+    sort_order = excluded.sort_order,
+    updated_at = now();
+
+insert into public.billing_products
+  (product_code, charge_type, title, description, base_amount_paise, tax_rate_percent, validity_days, is_refundable, visibility)
+values
+  ('featured_store_7d', 'featured_listing', 'Featured Store - 7 days', 'Featured storefront placement for one week.', 29900, 0, 7, false, 'vendor_visible'),
+  ('featured_product_7d', 'featured_listing', 'Featured Product - 7 days', 'Featured product placement for one week.', 14900, 0, 7, false, 'vendor_visible'),
+  ('festival_campaign_local', 'promotion', 'Local Festival Campaign', 'Local-area promotional campaign placement.', 99900, 0, 14, false, 'vendor_visible'),
+  ('premium_ai_monthly', 'premium_service', 'Premium AI Tools - Monthly', 'Premium AI tools for catalogue and order operations.', 49900, 0, 30, false, 'vendor_visible')
+on conflict (product_code) do update
+set title = excluded.title,
+    description = excluded.description,
+    base_amount_paise = excluded.base_amount_paise,
+    tax_rate_percent = excluded.tax_rate_percent,
+    validity_days = excluded.validity_days,
+    is_refundable = excluded.is_refundable,
+    visibility = excluded.visibility,
+    updated_at = now();
+
+alter table public.billing_products enable row level security;
+alter table public.subscription_plans enable row level security;
+alter table public.subscription_plan_features enable row level security;
+alter table public.vendor_subscriptions enable row level security;
+alter table public.vendor_billing_accounts enable row level security;
+alter table public.vendor_invoices enable row level security;
+alter table public.vendor_payment_attempts enable row level security;
+alter table public.razorpay_orders enable row level security;
+alter table public.vendor_security_deposits enable row level security;
+alter table public.vendor_promotions enable row level security;
+alter table public.vendor_refunds enable row level security;
+alter table public.billing_discounts enable row level security;
+alter table public.billing_coupons enable row level security;
+alter table public.billing_audit_logs enable row level security;
+
+drop policy if exists "Vendors read public billing products" on public.billing_products;
+create policy "Vendors read public billing products"
+  on public.billing_products for select
+  to authenticated
+  using (is_active = true and visibility = 'vendor_visible');
+
+drop policy if exists "Vendors read public subscription plans" on public.subscription_plans;
+create policy "Vendors read public subscription plans"
+  on public.subscription_plans for select
+  to authenticated
+  using (is_active = true and is_public = true);
+
+drop policy if exists "Vendor owners read own subscriptions" on public.vendor_subscriptions;
+create policy "Vendor owners read own subscriptions"
+  on public.vendor_subscriptions for select
+  to authenticated
+  using (public.owns_vendor(vendor_id) or public.is_company_admin());
+
+drop policy if exists "Vendor owners read own billing accounts" on public.vendor_billing_accounts;
+create policy "Vendor owners read own billing accounts"
+  on public.vendor_billing_accounts for select
+  to authenticated
+  using (public.owns_vendor(vendor_id) or public.is_company_admin());
+
+drop policy if exists "Vendor owners read own invoices" on public.vendor_invoices;
+create policy "Vendor owners read own invoices"
+  on public.vendor_invoices for select
+  to authenticated
+  using (public.owns_vendor(vendor_id) or public.is_company_admin());
+
+drop policy if exists "Vendor owners read own payment attempts" on public.vendor_payment_attempts;
+create policy "Vendor owners read own payment attempts"
+  on public.vendor_payment_attempts for select
+  to authenticated
+  using (public.owns_vendor(vendor_id) or public.is_company_admin());
+
+drop policy if exists "Vendor owners read own security deposits" on public.vendor_security_deposits;
+create policy "Vendor owners read own security deposits"
+  on public.vendor_security_deposits for select
+  to authenticated
+  using (public.owns_vendor(vendor_id) or public.is_company_admin());
+
+drop policy if exists "Vendor owners read own promotions" on public.vendor_promotions;
+create policy "Vendor owners read own promotions"
+  on public.vendor_promotions for select
+  to authenticated
+  using (public.owns_vendor(vendor_id) or public.is_company_admin());
+
+drop policy if exists "Admins manage billing products" on public.billing_products;
+create policy "Admins manage billing products"
+  on public.billing_products for all
+  to authenticated
+  using (public.is_company_admin())
+  with check (public.is_company_admin());
+
+drop policy if exists "Admins manage subscription plans" on public.subscription_plans;
+create policy "Admins manage subscription plans"
+  on public.subscription_plans for all
+  to authenticated
+  using (public.is_company_admin())
+  with check (public.is_company_admin());
+
+drop policy if exists "Admins manage billing discounts" on public.billing_discounts;
+create policy "Admins manage billing discounts"
+  on public.billing_discounts for all
+  to authenticated
+  using (public.is_company_admin())
+  with check (public.is_company_admin());
+
+drop policy if exists "Admins read billing audit logs" on public.billing_audit_logs;
+create policy "Admins read billing audit logs"
+  on public.billing_audit_logs for select
+  to authenticated
+  using (public.is_company_admin());
+
+grant select on public.billing_products, public.subscription_plans to authenticated;
+grant select on public.vendor_subscriptions, public.vendor_billing_accounts, public.vendor_invoices, public.vendor_payment_attempts, public.vendor_security_deposits, public.vendor_promotions to authenticated;
+
+comment on table public.vendor_payment_attempts is
+  'Central Razorpay platform-payment attempt table for vendor-to-SabSewa charges only. Customer order payments must not be routed here.';
+
+comment on table public.vendor_security_deposits is
+  'Security deposits are balance-sheet liabilities, stored separately from onboarding revenue.';
+
+create or replace function public.next_vendor_invoice_number()
+returns text
+language sql
+security definer
+set search_path = public
+as $$
+  select 'SSL-' || to_char(now(), 'YYYYMMDD') || '-' || lpad(nextval('public.vendor_invoice_number_seq')::text, 6, '0')
+$$;
+
+grant execute on function public.next_vendor_invoice_number() to service_role;
+
+
+
+-- ============================================================
+-- Migration: 202608060004_public_active_vendor_discovery.sql
+-- ============================================================
+
+-- Public discovery read access for active, verified, onboarding-paid vendors only.
+-- This supports customer discovery while keeping private KYC/payment/admin fields out of backend responses.
+
+alter table public.vendors
+  add column if not exists kyc_status text not null default 'kyc_not_started',
+  add column if not exists onboarding_payment_status text not null default 'payment_pending',
+  add column if not exists public_verification_badge boolean not null default false,
+  add column if not exists delivery_available boolean not null default true,
+  add column if not exists pickup_available boolean not null default true,
+  add column if not exists delivery_terms text,
+  add column if not exists rating numeric(3,2) not null default 0,
+  add column if not exists rating_count integer not null default 0,
+  add column if not exists estimated_fulfilment_minutes integer not null default 45,
+  add column if not exists max_service_radius_m integer not null default 1000,
+  add column if not exists city_code text,
+  add column if not exists locality_code text;
+
+alter table public.vendor_terminals
+  add column if not exists public_terminal_id text,
+  add column if not exists is_open_today boolean not null default true,
+  add column if not exists operating_hours jsonb not null default '{}'::jsonb,
+  add column if not exists delivery_available boolean not null default true,
+  add column if not exists pickup_available boolean not null default true,
+  add column if not exists estimated_fulfilment_minutes integer;
+
+alter table public.vendor_items
+  add column if not exists price_display_mode text not null default 'show_price',
+  add column if not exists price_unit_label text,
+  add column if not exists stock_status text not null default 'in_stock',
+  add column if not exists daily_availability_status text not null default 'available',
+  add column if not exists expected_restock_at timestamptz,
+  add column if not exists generic_product_name text,
+  add column if not exists brand_name text,
+  add column if not exists manufacturer text,
+  add column if not exists variant_name text,
+  add column if not exists pack_size numeric(10,2),
+  add column if not exists pack_unit text,
+  add column if not exists mrp numeric(10,2),
+  add column if not exists mrp_pricing_policy text not null default 'manual',
+  add column if not exists mrp_discount_percent numeric(5,2) not null default 0,
+  add column if not exists barcode text,
+  add column if not exists sku text,
+  add column if not exists ean text;
+
+alter table public.vendors enable row level security;
+alter table public.vendor_terminals enable row level security;
+alter table public.vendor_items enable row level security;
+
+do $$
+declare
+  v_columns text;
+begin
+  select string_agg(quote_ident(column_name), ', ' order by array_position(array[
+    'id',
+    'public_vendor_id',
+    'shop_name',
+    'category',
+    'status',
+    'kyc_status',
+    'onboarding_payment_status',
+    'public_verification_badge',
+    'delivery_available',
+    'pickup_available',
+    'delivery_terms',
+    'rating',
+    'rating_count',
+    'estimated_fulfilment_minutes',
+    'max_service_radius_m',
+    'city_code',
+    'locality_code',
+    'address'
+  ], column_name))
+  into v_columns
+  from information_schema.columns
+  where table_schema = 'public'
+    and table_name = 'vendors'
+    and column_name = any(array[
+      'id',
+      'public_vendor_id',
+      'shop_name',
+      'category',
+      'status',
+      'kyc_status',
+      'onboarding_payment_status',
+      'public_verification_badge',
+      'delivery_available',
+      'pickup_available',
+      'delivery_terms',
+      'rating',
+      'rating_count',
+      'estimated_fulfilment_minutes',
+      'max_service_radius_m',
+      'city_code',
+      'locality_code',
+      'address'
+    ]);
+
+  if v_columns is not null then
+    execute format('grant select (%s) on public.vendors to anon, authenticated', v_columns);
+  end if;
+
+  select string_agg(quote_ident(column_name), ', ' order by array_position(array[
+    'id',
+    'vendor_id',
+    'public_terminal_id',
+    'terminal_name',
+    'status',
+    'is_open_today',
+    'operating_hours',
+    'delivery_available',
+    'pickup_available',
+    'estimated_fulfilment_minutes',
+    'lat',
+    'lng',
+    'city',
+    'phone'
+  ], column_name))
+  into v_columns
+  from information_schema.columns
+  where table_schema = 'public'
+    and table_name = 'vendor_terminals'
+    and column_name = any(array[
+      'id',
+      'vendor_id',
+      'public_terminal_id',
+      'terminal_name',
+      'status',
+      'is_open_today',
+      'operating_hours',
+      'delivery_available',
+      'pickup_available',
+      'estimated_fulfilment_minutes',
+      'lat',
+      'lng',
+      'city',
+      'phone'
+    ]);
+
+  if v_columns is not null then
+    execute format('grant select (%s) on public.vendor_terminals to anon, authenticated', v_columns);
+  end if;
+
+  select string_agg(quote_ident(column_name), ', ' order by array_position(array[
+    'id',
+    'vendor_id',
+    'terminal_id',
+    'item_name',
+    'item_pic',
+    'price',
+    'price_display_mode',
+    'price_unit_label',
+    'unit',
+    'is_available',
+    'available_today',
+    'stock_status',
+    'daily_availability_status',
+    'expected_restock_at',
+    'generic_product_name',
+    'brand_name',
+    'manufacturer',
+    'variant_name',
+    'pack_size',
+    'pack_unit',
+    'mrp',
+    'mrp_pricing_policy',
+    'mrp_discount_percent',
+    'barcode',
+    'sku',
+    'ean'
+  ], column_name))
+  into v_columns
+  from information_schema.columns
+  where table_schema = 'public'
+    and table_name = 'vendor_items'
+    and column_name = any(array[
+      'id',
+      'vendor_id',
+      'terminal_id',
+      'item_name',
+      'item_pic',
+      'price',
+      'price_display_mode',
+      'price_unit_label',
+      'unit',
+      'is_available',
+      'available_today',
+      'stock_status',
+      'daily_availability_status',
+      'expected_restock_at',
+      'generic_product_name',
+      'brand_name',
+      'manufacturer',
+      'variant_name',
+      'pack_size',
+      'pack_unit',
+      'mrp',
+      'mrp_pricing_policy',
+      'mrp_discount_percent',
+      'barcode',
+      'sku',
+      'ean'
+    ]);
+
+  if v_columns is not null then
+    execute format('grant select (%s) on public.vendor_items to anon, authenticated', v_columns);
+  end if;
+end $$;
+
+drop policy if exists "Public read active verified paid vendors" on public.vendors;
+create policy "Public read active verified paid vendors"
+  on public.vendors
+  for select
+  to anon, authenticated
+  using (
+    status = 'active'
+    and kyc_status = 'kyc_verified'
+    and onboarding_payment_status = 'payment_completed'
+  );
+
+drop policy if exists "Public read active terminals for active vendors" on public.vendor_terminals;
+create policy "Public read active terminals for active vendors"
+  on public.vendor_terminals
+  for select
+  to anon, authenticated
+  using (
+    status = 'active'
+    and exists (
+      select 1
+      from public.vendors v
+      where v.id = vendor_terminals.vendor_id
+        and v.status = 'active'
+        and v.kyc_status = 'kyc_verified'
+        and v.onboarding_payment_status = 'payment_completed'
+    )
+  );
+
+drop policy if exists "Public read available items for active vendors" on public.vendor_items;
+create policy "Public read available items for active vendors"
+  on public.vendor_items
+  for select
+  to anon, authenticated
+  using (
+    is_available = true
+    and available_today = true
+    and coalesce(stock_status, 'in_stock') <> 'out_of_stock'
+    and coalesce(daily_availability_status, 'available') not in ('temporarily_unavailable', 'out_of_stock')
+    and exists (
+      select 1
+      from public.vendors v
+      where v.id = vendor_items.vendor_id
+        and v.status = 'active'
+        and v.kyc_status = 'kyc_verified'
+        and v.onboarding_payment_status = 'payment_completed'
+    )
+  );
 

@@ -19,6 +19,8 @@
   "scripts": {
     "start": "node index.js",
     "dev": "nodemon index.js",
+    "validate:onboarding": "node scripts/validate-onboarding-production.mjs",
+    "validate:billing": "node scripts/validate-platform-billing.mjs",
     "pm2:start": "pm2 start ecosystem.config.cjs --env production",
     "pm2:reload": "pm2 reload sabsewa-local-api --update-env",
     "pm2:stop": "pm2 stop sabsewa-local-api",

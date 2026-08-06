@@ -11,6 +11,7 @@ import {
   recordTestPaymentAttempt,
 } from "../securityWallet/securityWalletService.js";
 import { getPaymentReadiness } from "./paymentEnvironment.js";
+import { processCapturedPlatformBillingWebhookPayment } from "../billing/platformBillingService.js";
 
 const router = express.Router();
 
@@ -42,6 +43,7 @@ async function resolveVendorId(payment) {
 }
 
 async function recordWebhookEvent({ eventId, eventType, mode, payment, rawPayload }) {
+  const payloadHash = crypto.createHash("sha256").update(JSON.stringify(rawPayload)).digest("hex");
   const { data, error } = await supabase
     .from("razorpay_webhook_events")
     .insert({
@@ -51,6 +53,7 @@ async function recordWebhookEvent({ eventId, eventType, mode, payment, rawPayloa
       razorpay_payment_id: payment?.id || null,
       razorpay_order_id: payment?.order_id || null,
       processing_status: "received",
+      payload_hash: payloadHash,
       raw_payload: rawPayload,
     })
     .select()
@@ -99,12 +102,48 @@ router.post("/razorpay/webhook", express.raw({ type: "application/json" }), asyn
       return res.json({ success: true, duplicate: true, status: "duplicate_ignored" });
     }
 
-    if (eventType !== "payment.captured" || !payment) {
+    if (!payment && !["refund.processed", "refund.failed", "settlement.processed", "settlement.failed"].includes(eventType)) {
       await markWebhookEvent(eventId, {
         processing_status: "ignored",
-        processed_result: { reason: "Only payment.captured events affect wallet ledger." },
+        processed_result: { reason: "No payment entity present." },
       });
       return res.json({ success: true, status: "ignored" });
+    }
+
+    if (eventType === "payment.failed" && payment) {
+      await supabase
+        .from("vendor_payment_attempts")
+        .update({
+          payment_status: "failed",
+          razorpay_payment_id: payment.id,
+          failure_reason: payment.error_description || payment.error_reason || "Razorpay payment failed.",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("razorpay_order_id", payment.order_id);
+      await markWebhookEvent(eventId, {
+        processing_status: "processed",
+        processed_result: { payment_failed_recorded: true },
+      });
+      return res.json({ success: true, status: "processed" });
+    }
+
+    if (eventType !== "payment.captured" || !payment) {
+      await markWebhookEvent(eventId, {
+        processing_status: "recorded",
+        processed_result: { reason: "Event recorded for audit; no immediate local state change required." },
+      });
+      return res.json({ success: true, status: "recorded" });
+    }
+
+    const platformResult = await processCapturedPlatformBillingWebhookPayment({ payment });
+    if (platformResult.matched) {
+      await markWebhookEvent(eventId, {
+        vendor_id: platformResult.attempt?.vendor_id || null,
+        processing_status: platformResult.failed ? "failed" : platformResult.test_mode ? "test_recorded" : "processed",
+        processing_error: platformResult.failed ? platformResult.reason : null,
+        processed_result: platformResult,
+      });
+      return res.json({ success: true, status: platformResult.failed ? "failed" : "processed", platform_billing: true });
     }
 
     const vendorId = await resolveVendorId(payment);

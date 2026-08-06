@@ -84,6 +84,16 @@ export default function HomeScreen() {
       <BrandHeader subtitle={t("home.tagline")} />
 
       <View style={styles.hero}>
+        <View style={styles.topNav}>
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel="Partner With Us"
+            style={styles.partnerNavButton}
+            onPress={() => router.push("/partner" as any)}
+          >
+            <Text style={styles.partnerNavText}>Partner With Us</Text>
+          </TouchableOpacity>
+        </View>
         <Text style={styles.brandTitle}>{t("home.title")}</Text>
         <Text style={styles.tagline}>{t("home.tagline")}</Text>
         <TextInput style={styles.input} placeholder={t("home.locationPlaceholder")} accessibilityLabel={t("home.locationPlaceholder")} />
@@ -197,6 +207,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#f8fbff",
   },
   brandTitle: { fontSize: 28, fontWeight: "900", color: "#0f766e" },
+  topNav: { flexDirection: "row", justifyContent: "flex-end", marginBottom: 12 },
+  partnerNavButton: { backgroundColor: "#f97316", borderRadius: 8, paddingVertical: 10, paddingHorizontal: 14 },
+  partnerNavText: { color: "#fff", fontWeight: "900" },
   tagline: { color: "#f97316", fontSize: 16, fontWeight: "900", marginTop: 4, marginBottom: 14 },
   input: { borderWidth: 1, borderColor: "#cbd5e1", borderRadius: 8, padding: 12, marginBottom: 10, backgroundColor: "#fff" },
   categoryRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 14 },

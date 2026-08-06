@@ -41,7 +41,23 @@ export default function VendorDashboard() {
   }
 
   const vendorLoaded = Boolean(vendor?.id);
+  const onboardingComplete =
+    vendor?.status === "active" &&
+    vendor?.kyc_status === "kyc_verified" &&
+    vendor?.onboarding_payment_status === "payment_completed";
   const actionCards = [
+    {
+      title: "Onboarding",
+      description: "View KYC, fee summary, payment status and activation readiness.",
+      color: "#9333ea",
+      route: vendorLoaded ? "/vendor/Onboarding" : "",
+    },
+    {
+      title: "Billing & Subscription",
+      description: "Pay platform charges, manage subscriptions, view invoices and purchase promotions.",
+      color: "#0f766e",
+      route: vendorLoaded ? `/vendor/Billing?vendor=${vendor.id}` : "",
+    },
     {
       title: "Catalogue Setup",
       description: "Search the master catalogue, multi-select products and add them to your store.",
@@ -144,7 +160,7 @@ export default function VendorDashboard() {
 
       <View style={styles.summaryGrid}>
         <View style={styles.summaryCard}>
-          <Text style={styles.summaryValue}>{vendorLoaded ? "Active" : "Locked"}</Text>
+          <Text style={styles.summaryValue}>{onboardingComplete ? "Active" : "Locked"}</Text>
           <Text style={styles.summaryLabel}>Order receiving</Text>
         </View>
         <View style={styles.summaryCard}>
@@ -198,9 +214,9 @@ export default function VendorDashboard() {
           >
             <Text style={styles.actionTitle}>{action.title}</Text>
             <Text style={styles.actionText}>{action.description}</Text>
-            <Text style={[styles.actionStatus, { color: vendorLoaded ? action.color : "#6b7280" }]}>
-              {vendorLoaded ? "Open" : "Unlocks after vendor login"}
-            </Text>
+          <Text style={[styles.actionStatus, { color: vendorLoaded ? action.color : "#6b7280" }]}>
+              {vendorLoaded ? (action.title === "Onboarding" || onboardingComplete ? "Open" : "Requires onboarding") : "Unlocks after vendor login"}
+          </Text>
           </TouchableOpacity>
         ))}
       </View>

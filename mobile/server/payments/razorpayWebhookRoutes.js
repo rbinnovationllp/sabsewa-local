@@ -9,12 +9,16 @@ import {
   applyInitialActivationPayment,
   applyWalletCredit,
   recordTestPaymentAttempt,
+  verifyRazorpaySignature,
 } from "../securityWallet/securityWalletService.js";
 import { getPaymentReadiness } from "./paymentEnvironment.js";
 import { processCapturedPlatformBillingWebhookPayment } from "../billing/platformBillingService.js";
 
 const router = express.Router();
 
+/**
+ * Helper to verify Razorpay Webhook Signatures
+ */
 function verifyWebhookSignature(rawBody, signature) {
   const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET || "";
   if (!webhookSecret || !signature) return false;
@@ -25,6 +29,9 @@ function verifyWebhookSignature(rawBody, signature) {
   return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(received));
 }
 
+/**
+ * Resolves internal vendor_id from Razorpay payment notes
+ */
 async function resolveVendorId(payment) {
   const internalVendorId = payment?.notes?.internal_vendor_id;
   if (internalVendorId) return internalVendorId;
@@ -42,6 +49,9 @@ async function resolveVendorId(payment) {
   return data?.id || null;
 }
 
+/**
+ * Audit log helper for webhook events
+ */
 async function recordWebhookEvent({ eventId, eventType, mode, payment, rawPayload }) {
   const payloadHash = crypto.createHash("sha256").update(JSON.stringify(rawPayload)).digest("hex");
   const { data, error } = await supabase
@@ -76,6 +86,54 @@ async function markWebhookEvent(eventId, fields) {
     .eq("event_id", eventId);
 }
 
+/**
+ * @route POST /api/payments/verify-vendor-invoice
+ * @desc Manual verification endpoint called from frontend upon payment completion
+ */
+router.post("/verify-vendor-invoice", async (req, res) => {
+  try {
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, invoice_id } = req.body;
+
+    const isValid = verifyRazorpaySignature({
+      razorpayOrderId: razorpay_order_id,
+      razorpayPaymentId: razorpay_payment_id,
+      razorpaySignature: razorpay_signature
+    });
+
+    if (!isValid) {
+      return res.status(400).json({ success: false, error: "Invalid payment signature." });
+    }
+
+    // 1. Update Invoice Payment Status
+    const { data: invoice, error: invErr } = await supabase
+      .from("vendor_invoices")
+      .update({
+        payment_status: "paid",
+        razorpay_order_id,
+        razorpay_payment_id
+      })
+      .eq("id", invoice_id)
+      .select()
+      .single();
+
+    if (invErr) throw invErr;
+
+    // 2. Mark corresponding ledger entries as billed
+    await supabase
+      .from("vendor_platform_fee_ledger")
+      .update({ settlement_status: "billed" })
+      .eq("invoice_id", invoice_id);
+
+    return res.json({ success: true, message: "Payment verified successfully.", invoice });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * @route POST /api/payments/razorpay/webhook
+ * @desc Razorpay Webhook Endpoint
+ */
 router.post("/razorpay/webhook", express.raw({ type: "application/json" }), async (req, res) => {
   const signature = req.headers["x-razorpay-signature"];
   const paymentReadiness = getPaymentReadiness();
@@ -187,7 +245,7 @@ router.post("/razorpay/webhook", express.raw({ type: "application/json" }), asyn
           processing_status: "failed",
           processing_error: "Initial activation payment amount mismatch.",
         });
-        return res.status(400).json({ success: false, error: "Initial activation payment must be Rs 5,500." });
+        return res.status(400).json({ success: false, error: "Initial activation payment amount mismatch." });
       }
 
       const wallet = await applyInitialActivationPayment({

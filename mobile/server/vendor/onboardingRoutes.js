@@ -16,14 +16,95 @@ const razorpay = new Razorpay({
 });
 
 /**
+ * Fallback Matrix for Canonical Category IDs
+ * Note: perOrderCharge values are in Rupees (e.g., 20 = Rs. 20)
+ */
+const CANONICAL_FEE_MATRIX = {
+  FRUIT_VEGETABLE: { onboardingFee: 500, securityDeposit: 5000, perOrderCharge: 15, taxRate: 18 },
+  KIRANA_GENERAL: { onboardingFee: 1000, securityDeposit: 5000, perOrderCharge: 20, taxRate: 18 },
+  PHARMACY_MEDICAL: { onboardingFee: 2000, securityDeposit: 5000, perOrderCharge: 25, taxRate: 18 },
+  RESTAURANT_FOOD: { onboardingFee: 2000, securityDeposit: 5000, perOrderCharge: 25, taxRate: 18 },
+  BAKERY_DAIRY: { onboardingFee: 1000, securityDeposit: 5000, perOrderCharge: 15, taxRate: 18 },
+  HARDWARE_REPAIR: { onboardingFee: 1500, securityDeposit: 5000, perOrderCharge: 20, taxRate: 18 },
+  CLOTHING_TAILORING: { onboardingFee: 1000, securityDeposit: 5000, perOrderCharge: 15, taxRate: 18 },
+  HOME_BUSINESS: { onboardingFee: 500, securityDeposit: 5000, perOrderCharge: 10, taxRate: 18 },
+  OTHER: { onboardingFee: 2000, securityDeposit: 5000, perOrderCharge: 25, taxRate: 18 }
+};
+
+/**
+ * Resolves legacy free-text categories or controlled dropdown IDs to canonical category_id
+ */
+function resolveCanonicalId(rawCategory) {
+  if (!rawCategory) return "OTHER";
+  const clean = String(rawCategory).trim().toUpperCase();
+
+  if (CANONICAL_FEE_MATRIX[clean]) return clean;
+
+  const lower = clean.toLowerCase();
+  if (lower.includes("veg") || lower.includes("fruit")) return "FRUIT_VEGETABLE";
+  if (lower.includes("kirana") || lower.includes("general") || lower.includes("grocery")) return "KIRANA_GENERAL";
+  if (lower.includes("pharma") || lower.includes("med") || lower.includes("chemist")) return "PHARMACY_MEDICAL";
+  if (lower.includes("rest") || lower.includes("food") || lower.includes("eatery")) return "RESTAURANT_FOOD";
+  if (lower.includes("bake") || lower.includes("dairy")) return "BAKERY_DAIRY";
+  if (lower.includes("hardware") || lower.includes("repair")) return "HARDWARE_REPAIR";
+  if (lower.includes("cloth") || lower.includes("tailor")) return "CLOTHING_TAILORING";
+  if (lower.includes("home")) return "HOME_BUSINESS";
+
+  return "OTHER";
+}
+
+/**
+ * @route POST /api/vendor/onboarding/:vendor_id/register-category
+ * @desc Saves controlled dropdown selection or custom 'OTHER' category description
+ */
+router.post("/:vendor_id/register-category", async (req, res) => {
+  try {
+    const { vendor_id } = req.params;
+    const { category_id, custom_category_description, actor_user_id } = req.body || {};
+
+    if (!category_id) {
+      return res.status(400).json({ success: false, error: "Category selection is required." });
+    }
+
+    const canonicalId = resolveCanonicalId(category_id);
+
+    const { data: updatedVendor, error: updateError } = await supabase
+      .from("vendors")
+      .update({
+        category: canonicalId,
+        custom_category_description: canonicalId === "OTHER" ? custom_category_description : null,
+        updated_at: new Date().toISOString()
+      })
+      .eq("id", vendor_id)
+      .select()
+      .single();
+
+    if (updateError) throw updateError;
+
+    if (canonicalId === "OTHER" && custom_category_description) {
+      await supabase.from("audit_logs").insert({
+        actor_user_id: actor_user_id || null,
+        action: "custom_category_submitted",
+        entity_type: "vendors",
+        entity_id: vendor_id,
+        metadata: { custom_category_description, assigned_category: "OTHER" }
+      });
+    }
+
+    return res.json({ success: true, vendor: updatedVendor });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
  * @route POST /api/vendor/onboarding/:vendor_id/create-razorpay-order
- * @desc Dynamically calculates Onboarding Fee + Security Deposit based on vendor category and creates Razorpay Order
+ * @desc Dynamically calculates Onboarding Fee + GST + Security Deposit based on canonical category
  */
 router.post("/:vendor_id/create-razorpay-order", async (req, res) => {
   try {
     const { vendor_id } = req.params;
 
-    // 1. Fetch vendor profile and category
     const { data: vendor, error: vendorError } = await supabase
       .from("vendors")
       .select("id, public_vendor_id, category, shop_name, phone_number, email")
@@ -34,27 +115,26 @@ router.post("/:vendor_id/create-razorpay-order", async (req, res) => {
       return res.status(404).json({ success: false, error: "Vendor profile not found." });
     }
 
-    const categorySlug = String(vendor.category || "other").toLowerCase();
+    const canonicalId = resolveCanonicalId(vendor.category);
+    const fallbackRules = CANONICAL_FEE_MATRIX[canonicalId] || CANONICAL_FEE_MATRIX.OTHER;
 
-    // 2. Fetch active fee rule for the vendor's category from database
     const { data: feeRule } = await supabase
       .from("vendor_fee_rules")
-      .select("onboarding_fee_amount, security_deposit_amount, tax_rate_percent, onboarding_fee_refundable, security_deposit_refundable")
-      .eq("category_slug", categorySlug)
+      .select("onboarding_fee_amount, security_deposit_amount, tax_rate_percent, per_completed_order_charge")
+      .or(`category_id.eq.${canonicalId},category_slug.eq.${canonicalId.toLowerCase()}`)
       .eq("is_active", true)
       .is("effective_to", null)
       .maybeSingle();
 
-    // Dynamically retrieve fee values or fall back to defaults (Rs 500 Onboarding Fee + Rs 5,000 Security Deposit)
-    const onboardingFee = feeRule?.onboarding_fee_amount ?? 500;
-    const securityDeposit = feeRule?.security_deposit_amount ?? 5000;
-    const taxRatePercent = feeRule?.tax_rate_percent ?? 0;
+    const onboardingFee = feeRule?.onboarding_fee_amount ?? fallbackRules.onboardingFee;
+    const securityDeposit = feeRule?.security_deposit_amount ?? fallbackRules.securityDeposit;
+    const taxRatePercent = feeRule?.tax_rate_percent ?? fallbackRules.taxRate;
+    const perOrderCharge = feeRule?.per_completed_order_charge ?? fallbackRules.perOrderCharge;
 
     const taxAmount = Math.round((onboardingFee * taxRatePercent) / 100);
     const totalAmountInRupees = onboardingFee + securityDeposit + taxAmount;
     const totalAmountInPaise = Math.round(totalAmountInRupees * 100);
 
-    // 3. Create dynamic order on Razorpay
     const options = {
       amount: totalAmountInPaise,
       currency: "INR",
@@ -62,11 +142,11 @@ router.post("/:vendor_id/create-razorpay-order", async (req, res) => {
       notes: {
         internal_vendor_id: vendor.id,
         vendor_id: vendor.public_vendor_id || vendor.id,
-        payment_purpose: "vendor_initial_activation",
-        category_slug: categorySlug,
+        category_id: canonicalId,
         onboarding_fee: String(onboardingFee),
         security_deposit: String(securityDeposit),
         tax_amount: String(taxAmount),
+        per_order_charge: String(perOrderCharge)
       },
     };
 
@@ -79,15 +159,17 @@ router.post("/:vendor_id/create-razorpay-order", async (req, res) => {
       currency: order.currency,
       key_id: process.env.RAZORPAY_KEY_ID,
       breakdown: {
-        category_slug: categorySlug,
+        category_id: canonicalId,
         onboarding_fee: onboardingFee,
+        gst_amount: taxAmount,
+        gst_rate_percent: taxRatePercent,
         security_deposit: securityDeposit,
-        tax_amount: taxAmount,
-        tax_rate_percent: taxRatePercent,
+        per_completed_order_charge: perOrderCharge,
         total_payable: totalAmountInRupees,
       },
     });
   } catch (error) {
+    console.error("Error creating Razorpay order:", error);
     return res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -105,7 +187,7 @@ router.get("/categories/fee-rules", async (_req, res) => {
   try {
     const [{ data: categories, error: categoryError }, { data: feeRules, error: feeError }] = await Promise.all([
       supabase.from("vendor_categories").select("*").eq("is_active", true).order("sort_order"),
-      supabase.from("vendor_fee_rules").select("*").eq("is_active", true).is("effective_to", null).order("category_slug"),
+      supabase.from("vendor_fee_rules").select("*").eq("is_active", true).is("effective_to", null),
     ]);
     if (categoryError) throw categoryError;
     if (feeError) throw feeError;
@@ -117,19 +199,10 @@ router.get("/categories/fee-rules", async (_req, res) => {
 
 router.post("/:vendor_id/payment-record", async (req, res) => {
   try {
-    const {
-      gateway_order_id,
-      gateway_payment_id,
-      gateway_signature,
-      actor_user_id,
-      metadata = {},
-    } = req.body || {};
+    const { gateway_order_id, gateway_payment_id, gateway_signature, actor_user_id, metadata = {} } = req.body || {};
 
     if (!gateway_order_id || !gateway_payment_id) {
-      return res.status(400).json({
-        success: false,
-        error: "Verified gateway order id and payment id are required before onboarding payment can be recorded.",
-      });
+      return res.status(400).json({ success: false, error: "Verified gateway order id and payment id are required." });
     }
     if (getRazorpayMode() === "live" && !gateway_signature) {
       return res.status(400).json({ success: false, error: "Gateway signature is required in live payment mode." });
@@ -166,140 +239,11 @@ router.post("/:vendor_id/payment-record", async (req, res) => {
 
 router.get("/admin/config", ...requireAdmin, async (_req, res) => {
   try {
-    const [
-      { data: categories, error: categoryError },
-      { data: feeRules, error: feeError },
-      { data: storagePlans, error: storageError },
-    ] = await Promise.all([
+    const [{ data: categories }, { data: feeRules }] = await Promise.all([
       supabase.from("vendor_categories").select("*").order("sort_order"),
-      supabase.from("vendor_fee_rules").select("*").eq("is_active", true).is("effective_to", null).order("category_slug"),
-      supabase.from("vendor_storage_plans").select("*").order("sort_order"),
+      supabase.from("vendor_fee_rules").select("*").eq("is_active", true).is("effective_to", null),
     ]);
-    if (categoryError) throw categoryError;
-    if (feeError) throw feeError;
-    if (storageError && storageError.code !== "42P01") throw storageError;
-
-    return res.json({
-      success: true,
-      categories: categories || [],
-      fee_rules: feeRules || [],
-      storage_plans: storagePlans || [],
-    });
-  } catch (error) {
-    return res.status(error.statusCode || 500).json({ success: false, error: error.message });
-  }
-});
-
-router.post("/admin/categories", ...requireAdmin, async (req, res) => {
-  try {
-    const {
-      slug,
-      display_name,
-      description,
-      requires_fssai = false,
-      requires_drug_license = false,
-      requires_gstin = false,
-      requires_trade_license = false,
-      is_active = true,
-      sort_order = 100,
-      actor_user_id,
-    } = req.body || {};
-
-    if (!slug || !display_name) {
-      return res.status(400).json({ success: false, error: "Category slug and display name are required." });
-    }
-
-    const normalizedSlug = String(slug).trim().toLowerCase();
-    const { data, error } = await supabase
-      .from("vendor_categories")
-      .upsert({
-        slug: normalizedSlug,
-        display_name: String(display_name).trim(),
-        description: description || null,
-        requires_fssai: Boolean(requires_fssai),
-        requires_drug_license: Boolean(requires_drug_license),
-        requires_gstin: Boolean(requires_gstin),
-        requires_trade_license: Boolean(requires_trade_license),
-        is_active: Boolean(is_active),
-        sort_order: Number(sort_order || 100),
-        updated_at: new Date().toISOString(),
-      }, { onConflict: "slug" })
-      .select()
-      .single();
-    if (error) throw error;
-
-    await supabase.from("audit_logs").insert({
-      actor_user_id: actor_user_id || null,
-      action: "vendor_category_upsert",
-      entity_type: "vendor_categories",
-      entity_id: data.id,
-      metadata: { slug: normalizedSlug },
-    });
-
-    return res.json({ success: true, category: data });
-  } catch (error) {
-    return res.status(error.statusCode || 500).json({ success: false, error: error.message });
-  }
-});
-
-router.post("/admin/fee-rules", ...requireAdmin, async (req, res) => {
-  try {
-    const {
-      category_slug,
-      onboarding_fee_amount,
-      security_deposit_amount,
-      per_completed_order_charge,
-      onboarding_fee_refundable = false,
-      security_deposit_refundable = true,
-      tax_rate_percent = 0,
-      currency = "INR",
-      actor_user_id,
-    } = req.body || {};
-
-    if (!category_slug) return res.status(400).json({ success: false, error: "Category is required." });
-    const normalizedCategory = String(category_slug).trim().toLowerCase();
-    const onboardingFee = Number(onboarding_fee_amount);
-    const securityDeposit = Number(security_deposit_amount);
-    const orderCharge = Number(per_completed_order_charge);
-    const taxRate = Number(tax_rate_percent || 0);
-    if (![onboardingFee, securityDeposit, orderCharge, taxRate].every((value) => Number.isFinite(value) && value >= 0)) {
-      return res.status(400).json({ success: false, error: "Fee amounts and tax rate must be valid non-negative numbers." });
-    }
-
-    const now = new Date().toISOString();
-    await supabase
-      .from("vendor_fee_rules")
-      .update({ is_active: false, effective_to: now, updated_at: now })
-      .eq("category_slug", normalizedCategory)
-      .eq("is_active", true)
-      .is("effective_to", null);
-
-    const { data, error } = await supabase
-      .from("vendor_fee_rules")
-      .insert({
-        category_slug: normalizedCategory,
-        onboarding_fee_amount: onboardingFee,
-        security_deposit_amount: securityDeposit,
-        per_completed_order_charge: orderCharge,
-        onboarding_fee_refundable: Boolean(onboarding_fee_refundable),
-        security_deposit_refundable: Boolean(security_deposit_refundable),
-        tax_rate_percent: taxRate,
-        currency,
-        created_by: actor_user_id || null,
-      })
-      .select()
-      .single();
-    if (error) throw error;
-
-    await supabase.from("audit_logs").insert({
-      actor_user_id: actor_user_id || null,
-      action: "vendor_fee_rule_update",
-      entity_type: "vendor_fee_rules",
-      entity_id: data.id,
-      metadata: { category_slug: normalizedCategory, onboardingFee, securityDeposit, orderCharge, taxRate },
-    });
-
-    return res.status(201).json({ success: true, fee_rule: data });
+    return res.json({ success: true, categories: categories || [], fee_rules: feeRules || [] });
   } catch (error) {
     return res.status(error.statusCode || 500).json({ success: false, error: error.message });
   }
@@ -308,14 +252,7 @@ router.post("/admin/fee-rules", ...requireAdmin, async (req, res) => {
 router.post("/:vendor_id/kyc-status", ...requireAdmin, async (req, res) => {
   try {
     const { status, actor_user_id, reason } = req.body || {};
-    const allowed = new Set([
-      "kyc_not_started",
-      "kyc_submitted",
-      "kyc_under_review",
-      "additional_information_required",
-      "kyc_verified",
-      "kyc_rejected",
-    ]);
+    const allowed = new Set(["kyc_not_started", "kyc_submitted", "kyc_under_review", "additional_information_required", "kyc_verified", "kyc_rejected"]);
     if (!allowed.has(status)) return res.status(400).json({ success: false, error: "Invalid KYC status." });
 
     const { data: current, error: currentError } = await supabase
@@ -325,14 +262,13 @@ router.post("/:vendor_id/kyc-status", ...requireAdmin, async (req, res) => {
       .single();
     if (currentError || !current) return res.status(404).json({ success: false, error: "Vendor not found." });
 
-    const nextLifecycle =
-      status === "kyc_rejected"
-        ? "kyc_rejected"
-        : status === "kyc_verified" && current.onboarding_payment_status === "payment_completed"
-          ? "approval_pending"
-          : status === "kyc_verified"
-            ? "payment_pending"
-            : "kyc_pending";
+    const nextLifecycle = status === "kyc_rejected"
+      ? "kyc_rejected"
+      : status === "kyc_verified" && current.onboarding_payment_status === "payment_completed"
+        ? "approval_pending"
+        : status === "kyc_verified"
+          ? "payment_pending"
+          : "kyc_pending";
 
     const { data, error } = await supabase
       .from("vendors")

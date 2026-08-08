@@ -150,3 +150,18 @@ Not ready--complete the listed technical work first.
 - Onboarding page now includes a four-step progress indicator and clearer Pay Now/locked state text.
 - KYC remains mandatory before Razorpay order creation; payment verification remains backend-only.
 - Verified onboarding payment now activates a KYC-approved vendor in the database function.
+## 2026-08-08 - Flexible vendor KYC document sections
+
+- Vendor KYC now uses two mandatory dropdown-style sections: Identity Proof and Shop Address Proof / Business Registration.
+- Added conditional Special / Restricted Item Licence section for pharmacy, food, liquor, alcohol, or other regulated categories.
+- Uploads support Camera, Gallery, and Files and store document section/selected label in KYC metadata.
+- Uploading documents moves the vendor to kyc_under_review; it does not auto-approve KYC or unlock payment.
+- Admin KYC approval is blocked until mandatory KYC sections have acceptable submitted documents.
+- Added Supabase SQL repair: supabase/RUN_FIX_VENDOR_KYC_DOCUMENT_FLEXIBLE_TYPES_2026_08_08.sql.
+## 2026-08-08 - KYC section-level upload workflow
+
+- Reworked Vendor KYC so each required document section has its own document selection, file picker, and Upload button.
+- The bottom Submit For Verification action now submits only an already uploaded KYC package and blocks submission when mandatory sections are missing.
+- Uploading one document no longer implies the full KYC package was submitted.
+- KYC moves to kyc_under_review only after all mandatory uploaded documents are submitted for verification.
+- Vendor-facing payment configuration errors no longer expose SQL/developer instructions.

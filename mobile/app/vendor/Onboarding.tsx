@@ -264,7 +264,7 @@ export default function VendorOnboardingScreen() {
                   return;
                 }
                 if (!pricingReady) {
-                  Alert.alert("Pricing unavailable", "Payment configuration is missing. Please contact SabSewa support.");
+                  Alert.alert("Pricing unavailable", "Payment details are temporarily unavailable. Please try again later or contact SabSewa support.");
                   return;
                 }
                 if (!isPaymentCompleted) payOnboardingWithRazorpay();
@@ -313,7 +313,7 @@ export default function VendorOnboardingScreen() {
           <Text style={styles.lineLabel}>Tax</Text>
           <Text style={styles.lineValue}>{pricingReady || taxAmount !== null ? money(taxAmount, currency) : "Configuration missing"}</Text>
         </View>
-        {!pricingReady ? <Text style={styles.pricingWarning}>Payment configuration is missing or could not be loaded from the backend. Please run the Supabase fee-rule repair SQL or contact SabSewa support; Rs 0.00 will not be treated as payable.</Text> : null}
+        {!pricingReady ? <Text style={styles.pricingWarning}>Payment details are temporarily unavailable. Please try again later or contact SabSewa support.</Text> : null}
         <View style={[styles.line, styles.totalLine]}>
           <Text style={styles.totalLabel}>Total payable</Text>
           <Text style={styles.totalValue}>{pricingReady ? money(totalPayable, currency) : "Configuration missing"}</Text>

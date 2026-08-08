@@ -1,4 +1,4 @@
-﻿import express from "express";
+import express from "express";
 import multer from "multer";
 import Razorpay from "razorpay";
 import { supabase } from "../connection.js";
@@ -190,23 +190,125 @@ router.get("/:vendor_id/summary", async (req, res) => {
   }
 });
 
-function requiredKycDocumentsForCategory(category) {
+function categoryNeedsSpecialLicence(category) {
   const lower = String(category || "").toLowerCase();
-  const docs = [
-    { type: "aadhaar", label: "Owner Aadhaar / identity proof", required: true },
-    { type: "shop_establishment", label: "Shop establishment or local business proof", required: true },
-    { type: "shop_photo", label: "Shop photo", required: true },
-  ];
+  return (
+    lower.includes("pharma") ||
+    lower.includes("medical") ||
+    lower.includes("chemist") ||
+    lower.includes("drug") ||
+    lower.includes("medicine") ||
+    lower.includes("restaurant") ||
+    lower.includes("tiffin") ||
+    lower.includes("food") ||
+    lower.includes("liquor") ||
+    lower.includes("alcohol") ||
+    lower.includes("restricted")
+  );
+}
+
+function specialLicenceOptions(category) {
+  const lower = String(category || "").toLowerCase();
+  if (lower.includes("pharma") || lower.includes("medical") || lower.includes("chemist") || lower.includes("drug") || lower.includes("medicine")) {
+    return [
+      { type: "drug_license", label: "Drug licence / pharmacy licence" },
+      { type: "restricted_goods_license", label: "Other medicine or restricted goods licence" },
+      { type: "other_regulatory_license", label: "Other applicable regulatory licence" },
+    ];
+  }
   if (lower.includes("restaurant") || lower.includes("tiffin") || lower.includes("food")) {
-    docs.push({ type: "fssai_license", label: "FSSAI licence", required: true });
+    return [
+      { type: "fssai_license", label: "FSSAI licence / food business registration" },
+      { type: "other_regulatory_license", label: "Other applicable food licence" },
+    ];
   }
-  if (lower.includes("pharma") || lower.includes("medical") || lower.includes("chemist")) {
-    docs.push({ type: "drug_license", label: "Drug licence", required: true });
+  if (lower.includes("liquor") || lower.includes("alcohol")) {
+    return [
+      { type: "liquor_license", label: "Liquor / alcohol sales licence" },
+      { type: "restricted_goods_license", label: "Restricted goods licence" },
+      { type: "other_regulatory_license", label: "Other applicable regulatory licence" },
+    ];
   }
-  if (lower.includes("gst")) {
-    docs.push({ type: "gst_certificate", label: "GST certificate", required: false });
+  return [
+    { type: "restricted_goods_license", label: "Restricted goods licence" },
+    { type: "other_regulatory_license", label: "Other applicable regulatory licence" },
+  ];
+}
+
+function requiredKycDocumentsForCategory(category) {
+  const specialRequired = categoryNeedsSpecialLicence(category);
+  return [
+    {
+      id: "identity_proof",
+      title: "Identity Proof",
+      required: true,
+      note: "Select one government-issued identity proof for the shop owner, authorised person or caretaker.",
+      options: [
+        { type: "aadhaar", label: "Aadhaar Card" },
+        { type: "pan_card", label: "PAN Card" },
+        { type: "passport", label: "Passport" },
+        { type: "voter_id", label: "Voter ID Card" },
+        { type: "driving_licence", label: "Driving Licence" },
+        { type: "other_identity_proof", label: "Other valid government-issued identity proof" },
+      ],
+    },
+    {
+      id: "business_address_proof",
+      title: "Shop Address Proof / Business Registration",
+      required: true,
+      note: "Select one document proving shop/business address or lawful business presence.",
+      options: [
+        { type: "shop_establishment", label: "Shop & Establishment Registration Certificate" },
+        { type: "rent_agreement", label: "Rent / Lease Agreement" },
+        { type: "utility_bill", label: "Electricity / Utility Bill" },
+        { type: "municipal_document", label: "Municipal / Local Authority document" },
+        { type: "business_registration_address", label: "Business registration document containing shop address" },
+        { type: "gst_certificate", label: "GST registration certificate, where applicable" },
+        { type: "other_business_proof", label: "Other acceptable legal address/business proof" },
+      ],
+    },
+    {
+      id: "regulated_license",
+      title: "Special / Restricted Item Licence",
+      required: specialRequired,
+      conditional: true,
+      note: specialRequired
+        ? "Mandatory for this category. Upload the applicable valid licence before KYC can be approved."
+        : "Normally not applicable. Upload only if the shop sells restricted or regulated products.",
+      options: specialLicenceOptions(category),
+    },
+  ];
+}
+
+function flattenKycDocumentTypes(requirements) {
+  return new Set(requirements.flatMap((section) => (section.options || []).map((option) => option.type)).concat(["authorisation", "trade_license", "shop_photo"]));
+}
+
+function latestDocumentForSection(section, documents) {
+  const allowed = new Set((section.options || []).map((option) => option.type));
+  return documents.find((document) => allowed.has(document.document_type));
+}
+
+function hasAcceptableSubmittedDocument(section, documents) {
+  const latest = latestDocumentForSection(section, documents);
+  return Boolean(latest && !["rejected", "additional_information_required"].includes(latest.status));
+}
+
+async function assertRequiredKycDocumentsSubmitted(vendorId, category) {
+  const requirements = requiredKycDocumentsForCategory(category).filter((section) => section.required);
+  const { data: documents, error } = await supabase
+    .from("vendor_kyc_documents")
+    .select("document_type, status, created_at, metadata")
+    .eq("vendor_id", vendorId)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+
+  const missing = requirements.filter((section) => !hasAcceptableSubmittedDocument(section, documents || []));
+  if (missing.length > 0) {
+    const err = new Error(`KYC cannot be approved until required documents are submitted: ${missing.map((section) => section.title).join(", ")}.`);
+    err.statusCode = 409;
+    throw err;
   }
-  return docs;
 }
 
 async function assertVendorOwnerOrAdmin(req, vendorId) {
@@ -235,7 +337,7 @@ router.get("/:vendor_id/kyc-requirements", requireAuth, async (req, res) => {
     const vendor = await assertVendorOwnerOrAdmin(req, req.params.vendor_id);
     const { data: documents, error } = await supabase
       .from("vendor_kyc_documents")
-      .select("id, document_type, status, file_name, mime_type, file_size_bytes, rejection_reason, created_at, reviewed_at")
+      .select("id, document_type, status, file_name, mime_type, file_size_bytes, rejection_reason, metadata, created_at, reviewed_at")
       .eq("vendor_id", req.params.vendor_id)
       .order("created_at", { ascending: false });
     if (error) throw error;
@@ -258,15 +360,11 @@ router.get("/:vendor_id/kyc-requirements", requireAuth, async (req, res) => {
 router.post("/:vendor_id/kyc-documents", requireAuth, kycUpload.single("document"), async (req, res) => {
   try {
     const vendor = await assertVendorOwnerOrAdmin(req, req.params.vendor_id);
+    const requirements = requiredKycDocumentsForCategory(vendor.category);
     const documentType = String(req.body?.document_type || "").trim();
-    const allowedTypes = new Set(requiredKycDocumentsForCategory(vendor.category).map((doc) => doc.type).concat([
-      "authorisation",
-      "trade_license",
-      "gst_certificate",
-      "utility_bill",
-      "rent_agreement",
-      "other_business_proof",
-    ]));
+    const documentSection = String(req.body?.document_section || "").trim();
+    const documentLabel = String(req.body?.document_label || documentType).trim();
+    const allowedTypes = flattenKycDocumentTypes(requirements);
     if (!allowedTypes.has(documentType)) {
       return res.status(400).json({ success: false, error: "Invalid or unsupported KYC document type for this vendor category." });
     }
@@ -294,6 +392,8 @@ router.post("/:vendor_id/kyc-documents", requireAuth, kycUpload.single("document
         file_size_bytes: uploaded.file_size_bytes,
         status: "submitted",
         metadata: {
+          document_section: documentSection || null,
+          document_label: documentLabel || documentType,
           optimized_for_storage: req.file.mimetype?.startsWith("image/") || false,
           public_url: uploaded.public_url,
           note: "Image compression only; legal document content is not altered or fabricated.",
@@ -303,18 +403,45 @@ router.post("/:vendor_id/kyc-documents", requireAuth, kycUpload.single("document
       .single();
     if (insertError) throw insertError;
 
-    const nextKycStatus = vendor.kyc_status === "kyc_verified" ? "kyc_verified" : "kyc_submitted";
-    await supabase
+    const currentKycStatus = vendor.kyc_status || "kyc_not_started";
+    return res.status(201).json({ success: true, document: documentRow, kyc_status: currentKycStatus });
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({ success: false, error: error.message });
+  }
+});
+
+router.post("/:vendor_id/submit-kyc", requireAuth, async (req, res) => {
+  try {
+    const vendor = await assertVendorOwnerOrAdmin(req, req.params.vendor_id);
+    if (vendor.kyc_status === "kyc_verified") {
+      return res.json({ success: true, kyc_status: "kyc_verified" });
+    }
+
+    await assertRequiredKycDocumentsSubmitted(req.params.vendor_id, vendor.category);
+
+    const now = new Date().toISOString();
+    const { data, error } = await supabase
       .from("vendors")
       .update({
-        kyc_status: nextKycStatus,
+        kyc_status: "kyc_under_review",
         status: vendor.status === "active" ? "active" : "kyc_pending",
         lifecycle_status: vendor.status === "active" ? "active" : "kyc_pending",
-        updated_at: new Date().toISOString(),
+        updated_at: now,
       })
-      .eq("id", req.params.vendor_id);
+      .eq("id", req.params.vendor_id)
+      .select("id, category, kyc_status, onboarding_payment_status")
+      .single();
+    if (error) throw error;
 
-    return res.status(201).json({ success: true, document: documentRow, kyc_status: nextKycStatus });
+    await supabase.from("vendor_status_history").insert({
+      vendor_id: req.params.vendor_id,
+      previous_status: vendor.kyc_status || "kyc_not_started",
+      next_status: "kyc_under_review",
+      changed_by: req.auth?.user_id || null,
+      change_reason: "Vendor submitted complete KYC package for verification",
+    });
+
+    return res.json({ success: true, vendor: data, kyc_status: "kyc_under_review" });
   } catch (error) {
     return res.status(error.statusCode || 500).json({ success: false, error: error.message });
   }
@@ -410,6 +537,15 @@ router.post("/:vendor_id/kyc-status", ...requireAdmin, async (req, res) => {
       .single();
     if (currentError || !current) return res.status(404).json({ success: false, error: "Vendor not found." });
 
+    if (status === "kyc_verified") {
+      const { data: vendorForApproval, error: vendorForApprovalError } = await supabase
+        .from("vendors")
+        .select("id, category")
+        .eq("id", req.params.vendor_id)
+        .single();
+      if (vendorForApprovalError || !vendorForApproval) return res.status(404).json({ success: false, error: "Vendor not found." });
+      await assertRequiredKycDocumentsSubmitted(req.params.vendor_id, vendorForApproval.category);
+    }
     const nextLifecycle = status === "kyc_rejected"
       ? "kyc_rejected"
       : status === "kyc_verified" && current.onboarding_payment_status === "payment_completed"

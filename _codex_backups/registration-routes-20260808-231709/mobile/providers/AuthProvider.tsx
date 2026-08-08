@@ -1,4 +1,4 @@
-﻿import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useState } from "react";
 import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 import { usePathname, useRouter, useSegments } from "expo-router";
@@ -12,12 +12,10 @@ type AuthContextType = {
   role: AppRole | null;
   roleLoading: boolean;
   signOut: () => Promise<void>;
-  signInWithOtp: (phone: string, metadata?: Record<string, any>) => Promise<any>;
+  signInWithOtp: (phone: string) => Promise<any>;
   verifyOtp: (phone: string, token: string) => Promise<any>;
-  signInWithEmailOtp: (email: string, metadata?: Record<string, any>) => Promise<any>;
+  signInWithEmailOtp: (email: string) => Promise<any>;
   verifyEmailOtp: (email: string, token: string) => Promise<any>;
-  signUpWithEmailPassword: (email: string, password: string, metadata?: Record<string, any>) => Promise<any>;
-  signInWithGoogle: () => Promise<any>;
 };
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -165,16 +163,10 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
     router.replace("/auth/Login" as any);
   };
 
-  const signInWithOtp = (phone: string, metadata?: Record<string, any>) =>
-    supabase.auth.signInWithOtp({ phone, options: metadata ? { data: metadata } : undefined });
+  const signInWithOtp = (phone: string) => supabase.auth.signInWithOtp({ phone });
   const verifyOtp = (phone: string, token: string) => supabase.auth.verifyOtp({ phone, token, type: "sms" });
-  const signInWithEmailOtp = (email: string, metadata?: Record<string, any>) =>
-    supabase.auth.signInWithOtp({ email, options: metadata ? { data: metadata } : undefined });
+  const signInWithEmailOtp = (email: string) => supabase.auth.signInWithOtp({ email });
   const verifyEmailOtp = (email: string, token: string) => supabase.auth.verifyOtp({ email, token, type: "email" });
-  const signUpWithEmailPassword = (email: string, password: string, metadata?: Record<string, any>) =>
-    supabase.auth.signUp({ email, password, options: metadata ? { data: metadata } : undefined });
-  const signInWithGoogle = () =>
-    supabase.auth.signInWithOAuth({ provider: "google", options: { redirectTo: typeof window !== "undefined" ? window.location.origin : undefined } });
 
   return (
     <AuthContext.Provider
@@ -189,8 +181,6 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
         verifyOtp,
         signInWithEmailOtp,
         verifyEmailOtp,
-        signUpWithEmailPassword,
-        signInWithGoogle,
       }}
     >
       {children}

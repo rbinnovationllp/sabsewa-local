@@ -1034,3 +1034,17 @@ Hostinger Static PWA Export: Documents build validation, .htaccess copying, PWA 
 Razorpay Live-Mode Hardening: Documents webhook signature verification (HMAC-SHA256), environment banners, idempotency tables (razorpay_webhook_events), and the updated Rs 5,500 vendor activation wallet policy.
 
 Gemini XPRIZE Alignment: Outlines compliance status across AI backend logging (gemini_agent_logs), multilingual Flash translation, conversational ordering, and Devpost submission checklist items.
+## 2026-08-08 - Vendor login role routing guard
+
+- Fixed vendor sessions being able to remain on public/customer marketplace screens after OTP login or browser refresh.
+- mobile/providers/AuthProvider.tsx now resolves the active role from auth metadata, user_profiles, and linked endors before routing.
+- Vendors are redirected to /vendor/dashboard from /, /hlm, /customer/*, /hyperlocal/*, and auth screens.
+- The global Home button now uses the resolved auth role instead of only user_metadata.role.
+## 2026-08-08 - Vendor onboarding pricing repair
+
+- Root cause fixed: database fee-rule lookup only matched exact slugs, so Vegetable Shops did not resolve to the egetables onboarding fee rule.
+- Added Supabase repair SQL: supabase/RUN_FIX_VENDOR_ONBOARDING_PRICING_AND_ACTIVATION_2026_08_08.sql.
+- Platform billing now resolves onboarding Razorpay amounts through the category-aware backend policy service.
+- Onboarding page now includes a four-step progress indicator and clearer Pay Now/locked state text.
+- KYC remains mandatory before Razorpay order creation; payment verification remains backend-only.
+- Verified onboarding payment now activates a KYC-approved vendor in the database function.

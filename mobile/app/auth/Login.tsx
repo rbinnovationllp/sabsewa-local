@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -191,7 +191,7 @@ export default function LoginScreen() {
       const mergedMetadata = {
         ...pendingMetadata,
         ...metadata,
-        role: metadata.role || pendingMetadata.role || String(params.role || "customer"),
+        role: metadata.role || pendingMetadata.role || (params.registering === "1" ? String(params.role || "customer") : String(params.role || "")),
         phone: metadata.phone || pendingMetadata.phone || normalizedPhone || null,
         email: metadata.email || pendingMetadata.email || normalizedEmail || null,
       };
@@ -214,7 +214,16 @@ export default function LoginScreen() {
       );
 
       const profile = await res.json();
-      const role = profile?.[0]?.role || mergedMetadata.role;
+            let role = profile?.[0]?.role || mergedMetadata.role;
+
+      if (!role && data.user?.id) {
+        const { data: vendorProfile } = await supabase
+          .from("vendors")
+          .select("id")
+          .eq("owner_user_id", data.user.id)
+          .maybeSingle();
+        if (vendorProfile?.id) role = "vendor";
+      }
 
       if (!role) throw new Error(t("auth.userRoleNotFound"));
 

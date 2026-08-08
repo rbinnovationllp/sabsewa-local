@@ -11,11 +11,13 @@ function read(path, base = root) {
 
 const service = read("billing/platformBillingService.js");
 assert.match(service, /resolveBillingItem/, "billing items are resolved server-side");
-assert.match(service, /vendor_onboarding_payment_summary/, "onboarding amount is authoritative from database");
+assert.match(service, /getVendorOnboardingSummary/, "onboarding amount is resolved through category-aware backend policy service");
+assert.match(service, /vendor_onboarding_payment_summary|onboarding_policy_service/, "onboarding amount remains tied to backend/database policy");
 assert.match(service, /subscription_plans/, "subscription pricing comes from database");
 assert.match(service, /vendor_storage_plans/, "storage pricing comes from database");
 assert.match(service, /billing_products/, "promotion and premium pricing comes from database");
 assert.match(service, /verifyRazorpaySignature/, "Razorpay payment signatures are verified server-side");
+assert.match(service, /Complete and verify KYC before paying onboarding charges/, "platform billing blocks onboarding order creation before KYC approval");
 assert.match(service, /getRazorpayPayment/, "Razorpay payment status and amount are verified server-side");
 assert.match(service, /customer_order_payment: false/, "platform payments are explicitly separated from customer order payments");
 assert.match(service, /vendor_security_deposits/, "security deposits are recorded separately");

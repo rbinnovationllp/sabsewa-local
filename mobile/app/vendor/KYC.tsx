@@ -1,6 +1,7 @@
 ﻿import { useEffect, useState } from "react";
 import { ActivityIndicator, Alert, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import * as ImagePicker from "expo-image-picker";
+import * as DocumentPicker from "expo-document-picker";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import BrandHeader from "@/components/BrandHeader";
 import { authenticatedFetch } from "@/lib/backend";
@@ -72,6 +73,22 @@ export default function VendorKycScreen() {
       quality: 0.85,
     });
     if (!result.canceled && result.assets?.[0]) setPickedFile(result.assets[0]);
+  }
+
+  async function pickFromStorage() {
+    const result = await DocumentPicker.getDocumentAsync({
+      type: ["application/pdf", "image/*"],
+      copyToCacheDirectory: true,
+      multiple: false,
+    });
+    if (!result.canceled && result.assets?.[0]) {
+      const asset = result.assets[0];
+      setPickedFile({
+        uri: asset.uri,
+        fileName: asset.name,
+        mimeType: asset.mimeType || "application/octet-stream",
+      });
+    }
   }
 
   async function appendPickedFile(formData: FormData) {
@@ -163,6 +180,9 @@ export default function VendorKycScreen() {
           <TouchableOpacity style={styles.secondaryBtn} onPress={pickFromGallery}>
             <Text style={styles.secondaryText}>Gallery</Text>
           </TouchableOpacity>
+          <TouchableOpacity style={styles.secondaryBtn} onPress={pickFromStorage}>
+            <Text style={styles.secondaryText}>Files</Text>
+          </TouchableOpacity>
         </View>
         {pickedFile ? <Text style={styles.fileName}>{pickedFile.fileName || pickedFile.uri}</Text> : null}
         <TouchableOpacity
@@ -203,3 +223,4 @@ const styles = StyleSheet.create({
   fileName: { color: "#334155", fontSize: 12, marginTop: 4 },
   disabled: { opacity: 0.6 },
 });
+

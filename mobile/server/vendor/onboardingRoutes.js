@@ -111,12 +111,15 @@ router.post("/:vendor_id/create-razorpay-order", async (req, res) => {
 
     const { data: vendor, error: vendorError } = await supabase
       .from("vendors")
-      .select("id, public_vendor_id, category, shop_name, phone_number, email")
+      .select("id, public_vendor_id, category, shop_name, phone_number, email, kyc_status")
       .eq("id", vendor_id)
       .single();
 
     if (vendorError || !vendor) {
       return res.status(404).json({ success: false, error: "Vendor profile not found." });
+    }
+    if (vendor.kyc_status !== "kyc_verified") {
+      return res.status(409).json({ success: false, error: "Complete KYC verification before creating an onboarding payment order." });
     }
 
     const canonicalId = resolveCanonicalId(vendor.category);
@@ -125,7 +128,7 @@ router.post("/:vendor_id/create-razorpay-order", async (req, res) => {
     const { data: feeRule } = await supabase
       .from("vendor_fee_rules")
       .select("onboarding_fee_amount, security_deposit_amount, tax_rate_percent, per_completed_order_charge")
-      .or(`category_id.eq.${canonicalId},category_slug.eq.${canonicalId.toLowerCase()}`)
+      .in("category_slug", [canonicalId.toLowerCase(), "vegetables", "fruits", "kirana", "grocery", "pharmacy", "medical", "restaurant", "tiffin", "other"])
       .eq("is_active", true)
       .is("effective_to", null)
       .maybeSingle();
@@ -338,6 +341,17 @@ router.post("/:vendor_id/payment-record", async (req, res) => {
     if (!gateway_order_id || !gateway_payment_id) {
       return res.status(400).json({ success: false, error: "Verified gateway order id and payment id are required." });
     }
+    const { data: vendorForPayment, error: vendorForPaymentError } = await supabase
+      .from("vendors")
+      .select("id, kyc_status")
+      .eq("id", req.params.vendor_id)
+      .single();
+    if (vendorForPaymentError || !vendorForPayment) {
+      return res.status(404).json({ success: false, error: "Vendor profile not found." });
+    }
+    if (vendorForPayment.kyc_status !== "kyc_verified") {
+      return res.status(409).json({ success: false, error: "Complete KYC verification before recording onboarding payment." });
+    }
     if (getRazorpayMode() === "live" && !gateway_signature) {
       return res.status(400).json({ success: false, error: "Gateway signature is required in live payment mode." });
     }
@@ -473,3 +487,4 @@ router.post("/:vendor_id/activate", ...requireAdmin, async (req, res) => {
 });
 
 export default router;
+

@@ -11,11 +11,9 @@ import PwaInstallPrompt from "@/components/PwaInstallPrompt";
 function TopNavigationBar() {
   const router = useRouter();
   const pathname = usePathname();
-  const { user } = useAuth();
+  const { role } = useAuth();
 
   const isHome = pathname === "/" || pathname === "/index";
-  const role = user?.user_metadata?.role;
-
   const handleGoHome = () => {
     if (role === "vendor") {
       router.replace("/vendor/dashboard" as any);

@@ -9,19 +9,19 @@ function read(path) {
 }
 
 const feeRules = [
-  { category: "vegetables", onboarding: 500, deposit: 5000, orderCharge: 15, total: 5500 },
-  { category: "fruits", onboarding: 500, deposit: 5000, orderCharge: 15, total: 5500 },
-  { category: "kirana", onboarding: 1000, deposit: 5000, orderCharge: 15, total: 6000 },
-  { category: "grocery", onboarding: 1000, deposit: 5000, orderCharge: 15, total: 6000 },
-  { category: "pharmacy", onboarding: 2000, deposit: 5000, orderCharge: 25, total: 7000 },
-  { category: "medical", onboarding: 2000, deposit: 5000, orderCharge: 25, total: 7000 },
-  { category: "restaurant", onboarding: 2000, deposit: 5000, orderCharge: 25, total: 7000 },
-  { category: "tiffin", onboarding: 2000, deposit: 5000, orderCharge: 25, total: 7000 },
-  { category: "other", onboarding: 2000, deposit: 5000, orderCharge: 25, total: 7000 },
+  { category: "vegetables", onboarding: 500, deposit: 5000, orderCharge: 15, total: 5590 },
+  { category: "fruits", onboarding: 500, deposit: 5000, orderCharge: 15, total: 5590 },
+  { category: "kirana", onboarding: 1000, deposit: 5000, orderCharge: 15, total: 6180 },
+  { category: "grocery", onboarding: 1000, deposit: 5000, orderCharge: 15, total: 6180 },
+  { category: "pharmacy", onboarding: 2000, deposit: 5000, orderCharge: 25, total: 7360 },
+  { category: "medical", onboarding: 2000, deposit: 5000, orderCharge: 25, total: 7360 },
+  { category: "restaurant", onboarding: 2000, deposit: 5000, orderCharge: 25, total: 7360 },
+  { category: "tiffin", onboarding: 2000, deposit: 5000, orderCharge: 25, total: 7360 },
+  { category: "other", onboarding: 2000, deposit: 5000, orderCharge: 25, total: 7360 },
 ];
 
 for (const rule of feeRules) {
-  assert.equal(rule.onboarding + rule.deposit, rule.total, `${rule.category} total payment`);
+  assert.equal(rule.onboarding + rule.deposit + Math.round(rule.onboarding * 0.18), rule.total, `${rule.category} total payment including GST`);
   assert.equal(rule.deposit, 5000, `${rule.category} security deposit remains separate`);
   assert.ok(rule.orderCharge >= 15, `${rule.category} per-order charge configured`);
 }
@@ -54,6 +54,7 @@ assert.match(vendorOrderActions, /record_platform_order_charge/, "completed vend
 
 const onboardingRoutes = read("vendor/onboardingRoutes.js");
 assert.match(onboardingRoutes, /verifyRazorpaySignature/, "onboarding payments verify Razorpay signatures");
+assert.match(onboardingRoutes, /kyc_status !== "kyc_verified"/, "legacy onboarding payment routes block payment before KYC approval");
 assert.match(onboardingRoutes, /getRazorpayMode\(\) === "live"/, "live onboarding payments require gateway signature");
 assert.match(onboardingRoutes, /requireRole\(\["admin", "company_admin", "super_admin"\]\)/, "onboarding admin operations require admin role");
 

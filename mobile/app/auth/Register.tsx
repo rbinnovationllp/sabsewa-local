@@ -16,7 +16,7 @@ import { useAuth } from "@/providers/AuthProvider";
 
 export default function RegisterScreen() {
   const router = useRouter();
-  const { signInWithOtp, signInWithEmailOtp, verifyOtp, user } = useAuth();
+  const { signInWithOtp, signInWithEmailOtp, verifyOtp, verifyEmailOtp, user } = useAuth();
 
   const [authMode, setAuthMode] = useState<"phone" | "email">("phone");
   const [phone, setPhone] = useState("");
@@ -71,9 +71,10 @@ export default function RegisterScreen() {
     setLoading(true);
     try {
       const target = authMode === "phone" ? (phone.startsWith("+") ? phone : `+91${phone.trim()}`) : email.trim();
-      const type = authMode === "phone" ? "sms" : "email";
-
-      const { error } = await verifyOtp(target, otpToken.trim(), type as any);
+      const { error } =
+        authMode === "phone"
+          ? await verifyOtp(target, otpToken.trim())
+          : await verifyEmailOtp(target, otpToken.trim());
       if (error) throw error;
 
       Alert.alert("Success", "Account authenticated successfully!");

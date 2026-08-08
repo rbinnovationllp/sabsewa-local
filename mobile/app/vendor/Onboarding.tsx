@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { ActivityIndicator, Alert, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -13,6 +13,14 @@ function money(value: unknown, currency = "INR") {
 
 function statusLabel(value: unknown) {
   return String(value || "pending").replace(/_/g, " ").replace(/\b\w/g, (match) => match.toUpperCase());
+}
+
+function pricingValue(summary: any, key: string) {
+  return summary?.pricing?.[key] ?? summary?.[key] ?? null;
+}
+
+function isPositiveAmount(value: unknown) {
+  return Number(value || 0) > 0;
 }
 
 export default function VendorOnboardingScreen() {
@@ -147,14 +155,13 @@ export default function VendorOnboardingScreen() {
   // Verifies signature and updates onboarding status
   async function verifyPaymentAndRefresh(orderId: string, paymentId: string, signature: string) {
     try {
-      const response = await fetch(apiUrl(`/api/vendor/onboarding/${vendor.id}/payment-record`), {
+      const response = await authenticatedFetch(`/api/vendor/billing/${vendor.id}/verify-platform-payment`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          gateway_order_id: orderId,
-          gateway_payment_id: paymentId,
-          gateway_signature: signature || null,
-          actor_user_id: user?.id || null,
+          razorpay_order_id: orderId,
+          razorpay_payment_id: paymentId,
+          razorpay_signature: signature || null,
         }),
       });
 
@@ -209,12 +216,33 @@ export default function VendorOnboardingScreen() {
   const isPaymentCompleted = paymentStatus === "payment_completed";
   const paymentUnlocked = Boolean(summary?.is_payment_unlocked || isKycVerified);
   const pricingReady = isPositiveAmount(totalPayable);
+  const kycReviewPending = ["kyc_submitted", "kyc_under_review", "additional_information_required", "kyc_rejected"].includes(kycStatus);
+  const currentStep = isKycVerified ? (isPaymentCompleted ? 4 : 3) : (kycReviewPending ? 2 : 1);
+  const onboardingSteps = [
+    "Complete KYC",
+    "Wait for KYC Approval",
+    "Make Required Payment",
+    "Account Activated",
+  ];
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <BrandHeader compact subtitle="Vendor onboarding" />
       <Text style={styles.heading}>Onboarding</Text>
 
+      <View style={styles.progressPanel}>
+        {onboardingSteps.map((step, index) => {
+          const stepNumber = index + 1;
+          const completed = stepNumber < currentStep || (stepNumber === 4 && canPublish);
+          const active = stepNumber === currentStep && !completed;
+          return (
+            <View key={step} style={[styles.progressStep, active && styles.progressStepActive, completed && styles.progressStepDone]}>
+              <Text style={[styles.progressNumber, (active || completed) && styles.progressNumberActive]}>{stepNumber}</Text>
+              <Text style={[styles.progressText, (active || completed) && styles.progressTextActive]}>{step}</Text>
+            </View>
+          );
+        })}
+      </View>
       {vendor ? (
         <View style={styles.panel}>
           <Text style={styles.shopName}>{vendor.shop_name || vendor.vendor_name || "Vendor"}</Text>
@@ -244,7 +272,7 @@ export default function VendorOnboardingScreen() {
             >
               <Text style={styles.statusValue}>{paymentUnlocked ? statusLabel(paymentStatus) : "Locked"}</Text>
               <Text style={styles.statusLabel}>Payment</Text>
-              <Text style={styles.statusHint}>{paymentUnlocked ? "Pay onboarding charges" : "Complete KYC first"}</Text>
+              <Text style={styles.statusHint}>{isPaymentCompleted ? "Verified" : paymentUnlocked ? (pricingReady ? "Pay Now" : "Pricing unavailable") : "Complete KYC first"}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.statusBox}
@@ -285,7 +313,7 @@ export default function VendorOnboardingScreen() {
           <Text style={styles.lineLabel}>Tax</Text>
           <Text style={styles.lineValue}>{pricingReady || taxAmount !== null ? money(taxAmount, currency) : "Configuration missing"}</Text>
         </View>
-        {!pricingReady ? <Text style={styles.pricingWarning}>Payment configuration is missing or could not be loaded. Please contact SabSewa support; Rs 0.00 will not be treated as payable.</Text> : null}
+        {!pricingReady ? <Text style={styles.pricingWarning}>Payment configuration is missing or could not be loaded from the backend. Please run the Supabase fee-rule repair SQL or contact SabSewa support; Rs 0.00 will not be treated as payable.</Text> : null}
         <View style={[styles.line, styles.totalLine]}>
           <Text style={styles.totalLabel}>Total payable</Text>
           <Text style={styles.totalValue}>{pricingReady ? money(totalPayable, currency) : "Configuration missing"}</Text>
@@ -318,7 +346,7 @@ export default function VendorOnboardingScreen() {
         </TouchableOpacity>
       )}
 
-      {!isPaymentCompleted ? (
+      {!isPaymentCompleted && paymentUnlocked && pricingReady ? (
         <View style={styles.panel}>
           <Text style={styles.section}>Manual Payment Fallback</Text>
           <Text style={styles.muted}>If automatic payment completed but failed to sync, enter reference IDs here:</Text>
@@ -346,7 +374,7 @@ export default function VendorOnboardingScreen() {
           <TouchableOpacity
             style={[styles.secondaryBtn, saving && styles.disabled]}
             onPress={recordPayment}
-            disabled={saving || !vendor?.id}
+            disabled={saving || !vendor?.id || !paymentUnlocked || !pricingReady}
           >
             <Text style={styles.secondaryText}>{saving ? "Recording..." : "Verify & Record Reference"}</Text>
           </TouchableOpacity>
@@ -361,6 +389,14 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 8 },
   heading: { fontSize: 28, fontWeight: "900", color: "#111827", marginBottom: 14 },
   panel: { borderWidth: 1, borderColor: "#e5e7eb", borderRadius: 8, padding: 14, marginBottom: 14, backgroundColor: "#fff" },
+  progressPanel: { borderWidth: 1, borderColor: "#dbeafe", borderRadius: 8, padding: 10, marginBottom: 14, backgroundColor: "#f8fbff", gap: 8 },
+  progressStep: { flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderColor: "#e5e7eb", backgroundColor: "#fff", borderRadius: 8, padding: 9 },
+  progressStepActive: { borderColor: "#1166ff", backgroundColor: "#eff6ff" },
+  progressStepDone: { borderColor: "#99f6e4", backgroundColor: "#f0fdfa" },
+  progressNumber: { width: 24, height: 24, borderRadius: 12, textAlign: "center", lineHeight: 24, backgroundColor: "#e5e7eb", color: "#475569", fontWeight: "900" },
+  progressNumberActive: { backgroundColor: "#1166ff", color: "#fff" },
+  progressText: { flex: 1, color: "#475569", fontWeight: "800", lineHeight: 18 },
+  progressTextActive: { color: "#111827" },
   shopName: { fontSize: 18, fontWeight: "900", color: "#111827" },
   statusGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 12 },
   statusBox: { flex: 1, minWidth: 110, borderWidth: 1, borderColor: "#e5e7eb", borderRadius: 8, padding: 10, backgroundColor: "#f9fafb" },
@@ -388,3 +424,5 @@ const styles = StyleSheet.create({
   secondaryText: { color: "#1166ff", textAlign: "center", fontWeight: "900" },
   disabled: { opacity: 0.6 },
 });
+
+

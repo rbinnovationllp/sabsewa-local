@@ -1,12 +1,16 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
-import { useRouter, useSegments } from "expo-router";
+import { usePathname, useRouter, useSegments } from "expo-router";
+
+type AppRole = "customer" | "vendor" | "rider" | "admin" | "company_admin" | "super_admin" | string;
 
 type AuthContextType = {
   user: User | null;
   session: Session | null;
   loading: boolean;
+  role: AppRole | null;
+  roleLoading: boolean;
   signOut: () => Promise<void>;
   signInWithOtp: (phone: string) => Promise<any>;
   verifyOtp: (phone: string, token: string) => Promise<any>;
@@ -16,12 +20,59 @@ type AuthContextType = {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
+function cleanRole(value: unknown): AppRole | null {
+  const role = String(value || "").trim().toLowerCase();
+  return role || null;
+}
+
+function roleHome(role: AppRole | null) {
+  if (role === "vendor") return "/vendor/dashboard";
+  if (role === "rider") return "/rider";
+  if (role === "admin" || role === "company_admin" || role === "super_admin") return "/company";
+  return "/customer/dashboard";
+}
+
+async function resolveUserRole(user: User | null): Promise<AppRole | null> {
+  if (!user?.id) return null;
+
+  const metadataRole = cleanRole(user.user_metadata?.role || user.app_metadata?.role);
+  if (metadataRole) return metadataRole;
+
+  try {
+    const { data: profile } = await supabase
+      .from("user_profiles")
+      .select("role")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    const profileRole = cleanRole(profile?.role);
+    if (profileRole) return profileRole;
+  } catch (error) {
+    console.warn("Role profile lookup skipped", error);
+  }
+
+  try {
+    const { data: vendor } = await supabase
+      .from("vendors")
+      .select("id")
+      .eq("owner_user_id", user.id)
+      .maybeSingle();
+    if (vendor?.id) return "vendor";
+  } catch (error) {
+    console.warn("Vendor role lookup skipped", error);
+  }
+
+  return null;
+}
+
 export default function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [role, setRole] = useState<AppRole | null>(null);
+  const [roleLoading, setRoleLoading] = useState(false);
   const router = useRouter();
   const segments = useSegments();
+  const pathname = usePathname();
 
   useEffect(() => {
     let mounted = true;
@@ -56,26 +107,59 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
     };
   }, []);
 
-  // Automatic Routing Guard based on Persistent Session State
   useEffect(() => {
-    if (loading) return;
+    let active = true;
 
-    const inAuthGroup = segments[0] === "auth";
-    const role = user?.user_metadata?.role;
+    async function loadRole() {
+      if (!user?.id) {
+        setRole(null);
+        setRoleLoading(false);
+        return;
+      }
 
-    if (user && inAuthGroup) {
-      if (role === "vendor") {
-        router.replace("/vendor/dashboard" as any);
-      } else {
-        router.replace("/customer/dashboard" as any);
+      setRoleLoading(true);
+      const resolved = await resolveUserRole(user);
+      if (active) {
+        setRole(resolved);
+        setRoleLoading(false);
       }
     }
-  }, [user, loading, segments]);
+
+    loadRole();
+    return () => {
+      active = false;
+    };
+  }, [user?.id, user?.user_metadata?.role, user?.app_metadata?.role]);
+
+  useEffect(() => {
+    if (loading || roleLoading || !user || !role) return;
+
+    const firstSegment = String(segments[0] || "");
+    const inAuthGroup = firstSegment === "auth";
+    const onPublicHome = pathname === "/" || pathname === "/index";
+    const inCustomerArea = firstSegment === "customer" || firstSegment === "hlm" || firstSegment === "hyperlocal";
+    const inVendorArea = firstSegment === "vendor";
+
+    if (role === "vendor" && (inAuthGroup || onPublicHome || inCustomerArea)) {
+      router.replace("/vendor/dashboard" as any);
+      return;
+    }
+
+    if (role !== "vendor" && inVendorArea) {
+      router.replace(roleHome(role) as any);
+      return;
+    }
+
+    if (inAuthGroup) {
+      router.replace(roleHome(role) as any);
+    }
+  }, [user, role, loading, roleLoading, segments, pathname, router]);
 
   const signOut = async () => {
     await supabase.auth.signOut();
     setUser(null);
     setSession(null);
+    setRole(null);
     router.replace("/auth/Login" as any);
   };
 
@@ -90,6 +174,8 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
         user,
         session,
         loading,
+        role,
+        roleLoading,
         signOut,
         signInWithOtp,
         verifyOtp,
@@ -104,6 +190,6 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
 
 export function useAuth() {
   const context = useContext(AuthContext);
-  if (!context) throw new Error("useAuth must be used within an AuthProvider");
+  if (!context) throw new Error("useAuth must be used within AuthProvider");
   return context;
 }

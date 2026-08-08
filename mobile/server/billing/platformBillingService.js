@@ -1,7 +1,8 @@
-﻿import axios from "axios";
+import axios from "axios";
 import { supabase } from "../connection.js";
 import { getPaymentReadiness } from "../payments/paymentEnvironment.js";
 import { getRazorpayPayment, verifyRazorpaySignature } from "../securityWallet/securityWalletService.js";
+import { getVendorOnboardingSummary } from "../vendor/onboardingPolicyService.js";
 
 const SUPPORTED_CHARGE_TYPES = new Set([
   "onboarding",
@@ -86,12 +87,21 @@ export async function assertVendorBillingAccess({ vendorId, auth }) {
 }
 
 async function resolveOnboardingItem({ vendorId }) {
-  const summary = await supabase.rpc("vendor_onboarding_payment_summary", { p_vendor_id: vendorId });
-  if (summary.error) throw summary.error;
-  const value = summary.data || {};
+  // Keep database RPC as the authoritative production source where available, but use
+  // the onboarding policy resolver because it safely maps labels like "Vegetable Shops"
+  // to the configured "vegetables" fee rule instead of returning a zero/null payable.
+  const value = await getVendorOnboardingSummary(vendorId);
   const onboardingFeePaise = paiseFromRupees(value.onboarding_fee);
   const securityDepositPaise = paiseFromRupees(value.security_deposit);
   const taxPaise = paiseFromRupees(value.tax_amount);
+  const totalAmountPaise = paiseFromRupees(value.total_payable);
+
+  if (totalAmountPaise <= 0 || value.pricing_configured === false) {
+    const error = new Error("Vendor onboarding payment configuration is missing.");
+    error.statusCode = 409;
+    throw error;
+  }
+
   return {
     chargeType: "onboarding_fee",
     referenceType: "vendor_onboarding",
@@ -99,7 +109,7 @@ async function resolveOnboardingItem({ vendorId }) {
     baseAmountPaise: onboardingFeePaise + securityDepositPaise,
     discountAmountPaise: 0,
     taxAmountPaise: taxPaise,
-    totalAmountPaise: paiseFromRupees(value.total_payable),
+    totalAmountPaise,
     currency: value.currency || "INR",
     title: "Vendor onboarding fee and refundable security deposit",
     allocation: {
@@ -108,6 +118,8 @@ async function resolveOnboardingItem({ vendorId }) {
       security_deposit_refundable: value.security_deposit_refundable !== false,
       onboarding_fee_refundable: Boolean(value.onboarding_fee_refundable),
       category_slug: value.category_slug,
+      fee_rule_id: value.fee_rule_id || null,
+      pricing_source: value.pricing_source || "onboarding_policy_service",
     },
   };
 }

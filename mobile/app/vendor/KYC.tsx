@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Alert, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Alert, Linking, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import * as DocumentPicker from "expo-document-picker";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -17,11 +17,18 @@ type KycSection = {
   note: string;
   options: KycOption[];
 };
-
-type PickedFile = {
-  uri: string;
-  fileName?: string;
-  mimeType?: string;
+type PickedFile = { uri: string; fileName?: string; mimeType?: string };
+type KycDocument = {
+  id: string;
+  document_type: string;
+  status?: string;
+  file_name?: string;
+  mime_type?: string;
+  file_size_bytes?: number;
+  rejection_reason?: string | null;
+  metadata?: Record<string, any>;
+  created_at?: string;
+  reviewed_at?: string | null;
 };
 
 function statusLabel(value: unknown) {
@@ -119,17 +126,37 @@ function buildKycSections(category: unknown, serverSections: any[] = []): KycSec
   ];
 }
 
-function latestDocumentForSection(section: KycSection, documents: any[]) {
+function sortDocuments(documents: KycDocument[]) {
+  return [...documents].sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")));
+}
+
+function documentBelongsToSection(section: KycSection, document: KycDocument) {
   const allowed = new Set(section.options.map((option) => option.type));
-  return documents.find((item) => allowed.has(item.document_type));
+  const metadataSection = document.metadata?.document_section;
+  if (metadataSection) return metadataSection === section.id && allowed.has(document.document_type);
+  return allowed.has(document.document_type);
+}
+
+function latestDocumentForSection(section: KycSection, documents: KycDocument[]) {
+  return sortDocuments(documents).find((item) => documentBelongsToSection(section, item));
 }
 
 function selectedOptionFor(section: KycSection, selectedTypes: Record<string, string>) {
   return section.options.find((option) => option.type === selectedTypes[section.id]) || section.options[0];
 }
 
-function isUploaded(document: any) {
-  return Boolean(document && !["rejected", "additional_information_required"].includes(document.status));
+function isUploaded(document: KycDocument | undefined) {
+  return Boolean(document && !["rejected", "additional_information_required"].includes(String(document.status || "")));
+}
+
+function fileSizeLabel(bytes?: number) {
+  if (!bytes) return "";
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function upsertDocument(documents: KycDocument[], next: KycDocument) {
+  return sortDocuments([next, ...documents.filter((item) => item.id !== next.id)]);
 }
 
 export default function VendorKycScreen() {
@@ -139,9 +166,10 @@ export default function VendorKycScreen() {
   const [loading, setLoading] = useState(true);
   const [uploadingSectionId, setUploadingSectionId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null);
   const [vendor, setVendor] = useState<any>(null);
   const [requiredDocs, setRequiredDocs] = useState<any[]>([]);
-  const [documents, setDocuments] = useState<any[]>([]);
+  const [documents, setDocuments] = useState<KycDocument[]>([]);
   const [selectedTypes, setSelectedTypes] = useState<Record<string, string>>({});
   const [pickedFiles, setPickedFiles] = useState<Record<string, PickedFile | null>>({});
 
@@ -161,10 +189,11 @@ export default function VendorKycScreen() {
     return data?.id || "";
   }
 
-  function primeSelectedTypes(nextSections: KycSection[]) {
+  function primeSelectedTypes(nextSections: KycSection[], nextDocuments: KycDocument[]) {
     const nextSelected: Record<string, string> = {};
     for (const section of nextSections) {
-      nextSelected[section.id] = selectedTypes[section.id] || section.options[0]?.type || "";
+      const latest = latestDocumentForSection(section, nextDocuments);
+      nextSelected[section.id] = latest?.document_type || selectedTypes[section.id] || section.options[0]?.type || "";
     }
     setSelectedTypes(nextSelected);
   }
@@ -177,10 +206,12 @@ export default function VendorKycScreen() {
       const response = await authenticatedFetch(`/api/vendor/onboarding/${vendorId}/kyc-requirements`);
       const json = await response.json();
       if (!response.ok || !json.success) throw new Error(json.error || "Unable to load KYC requirements.");
+      const nextDocuments = sortDocuments(json.documents || []);
+      const nextSections = buildKycSections(json.vendor?.category, json.required_documents || []);
       setVendor(json.vendor);
       setRequiredDocs(json.required_documents || []);
-      setDocuments(json.documents || []);
-      primeSelectedTypes(buildKycSections(json.vendor?.category, json.required_documents || []));
+      setDocuments(nextDocuments);
+      primeSelectedTypes(nextSections, nextDocuments);
     } catch (error) {
       Alert.alert("KYC", error instanceof Error ? error.message : "Unable to load KYC.");
     } finally {
@@ -203,34 +234,20 @@ export default function VendorKycScreen() {
       Alert.alert("Camera permission required", "Allow camera access to capture KYC documents.");
       return;
     }
-    const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.85,
-    });
+    const result = await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.85 });
     if (!result.canceled && result.assets?.[0]) setSectionFile(section.id, result.assets[0]);
   }
 
   async function pickFromGallery(section: KycSection) {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.85,
-    });
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.85 });
     if (!result.canceled && result.assets?.[0]) setSectionFile(section.id, result.assets[0]);
   }
 
   async function pickFromStorage(section: KycSection) {
-    const result = await DocumentPicker.getDocumentAsync({
-      type: ["application/pdf", "image/*"],
-      copyToCacheDirectory: true,
-      multiple: false,
-    });
+    const result = await DocumentPicker.getDocumentAsync({ type: ["application/pdf", "image/*"], copyToCacheDirectory: true, multiple: false });
     if (!result.canceled && result.assets?.[0]) {
       const asset = result.assets[0];
-      setSectionFile(section.id, {
-        uri: asset.uri,
-        fileName: asset.name,
-        mimeType: asset.mimeType || "application/octet-stream",
-      });
+      setSectionFile(section.id, { uri: asset.uri, fileName: asset.name, mimeType: asset.mimeType || "application/octet-stream" });
     }
   }
 
@@ -262,36 +279,60 @@ export default function VendorKycScreen() {
       formData.append("document_section", section.id);
       formData.append("document_label", option.label);
       await appendPickedFile(formData, pickedFile, option.type);
-      const response = await authenticatedFetch(`/api/vendor/onboarding/${vendor.id}/kyc-documents`, {
-        method: "POST",
-        body: formData,
-      });
+      const response = await authenticatedFetch(`/api/vendor/onboarding/${vendor.id}/kyc-documents`, { method: "POST", body: formData });
       const json = await response.json();
-      if (!response.ok || !json.success) throw new Error(json.error || "Unable to upload KYC document.");
+      if (!response.ok || !json.success || !json.document?.id) throw new Error(json.error || "Upload failed. Please try again.");
+
+      setDocuments((current) => upsertDocument(current, json.document));
       setPickedFiles((current) => ({ ...current, [section.id]: null }));
-      Alert.alert("Document uploaded", `${option.label} uploaded. Upload all mandatory documents, then submit the KYC package for verification.`);
+      setSelectedTypes((current) => ({ ...current, [section.id]: json.document.document_type || option.type }));
+      Alert.alert("Uploaded successfully", `${json.document.metadata?.document_label || option.label} was uploaded successfully.`);
       await loadKyc();
     } catch (error) {
-      Alert.alert("Upload failed", error instanceof Error ? error.message : "Unable to upload KYC document.");
+      Alert.alert("Upload failed", error instanceof Error ? error.message : "Upload failed. Please try again.");
     } finally {
       setUploadingSectionId(null);
+    }
+  }
+
+  async function previewDocument(document: KycDocument) {
+    if (!vendor?.id || !document.id) return;
+    try {
+      const response = await authenticatedFetch(`/api/vendor/onboarding/${vendor.id}/kyc-documents/${document.id}/view`);
+      const json = await response.json();
+      if (!response.ok || !json.success || !json.url) throw new Error(json.error || "Unable to open this document.");
+      await Linking.openURL(json.url);
+    } catch (error) {
+      Alert.alert("Preview unavailable", error instanceof Error ? error.message : "Unable to open this document.");
+    }
+  }
+
+  async function deleteDocument(document: KycDocument) {
+    if (!vendor?.id || !document.id) return;
+    setDeletingDocumentId(document.id);
+    try {
+      const response = await authenticatedFetch(`/api/vendor/onboarding/${vendor.id}/kyc-documents/${document.id}`, { method: "DELETE" });
+      const json = await response.json();
+      if (!response.ok || !json.success) throw new Error(json.error || "Unable to delete this document.");
+      setDocuments((current) => current.filter((item) => item.id !== document.id));
+      Alert.alert("Document removed", "Upload the correct document again before submitting KYC.");
+      await loadKyc();
+    } catch (error) {
+      Alert.alert("Delete failed", error instanceof Error ? error.message : "Unable to delete this document.");
+    } finally {
+      setDeletingDocumentId(null);
     }
   }
 
   async function submitForVerification() {
     if (!vendor?.id) return;
     if (missingMandatorySections.length > 0) {
-      Alert.alert(
-        "Mandatory documents missing",
-        missingMandatorySections.map((section) => `${section.title} missing - Please upload before submitting.`).join("\n")
-      );
+      Alert.alert("Mandatory documents missing", missingMandatorySections.map((section) => `${section.title} missing - Please upload before submitting.`).join("\n"));
       return;
     }
     setSubmitting(true);
     try {
-      const response = await authenticatedFetch(`/api/vendor/onboarding/${vendor.id}/submit-kyc`, {
-        method: "POST",
-      });
+      const response = await authenticatedFetch(`/api/vendor/onboarding/${vendor.id}/submit-kyc`, { method: "POST" });
       const json = await response.json();
       if (!response.ok || !json.success) throw new Error(json.error || "Unable to submit KYC for verification.");
       Alert.alert("KYC submitted", "Your KYC package is under verification. Payment remains locked until SabSewa approves KYC.");
@@ -329,9 +370,11 @@ export default function VendorKycScreen() {
         {sections.map((section) => {
           const latest = latestDocumentForSection(section, documents);
           const uploaded = isUploaded(latest);
+          const optionalAndNotRequired = !section.required && section.conditional && !uploaded;
           const option = selectedOptionFor(section, selectedTypes);
           const pickedFile = pickedFiles[section.id];
           const uploading = uploadingSectionId === section.id;
+          const uploadedLabel = latest?.metadata?.document_label || section.options.find((candidate) => candidate.type === latest?.document_type)?.label || latest?.document_type;
           return (
             <View key={section.id} style={[styles.docSection, uploaded && styles.docSectionUploaded]}>
               <View style={styles.docSectionHeader}>
@@ -339,19 +382,15 @@ export default function VendorKycScreen() {
                   <Text style={styles.docTitle}>{section.title}</Text>
                   <Text style={styles.muted}>{section.required ? "Mandatory" : section.conditional ? "Conditional / Optional" : "Optional"}</Text>
                 </View>
-                <Text style={[styles.uploadBadge, uploaded && styles.uploadBadgeDone]}>
-                  {uploaded ? "Uploaded" : "Missing"}
+                <Text style={[styles.uploadBadge, uploaded && styles.uploadBadgeDone, optionalAndNotRequired && styles.uploadBadgeOptional]}>
+                  {uploaded ? "Uploaded" : optionalAndNotRequired ? "Not Required / Optional" : "Missing"}
                 </Text>
               </View>
               <Text style={styles.docNote}>{section.note}</Text>
 
               <View style={styles.optionList}>
                 {section.options.map((candidate) => (
-                  <TouchableOpacity
-                    key={candidate.type}
-                    style={[styles.optionChip, option?.type === candidate.type && styles.optionChipSelected]}
-                    onPress={() => chooseOption(section, candidate)}
-                  >
+                  <TouchableOpacity key={candidate.type} style={[styles.optionChip, option?.type === candidate.type && styles.optionChipSelected]} onPress={() => chooseOption(section, candidate)}>
                     <Text style={[styles.optionText, option?.type === candidate.type && styles.optionTextSelected]}>{candidate.label}</Text>
                   </TouchableOpacity>
                 ))}
@@ -359,13 +398,26 @@ export default function VendorKycScreen() {
 
               <View style={styles.sectionUploadPanel}>
                 <Text style={styles.selectedLine}>Selected: {option?.label || "None"}</Text>
-                {uploaded ? <Text style={styles.successText}>âœ“ {latest?.metadata?.document_label || option?.label || latest?.document_type} uploaded</Text> : null}
+                {uploaded ? (
+                  <View style={styles.uploadedBox}>
+                    <Text style={styles.successText}>{uploadedLabel} - Uploaded Successfully</Text>
+                    <Text style={styles.fileName}>{latest?.file_name || "Uploaded document"} {fileSizeLabel(latest?.file_size_bytes)}</Text>
+                    <View style={styles.actions}>
+                      <TouchableOpacity style={styles.secondaryBtn} onPress={() => latest && previewDocument(latest)}>
+                        <Text style={styles.secondaryText}>View / Preview</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.secondaryBtn} onPress={() => latest && deleteDocument(latest)} disabled={deletingDocumentId === latest?.id}>
+                        <Text style={styles.secondaryText}>{deletingDocumentId === latest?.id ? "Removing..." : "Delete / Re-upload"}</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ) : null}
                 {latest?.rejection_reason ? <Text style={styles.rejectionText}>Action required: {latest.rejection_reason}</Text> : null}
-                {pickedFile ? <Text style={styles.fileName}>{pickedFile.fileName || pickedFile.uri}</Text> : null}
+                {pickedFile ? <Text style={styles.fileName}>Ready to upload: {pickedFile.fileName || pickedFile.uri}</Text> : null}
 
                 <View style={styles.actions}>
                   <TouchableOpacity style={styles.secondaryBtn} onPress={() => pickFromCamera(section)}>
-                    <Text style={styles.secondaryText}>Camera</Text>
+                    <Text style={styles.secondaryText}>Take Photo</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.secondaryBtn} onPress={() => pickFromGallery(section)}>
                     <Text style={styles.secondaryText}>Gallery</Text>
@@ -375,12 +427,8 @@ export default function VendorKycScreen() {
                   </TouchableOpacity>
                 </View>
 
-                <TouchableOpacity
-                  style={[styles.uploadBtn, (!pickedFile || uploading) && styles.disabled]}
-                  disabled={!pickedFile || uploading}
-                  onPress={() => uploadSectionDocument(section)}
-                >
-                  <Text style={styles.primaryText}>{uploading ? "Uploading..." : `Upload ${section.title}`}</Text>
+                <TouchableOpacity style={[styles.uploadBtn, (!pickedFile || uploading) && styles.disabled]} disabled={!pickedFile || uploading} onPress={() => uploadSectionDocument(section)}>
+                  <Text style={styles.primaryText}>{uploading ? "Uploading..." : uploaded ? `Replace ${section.title}` : `Upload ${section.title}`}</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -391,18 +439,16 @@ export default function VendorKycScreen() {
       <View style={styles.panel}>
         <Text style={styles.section}>Submit KYC Package</Text>
         {mandatorySections.map((section) => {
-          const uploaded = isUploaded(latestDocumentForSection(section, documents));
+          const latest = latestDocumentForSection(section, documents);
+          const uploaded = isUploaded(latest);
+          const uploadedLabel = latest?.metadata?.document_label || section.title;
           return (
             <Text key={section.id} style={uploaded ? styles.successText : styles.missingText}>
-              {uploaded ? "âœ“" : "!"} {section.title} {uploaded ? "uploaded" : "missing - Please upload before submitting."}
+              {uploaded ? `${uploadedLabel} uploaded` : `${section.title} missing - Please upload before submitting.`}
             </Text>
           );
         })}
-        <TouchableOpacity
-          style={[styles.primaryBtn, !canSubmitPackage && styles.disabled]}
-          disabled={!canSubmitPackage}
-          onPress={submitForVerification}
-        >
+        <TouchableOpacity style={[styles.primaryBtn, !canSubmitPackage && styles.disabled]} disabled={!canSubmitPackage} onPress={submitForVerification}>
           <Text style={styles.primaryText}>{submitting ? "Submitting..." : "Submit For Verification"}</Text>
         </TouchableOpacity>
       </View>
@@ -430,6 +476,7 @@ const styles = StyleSheet.create({
   docNote: { color: "#475569", fontSize: 12, lineHeight: 18, marginTop: 8 },
   uploadBadge: { color: "#991b1b", backgroundColor: "#fef2f2", borderRadius: 999, paddingVertical: 4, paddingHorizontal: 10, fontWeight: "900", overflow: "hidden" },
   uploadBadgeDone: { color: "#166534", backgroundColor: "#dcfce7" },
+  uploadBadgeOptional: { color: "#475569", backgroundColor: "#f1f5f9" },
   optionList: { gap: 8, marginTop: 10 },
   optionChip: { borderWidth: 1, borderColor: "#cbd5e1", borderRadius: 8, padding: 10, backgroundColor: "#fff" },
   optionChipSelected: { borderColor: "#1166ff", backgroundColor: "#1166ff" },
@@ -437,6 +484,7 @@ const styles = StyleSheet.create({
   optionTextSelected: { color: "#fff" },
   sectionUploadPanel: { borderTopWidth: 1, borderTopColor: "#e5e7eb", marginTop: 12, paddingTop: 12 },
   selectedLine: { color: "#111827", fontWeight: "900", marginBottom: 6 },
+  uploadedBox: { borderWidth: 1, borderColor: "#bbf7d0", backgroundColor: "#f0fdf4", borderRadius: 8, padding: 10, marginTop: 8 },
   successText: { color: "#166534", fontWeight: "900", marginTop: 6, lineHeight: 18 },
   missingText: { color: "#991b1b", fontWeight: "900", marginTop: 6, lineHeight: 18 },
   rejectionText: { color: "#991b1b", fontWeight: "800", marginTop: 8, lineHeight: 18 },

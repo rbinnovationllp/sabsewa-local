@@ -165,3 +165,11 @@ Not ready--complete the listed technical work first.
 - Uploading one document no longer implies the full KYC package was submitted.
 - KYC moves to kyc_under_review only after all mandatory uploaded documents are submitted for verification.
 - Vendor-facing payment configuration errors no longer expose SQL/developer instructions.
+
+## 2026-08-08 - KYC upload state synchronization
+
+- Fixed Vendor KYC so "selected file" and "uploaded document" are separate states.
+- Individual upload success is now based on the backend-created endor_kyc_documents row returned after storage upload.
+- Submit KYC Package now reads the same backend document records as each document section.
+- Normal vendors see restricted/regulated licence as Not Required / Optional unless their category legally requires it.
+- KYC uploads now use the private endor-kyc-private Supabase bucket with signed preview and delete/re-upload routes.

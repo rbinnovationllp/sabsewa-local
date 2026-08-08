@@ -1,6 +1,8 @@
-﻿import path from "path";
+import path from "path";
 import sharp from "sharp";
 import { supabase } from "../connection.js";
+
+export const KYC_STORAGE_BUCKET = "vendor-kyc-private";
 
 export async function compressKycDocument(inputBuffer) {
   return await sharp(inputBuffer)
@@ -30,29 +32,28 @@ export async function uploadKycDocument({ vendorId, documentType, fileBuffer, mi
   const ext = extensionFor({ fileName: originalName, mimeType, optimized: isImage });
   const contentType = isImage ? "image/jpeg" : (mimeType || "application/octet-stream");
   const safeDocumentType = String(documentType || "document").replace(/[^a-z0-9_-]/gi, "_").toLowerCase();
-  const storageBucket = "vendor-documents";
   const storagePath = `kyc/${vendorId}/${safeDocumentType}_${Date.now()}${ext}`;
 
   const { error } = await supabase.storage
-    .from(storageBucket)
+    .from(KYC_STORAGE_BUCKET)
     .upload(storagePath, processedBuffer, {
       contentType,
-      upsert: true,
+      upsert: false,
     });
 
   if (error) {
-    console.error("Error uploading KYC document to Supabase storage:", error);
-    throw new Error(`Document upload failed: ${error.message}`);
+    console.error("KYC storage upload failed", {
+      vendor_id: vendorId,
+      document_type: documentType,
+      bucket: KYC_STORAGE_BUCKET,
+      error,
+    });
+    throw new Error("Upload failed. Please try again.");
   }
 
-  const { data: publicUrlData } = supabase.storage
-    .from(storageBucket)
-    .getPublicUrl(storagePath);
-
   return {
-    storage_bucket: storageBucket,
+    storage_bucket: KYC_STORAGE_BUCKET,
     storage_path: storagePath,
-    public_url: publicUrlData.publicUrl,
     mime_type: contentType,
     file_size_bytes: processedBuffer.length,
   };

@@ -6,7 +6,7 @@ import { getRazorpayMode } from "../payments/paymentEnvironment.js";
 import { requireRole, requireUserJwt } from "../security/apiSecurity.js";
 import { verifyRazorpaySignature } from "../securityWallet/securityWalletService.js";
 import { getVendorOnboardingSummary } from "./onboardingPolicyService.js";
-import { uploadKycDocument } from "./kycService.js";
+import { KYC_STORAGE_BUCKET, uploadKycDocument } from "./kycService.js";
 
 const router = express.Router();
 const requireAdmin = [requireUserJwt(supabase), requireRole(["admin", "company_admin", "super_admin"])];
@@ -284,9 +284,15 @@ function flattenKycDocumentTypes(requirements) {
   return new Set(requirements.flatMap((section) => (section.options || []).map((option) => option.type)).concat(["authorisation", "trade_license", "shop_photo"]));
 }
 
-function latestDocumentForSection(section, documents) {
+function documentBelongsToSection(section, document) {
   const allowed = new Set((section.options || []).map((option) => option.type));
-  return documents.find((document) => allowed.has(document.document_type));
+  const metadataSection = document?.metadata?.document_section;
+  if (metadataSection) return metadataSection === section.id && allowed.has(document.document_type);
+  return allowed.has(document?.document_type);
+}
+
+function latestDocumentForSection(section, documents) {
+  return (documents || []).find((document) => documentBelongsToSection(section, document));
 }
 
 function hasAcceptableSubmittedDocument(section, documents) {
@@ -305,7 +311,7 @@ async function assertRequiredKycDocumentsSubmitted(vendorId, category) {
 
   const missing = requirements.filter((section) => !hasAcceptableSubmittedDocument(section, documents || []));
   if (missing.length > 0) {
-    const err = new Error(`KYC cannot be approved until required documents are submitted: ${missing.map((section) => section.title).join(", ")}.`);
+    const err = new Error(`KYC cannot be submitted until required documents are uploaded: ${missing.map((section) => section.title).join(", ")}.`);
     err.statusCode = 409;
     throw err;
   }
@@ -364,12 +370,14 @@ router.post("/:vendor_id/kyc-documents", requireAuth, kycUpload.single("document
     const documentType = String(req.body?.document_type || "").trim();
     const documentSection = String(req.body?.document_section || "").trim();
     const documentLabel = String(req.body?.document_label || documentType).trim();
+    const section = requirements.find((item) => item.id === documentSection);
     const allowedTypes = flattenKycDocumentTypes(requirements);
-    if (!allowedTypes.has(documentType)) {
-      return res.status(400).json({ success: false, error: "Invalid or unsupported KYC document type for this vendor category." });
+
+    if (!allowedTypes.has(documentType) || !section || !(section.options || []).some((option) => option.type === documentType)) {
+      return res.status(400).json({ success: false, error: "Invalid KYC document selection. Please choose the document type again and retry." });
     }
     if (!req.file?.buffer) {
-      return res.status(400).json({ success: false, error: "KYC document file is required." });
+      return res.status(400).json({ success: false, error: "Please choose a document file before uploading." });
     }
 
     const uploaded = await uploadKycDocument({
@@ -392,21 +400,86 @@ router.post("/:vendor_id/kyc-documents", requireAuth, kycUpload.single("document
         file_size_bytes: uploaded.file_size_bytes,
         status: "submitted",
         metadata: {
-          document_section: documentSection || null,
+          document_section: documentSection,
           document_label: documentLabel || documentType,
+          original_file_name: req.file.originalname || `${documentType}`,
           optimized_for_storage: req.file.mimetype?.startsWith("image/") || false,
-          public_url: uploaded.public_url,
           note: "Image compression only; legal document content is not altered or fabricated.",
         },
       })
-      .select()
+      .select("id, document_type, status, file_name, mime_type, file_size_bytes, rejection_reason, metadata, created_at, reviewed_at")
       .single();
-    if (insertError) throw insertError;
+    if (insertError) {
+      console.error("KYC metadata insert failed", {
+        vendor_id: req.params.vendor_id,
+        document_type: documentType,
+        document_section: documentSection,
+        storage_bucket: uploaded.storage_bucket,
+        storage_path: uploaded.storage_path,
+        error: insertError,
+      });
+      await supabase.storage.from(uploaded.storage_bucket).remove([uploaded.storage_path]);
+      throw new Error("Upload failed. Please try again.");
+    }
 
     const currentKycStatus = vendor.kyc_status || "kyc_not_started";
     return res.status(201).json({ success: true, document: documentRow, kyc_status: currentKycStatus });
   } catch (error) {
-    return res.status(error.statusCode || 500).json({ success: false, error: error.message });
+    console.error("KYC document upload route failed", {
+      vendor_id: req.params.vendor_id,
+      message: error.message,
+      details: error,
+    });
+    return res.status(error.statusCode || 500).json({ success: false, error: error.message || "Upload failed. Please try again." });
+  }
+});
+
+router.get("/:vendor_id/kyc-documents/:document_id/view", requireAuth, async (req, res) => {
+  try {
+    await assertVendorOwnerOrAdmin(req, req.params.vendor_id);
+    const { data: documentRow, error } = await supabase
+      .from("vendor_kyc_documents")
+      .select("id, vendor_id, storage_bucket, storage_path, file_name")
+      .eq("id", req.params.document_id)
+      .eq("vendor_id", req.params.vendor_id)
+      .single();
+    if (error || !documentRow) return res.status(404).json({ success: false, error: "KYC document was not found." });
+
+    const { data, error: signedError } = await supabase.storage
+      .from(documentRow.storage_bucket || KYC_STORAGE_BUCKET)
+      .createSignedUrl(documentRow.storage_path, 300);
+    if (signedError) throw signedError;
+
+    return res.json({ success: true, url: data.signedUrl, file_name: documentRow.file_name });
+  } catch (error) {
+    console.error("KYC document preview failed", { vendor_id: req.params.vendor_id, document_id: req.params.document_id, error });
+    return res.status(error.statusCode || 500).json({ success: false, error: "Unable to open this document. Please try again." });
+  }
+});
+
+router.delete("/:vendor_id/kyc-documents/:document_id", requireAuth, async (req, res) => {
+  try {
+    await assertVendorOwnerOrAdmin(req, req.params.vendor_id);
+    const { data: documentRow, error } = await supabase
+      .from("vendor_kyc_documents")
+      .select("id, vendor_id, storage_bucket, storage_path")
+      .eq("id", req.params.document_id)
+      .eq("vendor_id", req.params.vendor_id)
+      .single();
+    if (error || !documentRow) return res.status(404).json({ success: false, error: "KYC document was not found." });
+
+    await supabase.storage.from(documentRow.storage_bucket || KYC_STORAGE_BUCKET).remove([documentRow.storage_path]);
+    const { error: deleteError } = await supabase
+      .from("vendor_kyc_documents")
+      .delete()
+      .eq("id", req.params.document_id)
+      .eq("vendor_id", req.params.vendor_id);
+    if (deleteError) throw deleteError;
+
+    return res.json({ success: true });
+  } catch (error) {
+    console.error("KYC document delete failed", { vendor_id: req.params.vendor_id, document_id: req.params.document_id, error });
+    return res.status(error.statusCode || 500).json({ success: false, error: "Unable to delete this document. Please try again." });
   }
 });
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { ActivityIndicator, Alert, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -196,9 +196,19 @@ export default function VendorOnboardingScreen() {
     );
   }
 
-  const currency = summary?.currency || "INR";
+    const currency = summary?.pricing?.currency || summary?.currency || "INR";
+  const onboardingFee = pricingValue(summary, "onboarding_fee");
+  const securityDeposit = pricingValue(summary, "security_deposit");
+  const taxAmount = pricingValue(summary, "tax_amount");
+  const totalPayable = pricingValue(summary, "total_payable");
   const canPublish = Boolean(summary?.can_publish_products);
-  const isPaymentCompleted = summary?.payment_status === "payment_completed";
+  const kycStatus = summary?.kyc_status || vendor?.kyc_status || "kyc_not_started";
+  const paymentStatus = summary?.payment_status || vendor?.onboarding_payment_status || "payment_pending";
+  const lifecycleStatus = summary?.vendor_status || summary?.lifecycle_status || vendor?.lifecycle_status || vendor?.status || "registered";
+  const isKycVerified = kycStatus === "kyc_verified";
+  const isPaymentCompleted = paymentStatus === "payment_completed";
+  const paymentUnlocked = Boolean(summary?.is_payment_unlocked || isKycVerified);
+  const pricingReady = isPositiveAmount(totalPayable);
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -210,18 +220,40 @@ export default function VendorOnboardingScreen() {
           <Text style={styles.shopName}>{vendor.shop_name || vendor.vendor_name || "Vendor"}</Text>
           <Text style={styles.muted}>{vendor.public_vendor_id || "Vendor ID pending"}</Text>
           <View style={styles.statusGrid}>
-            <View style={styles.statusBox}>
-              <Text style={styles.statusValue}>{statusLabel(summary?.kyc_status || vendor.kyc_status)}</Text>
+            <TouchableOpacity
+              style={styles.statusBox}
+              onPress={() => router.push(`/vendor/KYC?vendor=${vendor.id}` as any)}
+            >
+              <Text style={styles.statusValue}>{statusLabel(kycStatus)}</Text>
               <Text style={styles.statusLabel}>KYC</Text>
-            </View>
-            <View style={styles.statusBox}>
-              <Text style={styles.statusValue}>{statusLabel(summary?.payment_status || vendor.onboarding_payment_status)}</Text>
+              <Text style={styles.statusHint}>{isKycVerified ? "Approved" : "Upload required documents"}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.statusBox, !paymentUnlocked && styles.statusBoxLocked]}
+              onPress={() => {
+                if (!paymentUnlocked) {
+                  Alert.alert("Payment Locked", "Complete and verify KYC before paying onboarding charges.");
+                  return;
+                }
+                if (!pricingReady) {
+                  Alert.alert("Pricing unavailable", "Payment configuration is missing. Please contact SabSewa support.");
+                  return;
+                }
+                if (!isPaymentCompleted) payOnboardingWithRazorpay();
+              }}
+            >
+              <Text style={styles.statusValue}>{paymentUnlocked ? statusLabel(paymentStatus) : "Locked"}</Text>
               <Text style={styles.statusLabel}>Payment</Text>
-            </View>
-            <View style={styles.statusBox}>
-              <Text style={styles.statusValue}>{statusLabel(summary?.vendor_status || vendor.status)}</Text>
+              <Text style={styles.statusHint}>{paymentUnlocked ? "Pay onboarding charges" : "Complete KYC first"}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.statusBox}
+              onPress={() => Alert.alert("Lifecycle", canPublish ? "Active / Onboarding completed." : `Pending: ${!isKycVerified ? "KYC verification" : !isPaymentCompleted ? "payment completion" : "final activation"}.`)}
+            >
+              <Text style={styles.statusValue}>{canPublish ? "Active" : statusLabel(lifecycleStatus)}</Text>
               <Text style={styles.statusLabel}>Lifecycle</Text>
-            </View>
+              <Text style={styles.statusHint}>{canPublish ? "Onboarding completed" : "Final activation pending"}</Text>
+            </TouchableOpacity>
           </View>
         </View>
       ) : (
@@ -235,34 +267,35 @@ export default function VendorOnboardingScreen() {
         <Text style={styles.section}>Payment Summary</Text>
         <View style={styles.line}>
           <Text style={styles.lineLabel}>Business category</Text>
-          <Text style={styles.lineValue}>{summary?.category_slug || vendor?.category || "other"}</Text>
+          <Text style={styles.lineValue}>{summary?.business_category_display || summary?.category_slug || vendor?.category || "other"}</Text>
         </View>
         <View style={styles.line}>
           <Text style={styles.lineLabel}>Onboarding fee</Text>
-          <Text style={styles.lineValue}>{money(summary?.onboarding_fee, currency)}</Text>
+          <Text style={styles.lineValue}>{pricingReady || onboardingFee !== null ? money(onboardingFee, currency) : "Configuration missing"}</Text>
         </View>
         <Text style={styles.muted}>{summary?.onboarding_fee_refundable ? "Refundable" : "Non-refundable"}</Text>
         <View style={styles.line}>
           <Text style={styles.lineLabel}>Security deposit</Text>
-          <Text style={styles.lineValue}>{money(summary?.security_deposit, currency)}</Text>
+          <Text style={styles.lineValue}>{pricingReady || securityDeposit !== null ? money(securityDeposit, currency) : "Configuration missing"}</Text>
         </View>
         <Text style={styles.muted}>
           {summary?.security_deposit_refundable === false ? "Not marked refundable" : "Refundable or adjustable as per vendor policy"}
         </Text>
         <View style={styles.line}>
           <Text style={styles.lineLabel}>Tax</Text>
-          <Text style={styles.lineValue}>{money(summary?.tax_amount, currency)}</Text>
+          <Text style={styles.lineValue}>{pricingReady || taxAmount !== null ? money(taxAmount, currency) : "Configuration missing"}</Text>
         </View>
+        {!pricingReady ? <Text style={styles.pricingWarning}>Payment configuration is missing or could not be loaded. Please contact SabSewa support; Rs 0.00 will not be treated as payable.</Text> : null}
         <View style={[styles.line, styles.totalLine]}>
           <Text style={styles.totalLabel}>Total payable</Text>
-          <Text style={styles.totalValue}>{money(summary?.total_payable, currency)}</Text>
+          <Text style={styles.totalValue}>{pricingReady ? money(totalPayable, currency) : "Configuration missing"}</Text>
         </View>
 
-        {!isPaymentCompleted && (
+        {!isPaymentCompleted && paymentUnlocked && pricingReady && (
           <TouchableOpacity
             style={[styles.payNowBtn, paying && styles.disabled]}
             onPress={payOnboardingWithRazorpay}
-            disabled={paying || !vendor?.id}
+            disabled={paying || !vendor?.id || !paymentUnlocked || !pricingReady}
           >
             <Text style={styles.primaryText}>{paying ? "Opening Razorpay..." : "Pay Now with Razorpay"}</Text>
           </TouchableOpacity>
@@ -273,7 +306,7 @@ export default function VendorOnboardingScreen() {
         <View style={styles.warningBox}>
           <Text style={styles.warningTitle}>Onboarding required</Text>
           <Text style={styles.warningText}>
-            Complete your SabSewa Local onboarding to list your store and publish products. Your payable amount includes the category-specific onboarding fee and the Rs 5,000 security deposit.
+            Complete KYC verification first. After approval, payment unlocks with the category-specific onboarding fee, security deposit and tax.
           </Text>
         </View>
       ) : (
@@ -333,6 +366,8 @@ const styles = StyleSheet.create({
   statusBox: { flex: 1, minWidth: 110, borderWidth: 1, borderColor: "#e5e7eb", borderRadius: 8, padding: 10, backgroundColor: "#f9fafb" },
   statusValue: { fontWeight: "900", color: "#111827" },
   statusLabel: { marginTop: 4, color: "#6b7280", fontSize: 12 },
+  statusHint: { marginTop: 6, color: "#475569", fontSize: 11, lineHeight: 16 },
+  statusBoxLocked: { backgroundColor: "#fff7ed", borderColor: "#fdba74" },
   section: { fontSize: 18, fontWeight: "900", color: "#111827", marginBottom: 10 },
   line: { flexDirection: "row", justifyContent: "space-between", gap: 12, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: "#f1f5f9" },
   lineLabel: { color: "#374151", fontWeight: "700", flex: 1 },
@@ -344,6 +379,7 @@ const styles = StyleSheet.create({
   warningBox: { borderWidth: 1, borderColor: "#fed7aa", borderRadius: 8, padding: 14, marginBottom: 14, backgroundColor: "#fff7ed" },
   warningTitle: { color: "#9a3412", fontWeight: "900" },
   warningText: { color: "#7c2d12", marginTop: 6, lineHeight: 20 },
+  pricingWarning: { color: "#991b1b", fontWeight: "700", marginTop: 8, lineHeight: 20 },
   input: { borderWidth: 1, borderColor: "#cbd5e1", borderRadius: 8, padding: 12, marginTop: 10, backgroundColor: "#fff" },
   payNowBtn: { backgroundColor: "#16a34a", borderRadius: 8, padding: 14, marginTop: 14 },
   primaryBtn: { backgroundColor: "#1166ff", borderRadius: 8, padding: 14, marginBottom: 14 },

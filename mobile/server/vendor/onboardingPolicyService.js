@@ -1,21 +1,40 @@
 ﻿import { supabase } from "../connection.js";
 
 const CANONICAL_FALLBACKS = {
-  FRUIT_VEGETABLE: { onboarding_fee: 500, security_deposit: 5000, tax_rate_percent: 18 },
-  KIRANA_GENERAL: { onboarding_fee: 1000, security_deposit: 5000, tax_rate_percent: 18 },
-  PHARMACY_MEDICAL: { onboarding_fee: 2000, security_deposit: 5000, tax_rate_percent: 18 },
-  RESTAURANT_FOOD: { onboarding_fee: 2000, security_deposit: 5000, tax_rate_percent: 18 },
-  OTHER: { onboarding_fee: 2000, security_deposit: 5000, tax_rate_percent: 18 }
+  FRUIT_VEGETABLE: { onboarding_fee: 500, security_deposit: 5000, tax_rate_percent: 18, slugs: ["vegetables", "fruits"] },
+  KIRANA_GENERAL: { onboarding_fee: 1000, security_deposit: 5000, tax_rate_percent: 18, slugs: ["kirana", "grocery"] },
+  PHARMACY_MEDICAL: { onboarding_fee: 2000, security_deposit: 5000, tax_rate_percent: 18, slugs: ["pharmacy", "medical"] },
+  RESTAURANT_FOOD: { onboarding_fee: 2000, security_deposit: 5000, tax_rate_percent: 18, slugs: ["restaurant", "tiffin"] },
+  BAKERY_DAIRY: { onboarding_fee: 1000, security_deposit: 5000, tax_rate_percent: 18, slugs: ["bakery", "dairy"] },
+  OTHER: { onboarding_fee: 2000, security_deposit: 5000, tax_rate_percent: 18, slugs: ["other"] },
 };
 
 function resolveCanonicalCategoryId(rawCategory) {
   if (!rawCategory) return "OTHER";
-  const clean = String(rawCategory).trim().toLowerCase();
-  if (clean.includes("veg") || clean.includes("fruit")) return "FRUIT_VEGETABLE";
-  if (clean.includes("kirana") || clean.includes("general") || clean.includes("grocery")) return "KIRANA_GENERAL";
-  if (clean.includes("pharma") || clean.includes("med")) return "PHARMACY_MEDICAL";
-  if (clean.includes("rest") || clean.includes("food")) return "RESTAURANT_FOOD";
+  const clean = String(rawCategory).trim();
+  const upper = clean.toUpperCase();
+  if (CANONICAL_FALLBACKS[upper]) return upper;
+
+  const lower = clean.toLowerCase();
+  if (lower.includes("veg") || lower.includes("fruit")) return "FRUIT_VEGETABLE";
+  if (lower.includes("kirana") || lower.includes("general") || lower.includes("grocery")) return "KIRANA_GENERAL";
+  if (lower.includes("pharma") || lower.includes("med") || lower.includes("chemist")) return "PHARMACY_MEDICAL";
+  if (lower.includes("rest") || lower.includes("food") || lower.includes("tiffin")) return "RESTAURANT_FOOD";
+  if (lower.includes("bake") || lower.includes("dairy")) return "BAKERY_DAIRY";
   return "OTHER";
+}
+
+function categorySlugCandidates(rawCategory, canonicalId) {
+  const clean = String(rawCategory || "").trim().toLowerCase();
+  const normalized = clean.replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+  return Array.from(new Set([
+    ...(CANONICAL_FALLBACKS[canonicalId]?.slugs || []),
+    canonicalId.toLowerCase(),
+    normalized,
+    normalized.replace(/_shops?$/, ""),
+    normalized.replace(/_stores?$/, ""),
+    "other",
+  ].filter(Boolean)));
 }
 
 export async function getVendorOnboardingSummary(vendorId) {
@@ -27,38 +46,63 @@ export async function getVendorOnboardingSummary(vendorId) {
 
   if (vendorErr || !vendor) throw new Error("Vendor profile not found");
 
-  const canonicalId = resolveCanonicalId(vendor.category);
+  const canonicalId = resolveCanonicalCategoryId(vendor.category);
   const fallback = CANONICAL_FALLBACKS[canonicalId] || CANONICAL_FALLBACKS.OTHER;
+  const slugCandidates = categorySlugCandidates(vendor.category, canonicalId);
 
-  // Query DB fee rules
-  const { data: feeRule } = await supabase
+  const { data: feeRules, error: feeError } = await supabase
     .from("vendor_fee_rules")
-    .select("onboarding_fee_amount, security_deposit_amount, tax_rate_percent")
-    .or(`category_id.eq.${canonicalId},category_slug.eq.${canonicalId.toLowerCase()}`)
+    .select("id, category_slug, onboarding_fee_amount, security_deposit_amount, tax_rate_percent, onboarding_fee_refundable, security_deposit_refundable, currency")
+    .in("category_slug", slugCandidates)
     .eq("is_active", true)
-    .maybeSingle();
+    .is("effective_to", null)
+    .order("effective_from", { ascending: false });
 
-  const onboardingFee = feeRule?.onboarding_fee_amount ?? fallback.onboarding_fee;
-  const securityDeposit = feeRule?.security_deposit_amount ?? fallback.security_deposit;
-  const taxRate = feeRule?.tax_rate_percent ?? fallback.tax_rate_percent;
+  if (feeError) {
+    console.warn("Unable to read vendor fee rules; using canonical fallback:", feeError.message);
+  }
 
+  const feeRule = (feeRules || []).find((rule) => rule.category_slug !== "other") || (feeRules || [])[0] || null;
+  const onboardingFee = Number(feeRule?.onboarding_fee_amount ?? fallback.onboarding_fee);
+  const securityDeposit = Number(feeRule?.security_deposit_amount ?? fallback.security_deposit);
+  const taxRate = Number(feeRule?.tax_rate_percent ?? fallback.tax_rate_percent);
   const taxAmount = Math.round((onboardingFee * taxRate) / 100);
   const totalPayable = onboardingFee + securityDeposit + taxAmount;
+  const kycStatus = vendor.kyc_status || "kyc_not_started";
+  const paymentStatus = vendor.onboarding_payment_status || "payment_pending";
+  const lifecycleStatus = vendor.lifecycle_status || vendor.status || "registered";
+  const canPublishProducts = lifecycleStatus === "active" && kycStatus === "kyc_verified" && paymentStatus === "payment_completed";
+  const pricingSource = feeRule ? "vendor_fee_rules" : "canonical_fallback";
 
   return {
     vendor_id: vendor.id,
     business_category_display: vendor.category || "General Vendor",
+    category_slug: feeRule?.category_slug || fallback.slugs[0] || "other",
     canonical_category_id: canonicalId,
-    kyc_status: vendor.kyc_status || "kyc_not_started",
-    payment_status: vendor.onboarding_payment_status || "payment_pending",
-    lifecycle_status: vendor.lifecycle_status || vendor.status || "registered",
-    is_payment_unlocked: vendor.kyc_status === "kyc_verified",
+    fee_rule_id: feeRule?.id || null,
+    pricing_source: pricingSource,
+    pricing_configured: totalPayable > 0,
+    kyc_status: kycStatus,
+    payment_status: paymentStatus,
+    vendor_status: lifecycleStatus,
+    lifecycle_status: lifecycleStatus,
+    is_payment_unlocked: kycStatus === "kyc_verified",
+    can_publish_products: canPublishProducts,
+    onboarding_fee: onboardingFee,
+    security_deposit: securityDeposit,
+    tax_amount: taxAmount,
+    tax_rate_percent: taxRate,
+    total_payable: totalPayable,
+    currency: feeRule?.currency || "INR",
+    onboarding_fee_refundable: Boolean(feeRule?.onboarding_fee_refundable),
+    security_deposit_refundable: feeRule?.security_deposit_refundable !== false,
     pricing: {
       onboarding_fee: onboardingFee,
       security_deposit: securityDeposit,
       tax_amount: taxAmount,
       tax_rate_percent: taxRate,
-      total_payable: totalPayable
-    }
+      total_payable: totalPayable,
+      currency: feeRule?.currency || "INR",
+    },
   };
 }

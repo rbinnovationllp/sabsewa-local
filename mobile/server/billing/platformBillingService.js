@@ -1,4 +1,4 @@
-import axios from "axios";
+﻿import axios from "axios";
 import { supabase } from "../connection.js";
 import { getPaymentReadiness } from "../payments/paymentEnvironment.js";
 import { getRazorpayPayment, verifyRazorpaySignature } from "../securityWallet/securityWalletService.js";
@@ -211,6 +211,11 @@ export async function resolveBillingItem({ vendorId, chargeType, referenceId, bi
 
 export async function createPlatformBillingOrder({ vendorId, auth, chargeType, referenceId, billingCycle, couponCode }) {
   const vendor = await assertVendorBillingAccess({ vendorId, auth });
+  if (chargeType === "onboarding" && vendor.kyc_status !== "kyc_verified") {
+    const error = new Error("Complete and verify KYC before paying onboarding charges.");
+    error.statusCode = 409;
+    throw error;
+  }
   const item = await resolveBillingItem({ vendorId, chargeType, referenceId, billingCycle, couponCode });
   if (item.totalAmountPaise <= 0 && item.chargeType !== "subscription") {
     const error = new Error("This billing item has no payable amount.");
@@ -829,3 +834,4 @@ export async function getInvoiceDocument({ vendorId, invoiceId, auth }) {
   }
   return invoice;
 }
+

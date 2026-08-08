@@ -1,13 +1,17 @@
 ﻿import express from "express";
+import multer from "multer";
 import Razorpay from "razorpay";
 import { supabase } from "../connection.js";
 import { getRazorpayMode } from "../payments/paymentEnvironment.js";
 import { requireRole, requireUserJwt } from "../security/apiSecurity.js";
 import { verifyRazorpaySignature } from "../securityWallet/securityWalletService.js";
 import { getVendorOnboardingSummary } from "./onboardingPolicyService.js";
+import { uploadKycDocument } from "./kycService.js";
 
 const router = express.Router();
 const requireAdmin = [requireUserJwt(supabase), requireRole(["admin", "company_admin", "super_admin"])];
+const requireAuth = requireUserJwt(supabase);
+const kycUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } });
 
 // Initialize Razorpay instance
 const razorpay = new Razorpay({
@@ -178,6 +182,136 @@ router.get("/:vendor_id/summary", async (req, res) => {
   try {
     const summary = await getVendorOnboardingSummary(req.params.vendor_id);
     return res.json({ success: true, summary });
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({ success: false, error: error.message });
+  }
+});
+
+function requiredKycDocumentsForCategory(category) {
+  const lower = String(category || "").toLowerCase();
+  const docs = [
+    { type: "aadhaar", label: "Owner Aadhaar / identity proof", required: true },
+    { type: "shop_establishment", label: "Shop establishment or local business proof", required: true },
+    { type: "shop_photo", label: "Shop photo", required: true },
+  ];
+  if (lower.includes("restaurant") || lower.includes("tiffin") || lower.includes("food")) {
+    docs.push({ type: "fssai_license", label: "FSSAI licence", required: true });
+  }
+  if (lower.includes("pharma") || lower.includes("medical") || lower.includes("chemist")) {
+    docs.push({ type: "drug_license", label: "Drug licence", required: true });
+  }
+  if (lower.includes("gst")) {
+    docs.push({ type: "gst_certificate", label: "GST certificate", required: false });
+  }
+  return docs;
+}
+
+async function assertVendorOwnerOrAdmin(req, vendorId) {
+  const { data: vendor, error } = await supabase
+    .from("vendors")
+    .select("id, owner_user_id, category, kyc_status, onboarding_payment_status, status")
+    .eq("id", vendorId)
+    .single();
+  if (error || !vendor) {
+    const err = new Error("Vendor profile not found.");
+    err.statusCode = 404;
+    throw err;
+  }
+  const role = String(req.auth?.role || "");
+  const admin = ["admin", "company_admin", "super_admin"].includes(role);
+  if (!admin && vendor.owner_user_id !== req.auth?.user_id) {
+    const err = new Error("You can access only your own vendor KYC.");
+    err.statusCode = 403;
+    throw err;
+  }
+  return vendor;
+}
+
+router.get("/:vendor_id/kyc-requirements", requireAuth, async (req, res) => {
+  try {
+    const vendor = await assertVendorOwnerOrAdmin(req, req.params.vendor_id);
+    const { data: documents, error } = await supabase
+      .from("vendor_kyc_documents")
+      .select("id, document_type, status, file_name, mime_type, file_size_bytes, rejection_reason, created_at, reviewed_at")
+      .eq("vendor_id", req.params.vendor_id)
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    return res.json({
+      success: true,
+      vendor: {
+        id: vendor.id,
+        category: vendor.category,
+        kyc_status: vendor.kyc_status || "kyc_not_started",
+        payment_status: vendor.onboarding_payment_status || "payment_pending",
+      },
+      required_documents: requiredKycDocumentsForCategory(vendor.category),
+      documents: documents || [],
+    });
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({ success: false, error: error.message });
+  }
+});
+
+router.post("/:vendor_id/kyc-documents", requireAuth, kycUpload.single("document"), async (req, res) => {
+  try {
+    const vendor = await assertVendorOwnerOrAdmin(req, req.params.vendor_id);
+    const documentType = String(req.body?.document_type || "").trim();
+    const allowedTypes = new Set(requiredKycDocumentsForCategory(vendor.category).map((doc) => doc.type).concat([
+      "authorisation",
+      "trade_license",
+      "gst_certificate",
+      "utility_bill",
+      "rent_agreement",
+      "other_business_proof",
+    ]));
+    if (!allowedTypes.has(documentType)) {
+      return res.status(400).json({ success: false, error: "Invalid or unsupported KYC document type for this vendor category." });
+    }
+    if (!req.file?.buffer) {
+      return res.status(400).json({ success: false, error: "KYC document file is required." });
+    }
+
+    const uploaded = await uploadKycDocument({
+      vendorId: req.params.vendor_id,
+      documentType,
+      fileBuffer: req.file.buffer,
+      mimeType: req.file.mimetype,
+      originalName: req.file.originalname,
+    });
+
+    const { data: documentRow, error: insertError } = await supabase
+      .from("vendor_kyc_documents")
+      .insert({
+        vendor_id: req.params.vendor_id,
+        document_type: documentType,
+        storage_bucket: uploaded.storage_bucket,
+        storage_path: uploaded.storage_path,
+        file_name: req.file.originalname || `${documentType}`,
+        mime_type: uploaded.mime_type,
+        file_size_bytes: uploaded.file_size_bytes,
+        status: "submitted",
+        metadata: {
+          optimized_for_storage: req.file.mimetype?.startsWith("image/") || false,
+          public_url: uploaded.public_url,
+          note: "Image compression only; legal document content is not altered or fabricated.",
+        },
+      })
+      .select()
+      .single();
+    if (insertError) throw insertError;
+
+    const nextKycStatus = vendor.kyc_status === "kyc_verified" ? "kyc_verified" : "kyc_submitted";
+    await supabase
+      .from("vendors")
+      .update({
+        kyc_status: nextKycStatus,
+        status: vendor.status === "active" ? "active" : "kyc_pending",
+        lifecycle_status: vendor.status === "active" ? "active" : "kyc_pending",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", req.params.vendor_id);
+
+    return res.status(201).json({ success: true, document: documentRow, kyc_status: nextKycStatus });
   } catch (error) {
     return res.status(error.statusCode || 500).json({ success: false, error: error.message });
   }

@@ -129,3 +129,19 @@ export async function assertVendorCanReceiveOrdersByStatus(vendorId) {
 
   return summary;
 }
+
+export async function assertVendorCanPublishProducts(vendorId) {
+  const summary = await getVendorOnboardingSummary(vendorId);
+
+  if (!summary.can_publish_products) {
+    const error = new Error("Vendor onboarding is incomplete. Complete KYC approval, required payment and activation before publishing products.");
+    error.statusCode = 403;
+    error.publicMessage = "Complete KYC approval and required payment before publishing products.";
+    error.vendor_status = summary.lifecycle_status || summary.vendor_status;
+    error.kyc_status = summary.kyc_status;
+    error.payment_status = summary.payment_status;
+    throw error;
+  }
+
+  return summary;
+}

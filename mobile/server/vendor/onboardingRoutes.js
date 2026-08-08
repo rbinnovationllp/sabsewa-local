@@ -410,16 +410,25 @@ router.post("/:vendor_id/kyc-documents", requireAuth, kycUpload.single("document
       .select("id, document_type, status, file_name, mime_type, file_size_bytes, rejection_reason, metadata, created_at, reviewed_at")
       .single();
     if (insertError) {
-      console.error("KYC metadata insert failed", {
+      const diagnostic = {
+        stage: "metadata_insert",
         vendor_id: req.params.vendor_id,
         document_type: documentType,
         document_section: documentSection,
         storage_bucket: uploaded.storage_bucket,
         storage_path: uploaded.storage_path,
-        error: insertError,
-      });
+        code: insertError?.code || null,
+        message: insertError?.message || String(insertError),
+        details: insertError?.details || null,
+        hint: insertError?.hint || null,
+      };
+      console.error("KYC metadata insert failed", diagnostic);
       await supabase.storage.from(uploaded.storage_bucket).remove([uploaded.storage_path]);
-      throw new Error("Upload failed. Please try again.");
+      const err = new Error(`KYC database record failed: ${diagnostic.message}`);
+      err.statusCode = 500;
+      err.publicMessage = err.message;
+      err.diagnostic = diagnostic;
+      throw err;
     }
 
     const currentKycStatus = vendor.kyc_status || "kyc_not_started";
@@ -430,7 +439,11 @@ router.post("/:vendor_id/kyc-documents", requireAuth, kycUpload.single("document
       message: error.message,
       details: error,
     });
-    return res.status(error.statusCode || 500).json({ success: false, error: error.message || "Upload failed. Please try again." });
+    return res.status(error.statusCode || 500).json({
+      success: false,
+      error: error.publicMessage || error.message || "Upload failed. Please try again.",
+      diagnostic: error.diagnostic || undefined,
+    });
   }
 });
 

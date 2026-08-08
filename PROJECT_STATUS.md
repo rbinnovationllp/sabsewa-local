@@ -1071,3 +1071,27 @@ Gemini XPRIZE Alignment: Outlines compliance status across AI backend logging (g
 - Submit KYC Package now reads the same backend document records as each document section.
 - Normal vendors see restricted/regulated licence as Not Required / Optional unless their category legally requires it.
 - KYC uploads now use the private endor-kyc-private Supabase bucket with signed preview and delete/re-upload routes.
+## 2026-08-08 - KYC auto-upload after file selection
+
+- KYC document pickers now start upload immediately after the vendor takes/selects a file.
+- The document badge shows Uploading during the request and changes to Uploaded only after backend storage and metadata insertion succeeds.
+- The old ambiguous "Ready to upload" wording was replaced with a clear fallback retry message for failed/manual retry cases.
+## 2026-08-08 - KYC upload button request execution
+
+- Hardened Vendor KYC upload buttons so each click visibly starts upload and logs the request path.
+- Web uploads now append the real browser File object from Expo pickers when available instead of relying only on fetching a picker URI.
+- Upload failures are shown inline inside the affected KYC section and logged to the browser console for debugging.
+- Upload success still requires backend confirmation and a created endor_kyc_documents row before the badge changes to Uploaded.
+## 2026-08-08 - KYC stable vendor-id auto upload
+
+- Removed the separate manual KYC upload button from the vendor KYC sections.
+- Upload now starts only from Take Photo, Gallery, or Files selection.
+- The upload API uses a stable resolved vendor id even if the backend response omits endor.id.
+- Removed contradictory "file selected but not uploaded, press upload" messaging.
+- If upload cannot start, the section now shows the actual blocking reason instead of silently doing nothing.
+## 2026-08-08 - KYC storage diagnostics and MIME inference
+
+- KYC backend now infers MIME type from the selected filename when browser/file picker reports pplication/octet-stream.
+- JPG/JPEG/PNG/WEBP images are compressed and uploaded as image/jpeg; PDFs remain PDFs.
+- KYC upload now verifies or creates the private endor-kyc-private bucket using the backend service role.
+- Storage/API failures return diagnostic stage/code/message to the frontend and are logged on the backend.

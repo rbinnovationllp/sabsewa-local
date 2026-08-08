@@ -106,3 +106,26 @@ export async function getVendorOnboardingSummary(vendorId) {
     },
   };
 }
+
+export async function assertVendorCanReceiveOrdersByStatus(vendorId) {
+  const summary = await getVendorOnboardingSummary(vendorId);
+  const lifecycleStatus = String(summary.lifecycle_status || summary.vendor_status || "").toLowerCase();
+  const kycStatus = String(summary.kyc_status || "").toLowerCase();
+  const paymentStatus = String(summary.payment_status || "").toLowerCase();
+
+  const activeLifecycle = ["active", "approved", "verified"].includes(lifecycleStatus);
+  const kycApproved = ["kyc_verified", "verified", "approved"].includes(kycStatus);
+  const paymentComplete = ["payment_completed", "paid", "completed"].includes(paymentStatus);
+
+  if (!activeLifecycle || !kycApproved || !paymentComplete) {
+    const error = new Error("Vendor is not active for receiving customer orders yet.");
+    error.statusCode = 403;
+    error.publicMessage = "This vendor is not active for customer orders yet.";
+    error.vendor_status = lifecycleStatus;
+    error.kyc_status = kycStatus;
+    error.payment_status = paymentStatus;
+    throw error;
+  }
+
+  return summary;
+}

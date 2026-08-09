@@ -13,6 +13,43 @@ const requireAdmin = [requireUserJwt(supabase), requireRole(["admin", "company_a
 const requireAuth = requireUserJwt(supabase);
 const kycUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } });
 
+function logKycUploadIngress(req, _res, next) {
+  if (req.method === "POST" || req.method === "OPTIONS") {
+    console.info("KYC upload ingress", {
+      method: req.method,
+      original_url: req.originalUrl,
+      vendor_id: req.params?.vendor_id || null,
+      content_type: req.headers["content-type"] || null,
+      content_length: req.headers["content-length"] || null,
+      has_authorization: Boolean(req.headers.authorization),
+      origin: req.headers.origin || null,
+      user_agent: req.headers["user-agent"] || null,
+    });
+  }
+  next();
+}
+
+function runKycMulter(req, res, next) {
+  kycUpload.single("document")(req, res, (error) => {
+    if (!error) return next();
+    const diagnostic = {
+      stage: "multer_file_parse",
+      code: error.code || null,
+      field: error.field || null,
+      message: error.message || String(error),
+      content_type: req.headers["content-type"] || null,
+      content_length: req.headers["content-length"] || null,
+    };
+    console.error("KYC multer upload failed", diagnostic);
+    const publicMessage = error.code === "LIMIT_FILE_SIZE"
+      ? "Document is larger than 8 MB. Please upload a smaller image or PDF."
+      : `KYC upload request could not be read by the server: ${diagnostic.message}`;
+    return res.status(400).json({ success: false, error: publicMessage, technical_error: diagnostic.message, diagnostic });
+  });
+}
+
+router.use("/:vendor_id/kyc-documents", logKycUploadIngress);
+
 // Initialize Razorpay instance
 const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY_ID,
@@ -363,7 +400,7 @@ router.get("/:vendor_id/kyc-requirements", requireAuth, async (req, res) => {
   }
 });
 
-router.post("/:vendor_id/kyc-documents", requireAuth, kycUpload.single("document"), async (req, res) => {
+router.post("/:vendor_id/kyc-documents", requireAuth, runKycMulter, async (req, res) => {
   try {
     console.info("KYC upload request received", {
       vendor_id: req.params.vendor_id,
@@ -725,5 +762,6 @@ router.post("/:vendor_id/activate", ...requireAdmin, async (req, res) => {
 });
 
 export default router;
+
 
 

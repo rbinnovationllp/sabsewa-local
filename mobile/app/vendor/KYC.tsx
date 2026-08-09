@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Alert, Linking, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import * as DocumentPicker from "expo-document-picker";
@@ -341,11 +341,14 @@ export default function VendorKycScreen() {
         json = raw ? JSON.parse(raw) : {};
       } catch (parseError) {
         console.error("KYC upload returned non-JSON response", { status: response.status, raw });
-        throw new Error("Upload failed. Please try again.");
+        throw new Error(`Upload failed. Server returned ${response.status}. Please try again or contact support.`);
       }
       if (!response.ok || !json.success || !json.document?.id) {
         console.error("KYC upload API rejected request", { status: response.status, json });
-        throw new Error(json.error || "Upload failed. Please try again.");
+        const diagnosticMessage = json.diagnostic?.stage
+          ? `${json.error || "Upload failed"} [${json.diagnostic.stage}${json.diagnostic.code ? `/${json.diagnostic.code}` : ""}]`
+          : (json.error || json.technical_error || "Upload failed. Please try again.");
+        throw new Error(diagnosticMessage);
       }
 
       setDocuments((current) => upsertDocument(current, json.document));
@@ -356,9 +359,12 @@ export default function VendorKycScreen() {
       await loadKyc();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Upload failed. Please try again.";
+      const visibleMessage = message === "Failed to fetch"
+        ? "Upload failed before reaching SabSewa API. Check internet connection, login session, API URL, or CORS."
+        : message;
       console.error("KYC upload failed", { section: section.id, document_type: option.type, error });
-      setUploadErrors((current) => ({ ...current, [section.id]: message }));
-      Alert.alert("Upload failed", message);
+      setUploadErrors((current) => ({ ...current, [section.id]: visibleMessage }));
+      Alert.alert("Upload failed", visibleMessage);
     } finally {
       setUploadingSectionId(null);
     }

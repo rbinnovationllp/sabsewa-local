@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Alert, Linking, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import * as DocumentPicker from "expo-document-picker";
@@ -119,7 +119,7 @@ function buildKycSections(category: unknown, serverSections: any[] = []): KycSec
       required: true,
       note: "Please stand in front of your shop and take a clear photograph showing your face, shop front, shop name/signboard if available, and some shop items or business activity.",
       options: [
-        { type: "owner_photo", label: "Owner + Shop Photograph" },
+        { type: "owner_shop_photo", label: "Owner + Shop Photograph" },
       ],
     },
     {

@@ -1,4 +1,4 @@
-﻿import express from "express";
+import express from "express";
 import multer from "multer";
 import Razorpay from "razorpay";
 import { supabase } from "../connection.js";
@@ -310,7 +310,7 @@ function requiredKycDocumentsForCategory(category) {
       required: true,
       note: "Please stand in front of your shop and take a clear photograph showing your face, shop front, shop name/signboard if available, and some shop items or business activity.",
       options: [
-        { type: "owner_photo", label: "Owner + Shop Photograph" },
+        { type: "owner_shop_photo", label: "Owner + Shop Photograph" },
       ],
     },
     {

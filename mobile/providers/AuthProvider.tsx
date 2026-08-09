@@ -1,4 +1,4 @@
-﻿import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useState } from "react";
 import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 import { usePathname, useRouter, useSegments } from "expo-router";
@@ -30,7 +30,7 @@ function cleanRole(value: unknown): AppRole | null {
 function roleHome(role: AppRole | null) {
   if (role === "vendor") return "/vendor/dashboard";
   if (role === "rider") return "/rider";
-  if (role === "admin" || role === "company_admin" || role === "super_admin") return "/company";
+  if (role === "admin" || role === "company_admin" || role === "super_admin" || role === "master_admin") return "/company";
   return "/customer/dashboard";
 }
 

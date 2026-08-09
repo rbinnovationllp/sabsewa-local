@@ -1095,3 +1095,11 @@ Gemini XPRIZE Alignment: Outlines compliance status across AI backend logging (g
 - JPG/JPEG/PNG/WEBP images are compressed and uploaded as image/jpeg; PDFs remain PDFs.
 - KYC upload now verifies or creates the private endor-kyc-private bucket using the backend service role.
 - Storage/API failures return diagnostic stage/code/message to the frontend and are logged on the backend.
+## 2026-08-09 - Master Admin Secret-Code CRM Security
+
+- Added a Master Admin CRM gate requiring both authenticated `master_admin` role and backend-verified Master Admin Secret Code.
+- The Master Admin secret is not stored in frontend code, GitHub, SQL migrations, or client-visible environment variables. The backend verifies a `crypto.scrypt` hash stored only in backend environment variables.
+- Added short-lived server-signed Master Admin CRM session tokens. Admin API calls include the token in `x-master-admin-session`; protected company routes reject requests without it.
+- Added rate limiting / temporary lockout for repeated incorrect secret attempts and audit logging for successful/failed Master Admin access attempts.
+- Added `mobile/server/scripts/generate-master-admin-secret.mjs` so the secret can be entered privately in PowerShell/terminal and converted into backend-only `.env` values.
+- Manual Supabase action: run `supabase/RUN_ONLY_MASTER_ADMIN_ACCESS_SECURITY_2026_08_09.sql` if audit/user-profile support is not already present.

@@ -3,6 +3,7 @@ import { getDeviceMetadata } from "@/lib/deviceIdentity";
 import { supabase } from "@/lib/supabase";
 
 const extra = Constants.expoConfig?.extra as Record<string, string> | undefined;
+export const MASTER_ADMIN_SESSION_STORAGE_KEY = "sabsewa_master_admin_session";
 
 export const BACKEND_URL =
   process.env.EXPO_PUBLIC_BACKEND_URL ||
@@ -26,9 +27,13 @@ export async function sabsewaClientHeaders(extraHeaders: Record<string, string> 
 
 export async function authenticatedApiHeaders(extraHeaders: Record<string, string> = {}) {
   const { data } = await supabase.auth.getSession();
-  const headers = await sabsewaClientHeaders(extraHeaders);
+  const headers: Record<string, string> = await sabsewaClientHeaders(extraHeaders);
   if (data.session?.access_token) {
-    return { ...headers, Authorization: `Bearer ${data.session.access_token}` };
+    headers.Authorization = `Bearer ${data.session.access_token}`;
+  }
+  if (typeof window !== "undefined") {
+    const token = window.sessionStorage.getItem(MASTER_ADMIN_SESSION_STORAGE_KEY);
+    if (token) headers["x-master-admin-session"] = token;
   }
   return headers;
 }

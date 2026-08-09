@@ -1,6 +1,7 @@
 import express from "express";
 import { supabase } from "../connection.js";
 import { requireRole, requireUserJwt } from "../security/apiSecurity.js";
+import { requireMasterAdminSession } from "../security/masterAdminSecurity.js";
 
 const router = express.Router();
 const requireAdmin = [requireUserJwt(supabase), requireRole(["admin", "company_admin", "super_admin"])];

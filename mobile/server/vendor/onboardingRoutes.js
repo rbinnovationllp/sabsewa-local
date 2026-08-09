@@ -305,6 +305,15 @@ function requiredKycDocumentsForCategory(category) {
       ],
     },
     {
+      id: "owner_photo",
+      title: "Owner / Authorized Person Photograph with Shop View",
+      required: true,
+      note: "Please stand in front of your shop and take a clear photograph showing your face, shop front, shop name/signboard if available, and some shop items or business activity.",
+      options: [
+        { type: "owner_photo", label: "Owner + Shop Photograph" },
+      ],
+    },
+    {
       id: "regulated_license",
       title: "Special / Restricted Item Licence",
       required: specialRequired,
@@ -430,6 +439,14 @@ router.post("/:vendor_id/kyc-documents", requireAuth, runKycMulter, async (req, 
     }
     if (!req.file?.buffer) {
       return res.status(400).json({ success: false, error: "Please choose a document file before uploading." });
+    }
+    if (documentSection === "owner_photo") {
+      const ownerPhotoMime = String(req.file.mimetype || "").toLowerCase();
+      const ownerPhotoName = String(req.file.originalname || "").toLowerCase();
+      const looksLikeImage = ownerPhotoMime.startsWith("image/") || /\.(jpg|jpeg|png|webp)$/.test(ownerPhotoName);
+      if (!looksLikeImage) {
+        return res.status(400).json({ success: false, error: "Owner + Shop Photograph must be an image. Please take or upload a JPG, PNG or WEBP photo from the shop location." });
+      }
     }
 
     const uploaded = await uploadKycDocument({
@@ -762,6 +779,7 @@ router.post("/:vendor_id/activate", ...requireAdmin, async (req, res) => {
 });
 
 export default router;
+
 
 
 

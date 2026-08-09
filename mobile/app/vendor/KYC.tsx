@@ -114,6 +114,15 @@ function buildKycSections(category: unknown, serverSections: any[] = []): KycSec
       ],
     },
     {
+      id: "owner_photo",
+      title: "Owner / Authorized Person Photograph with Shop View",
+      required: true,
+      note: "Please stand in front of your shop and take a clear photograph showing your face, shop front, shop name/signboard if available, and some shop items or business activity.",
+      options: [
+        { type: "owner_photo", label: "Owner + Shop Photograph" },
+      ],
+    },
+    {
       id: "regulated_license",
       title: "Restricted / Regulated Business Licence",
       required: specialRequired,
@@ -243,6 +252,9 @@ export default function VendorKycScreen() {
       Alert.alert("Camera permission required", "Allow camera access to capture KYC documents.");
       return;
     }
+    if (section.id === "owner_photo") {
+      Alert.alert("Owner + Shop Photograph", "Please stand in front of your shop and take a clear photograph showing your face, shop front, shop name/signboard if available, and some shop items or business activity.");
+    }
     const result = await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.85 });
     if (!result.canceled && result.assets?.[0]) {
       const asset: any = result.assets[0];
@@ -269,7 +281,7 @@ export default function VendorKycScreen() {
   }
 
   async function pickFromStorage(section: KycSection) {
-    const result = await DocumentPicker.getDocumentAsync({ type: ["application/pdf", "image/*"], copyToCacheDirectory: true, multiple: false });
+    const result = await DocumentPicker.getDocumentAsync({ type: section.id === "owner_photo" ? "image/*" : ["application/pdf", "image/*"], copyToCacheDirectory: true, multiple: false });
     if (!result.canceled && result.assets?.[0]) {
       const asset: any = result.assets[0];
       await handlePickedFile(section, {
@@ -476,7 +488,7 @@ export default function VendorKycScreen() {
                 <Text style={styles.selectedLine}>Selected: {option?.label || "None"}</Text>
                 {uploaded ? (
                   <View style={styles.uploadedBox}>
-                    <Text style={styles.successText}>{uploadedLabel} - Uploaded Successfully</Text>
+                    <Text style={styles.successText}>{section.id === "owner_photo" ? "Owner + Shop Photograph" : uploadedLabel} - Uploaded Successfully</Text>
                     <Text style={styles.fileName}>{latest?.file_name || "Uploaded document"} {fileSizeLabel(latest?.file_size_bytes)}</Text>
                     <View style={styles.actions}>
                       <TouchableOpacity style={styles.secondaryBtn} onPress={() => latest && previewDocument(latest)}>
@@ -494,7 +506,7 @@ export default function VendorKycScreen() {
 
                 <View style={styles.actions}>
                   <TouchableOpacity style={styles.secondaryBtn} onPress={() => pickFromCamera(section)}>
-                    <Text style={styles.secondaryText}>Take Photo</Text>
+                    <Text style={styles.secondaryText}>{section.id === "owner_photo" ? "Take Photo at Shop" : "Take Photo"}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.secondaryBtn} onPress={() => pickFromGallery(section)}>
                     <Text style={styles.secondaryText}>Gallery</Text>
@@ -572,3 +584,4 @@ const styles = StyleSheet.create({
   fileName: { color: "#334155", fontSize: 12, marginTop: 4 },
   disabled: { opacity: 0.6 },
 });
+

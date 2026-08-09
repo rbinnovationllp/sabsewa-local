@@ -1,4 +1,4 @@
-import express from "express";
+﻿import express from "express";
 import multer from "multer";
 import Razorpay from "razorpay";
 import { supabase } from "../connection.js";
@@ -365,6 +365,21 @@ router.get("/:vendor_id/kyc-requirements", requireAuth, async (req, res) => {
 
 router.post("/:vendor_id/kyc-documents", requireAuth, kycUpload.single("document"), async (req, res) => {
   try {
+    console.info("KYC upload request received", {
+      vendor_id: req.params.vendor_id,
+      user_id: req.auth?.user_id || null,
+      body: {
+        document_type: req.body?.document_type || null,
+        document_section: req.body?.document_section || null,
+        document_label: req.body?.document_label || null,
+      },
+      file: req.file ? {
+        originalname: req.file.originalname,
+        mimetype: req.file.mimetype,
+        size: req.file.size,
+        has_buffer: Boolean(req.file.buffer?.length),
+      } : null,
+    });
     const vendor = await assertVendorOwnerOrAdmin(req, req.params.vendor_id);
     const requirements = requiredKycDocumentsForCategory(vendor.category);
     const documentType = String(req.body?.document_type || "").trim();
@@ -442,6 +457,7 @@ router.post("/:vendor_id/kyc-documents", requireAuth, kycUpload.single("document
     return res.status(error.statusCode || 500).json({
       success: false,
       error: error.publicMessage || error.message || "Upload failed. Please try again.",
+      technical_error: error.message || null,
       diagnostic: error.diagnostic || undefined,
     });
   }
@@ -709,4 +725,5 @@ router.post("/:vendor_id/activate", ...requireAdmin, async (req, res) => {
 });
 
 export default router;
+
 

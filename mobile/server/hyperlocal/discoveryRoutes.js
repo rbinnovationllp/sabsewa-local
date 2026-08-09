@@ -1,5 +1,7 @@
 import express from "express";
+import sharp from "sharp";
 import { supabase } from "../connection.js";
+import { KYC_STORAGE_BUCKET } from "../vendor/kycService.js";
 
 const router = express.Router();
 
@@ -31,6 +33,79 @@ function categoryMatches(vendorCategory, requestedCategory) {
   return vendor.includes(requested) || requested.includes(vendor);
 }
 
+
+function publicVendorPhotoPath(vendorId) {
+  return `/api/discovery/vendors/${vendorId}/profile-photo`;
+}
+
+async function latestApprovedOwnerShopPhoto(vendorId) {
+  const { data, error } = await supabase
+    .from("vendor_kyc_documents")
+    .select("id, vendor_id, document_type, status, storage_bucket, storage_path, mime_type, file_name, metadata, created_at")
+    .eq("vendor_id", vendorId)
+    .eq("document_type", "owner_shop_photo")
+    .neq("status", "rejected")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data || null;
+}
+
+async function streamCustomerSafeOwnerShopPhoto(req, res) {
+  const vendorId = String(req.params.vendor_id || "").trim();
+  if (!vendorId) {
+    return res.status(400).json({ success: false, error: "Vendor id is required." });
+  }
+
+  const { data: vendor, error: vendorError } = await supabase
+    .from("vendors")
+    .select("id, status, kyc_status, onboarding_payment_status")
+    .eq("id", vendorId)
+    .maybeSingle();
+
+  if (vendorError) throw vendorError;
+  if (
+    !vendor ||
+    vendor.status !== "active" ||
+    vendor.kyc_status !== "kyc_verified" ||
+    vendor.onboarding_payment_status !== "payment_completed"
+  ) {
+    return res.status(404).json({ success: false, error: "Verified vendor photo is not available." });
+  }
+
+  const documentRow = await latestApprovedOwnerShopPhoto(vendorId);
+  if (!documentRow?.storage_path) {
+    return res.status(404).json({ success: false, error: "Verified vendor photo is not available." });
+  }
+
+  const bucket = documentRow.storage_bucket || KYC_STORAGE_BUCKET;
+  const { data: fileData, error: downloadError } = await supabase.storage
+    .from(bucket)
+    .download(documentRow.storage_path);
+
+  if (downloadError || !fileData) {
+    console.error("Customer vendor photo download failed", {
+      vendor_id: vendorId,
+      document_id: documentRow.id,
+      bucket,
+      message: downloadError?.message || String(downloadError || "No file data"),
+    });
+    return res.status(404).json({ success: false, error: "Verified vendor photo is not available." });
+  }
+
+  const sourceBuffer = Buffer.from(await fileData.arrayBuffer());
+  const outputBuffer = await sharp(sourceBuffer)
+    .resize({ width: 900, height: 620, fit: "inside", withoutEnlargement: true })
+    .jpeg({ quality: 78, progressive: true })
+    .toBuffer();
+
+  res.setHeader("Content-Type", "image/jpeg");
+  res.setHeader("Cache-Control", "private, max-age=300");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  return res.send(outputBuffer);
+}
 function rankVendor(a, b) {
   if (a.distance_m !== b.distance_m) return a.distance_m - b.distance_m;
   if (a.open_now !== b.open_now) return a.open_now ? -1 : 1;
@@ -54,6 +129,7 @@ function vendorCard({ vendor, terminal, items, distanceM }) {
     distance_label: distanceM < 1000 ? `${Math.round(distanceM)} m` : `${(distanceM / 1000).toFixed(1)} km`,
     open_now: vendor.status === "active" && terminal.status === "active" && terminal.is_open_today !== false,
     verified_vendor: vendor.public_verification_badge === true,
+    profile_photo_url: publicVendorPhotoPath(vendor.id),
     verification_status: vendor.kyc_status || "kyc_not_started",
     operating_hours: terminal.operating_hours || {},
     delivery_available: terminal.delivery_available !== false && vendor.delivery_available !== false,
@@ -93,6 +169,18 @@ function vendorCard({ vendor, terminal, items, distanceM }) {
   };
 }
 
+
+router.get("/vendors/:vendor_id/profile-photo", async (req, res) => {
+  try {
+    return await streamCustomerSafeOwnerShopPhoto(req, res);
+  } catch (error) {
+    console.error("Customer vendor photo route failed", {
+      vendor_id: req.params.vendor_id,
+      message: error?.message || String(error),
+    });
+    return res.status(500).json({ success: false, error: "Verified vendor photo is temporarily unavailable." });
+  }
+});
 router.get("/vendors", async (req, res) => {
   try {
     const category = String(req.query.category || "").trim();

@@ -304,9 +304,24 @@ export default function CustomerVendorDiscoveryScreen() {
       {filteredVendors.map((vendor) => (
         <View key={`${vendor.id}-${vendor.terminal_id}`} style={styles.vendorCard}>
           <View style={styles.cardHeader}>
+            {vendor.profile_photo_url ? (
+              <Image
+                source={{ uri: apiUrl(vendor.profile_photo_url) }}
+                style={styles.vendorPhoto}
+                resizeMode="cover"
+                accessibilityLabel={`${vendor.shop_name} verified shop photograph`}
+              />
+            ) : (
+              <View style={styles.vendorPhotoPlaceholder}>
+                <Ionicons name="storefront-outline" size={28} color="#0f766e" />
+              </View>
+            )}
             <View style={{ flex: 1 }}>
               <Text style={styles.shopName}>{vendor.shop_name}</Text>
-              <Text style={styles.vendorMeta}>{vendor.category} | ⚡ {vendor.distance_label || "Nearby"}</Text>
+              <Text style={styles.vendorMeta}>{vendor.category} | {vendor.distance_label || "Nearby"}</Text>
+              {vendor.verified_vendor || vendor.verification_status === "kyc_verified" ? (
+                <Text style={styles.verifiedBadge}>Verified Vendor</Text>
+              ) : null}
             </View>
             <Text style={[styles.status, vendor.open_now ? styles.open : styles.closed]}>
               {vendor.open_now ? "Open" : "Closed"}
@@ -429,7 +444,10 @@ const styles = StyleSheet.create({
   catalogueTitle: { color: "#0f766e", fontSize: 18, fontWeight: "900" },
   catalogueText: { color: "#334155", lineHeight: 19, marginTop: 5, marginBottom: 10 },
   vendorCard: { borderWidth: 1, borderColor: "#e2e8f0", borderRadius: 12, padding: 14, marginTop: 14, backgroundColor: "#fafafa" },
-  cardHeader: { flexDirection: "row", gap: 12 },
+  cardHeader: { flexDirection: "row", gap: 12, alignItems: "center" },
+  vendorPhoto: { width: 96, height: 72, borderRadius: 8, backgroundColor: "#ecfeff", borderWidth: 1, borderColor: "#99f6e4" },
+  vendorPhotoPlaceholder: { width: 96, height: 72, borderRadius: 8, backgroundColor: "#ecfeff", borderWidth: 1, borderColor: "#99f6e4", alignItems: "center", justifyContent: "center" },
+  verifiedBadge: { alignSelf: "flex-start", marginTop: 5, color: "#166534", backgroundColor: "#dcfce7", borderWidth: 1, borderColor: "#86efac", borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3, fontSize: 11, fontWeight: "900", overflow: "hidden" },
   shopName: { fontSize: 18, fontWeight: "900", color: "#0f172a" },
   vendorMeta: { color: "#64748b", marginTop: 2, fontSize: 13 },
   status: { fontWeight: "900" },

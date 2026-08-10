@@ -129,3 +129,11 @@ SabSewa-Local/
 - Admin profiles now carry Admin Name, generated Admin ID, phone, optional email, role, jurisdiction, status and audit identity.
 - Vendor order operations include in-app notification records, web-push dispatch when VAPID keys are configured, and a visible New Orders counter on the Vendor Orders screen.
 - Run `supabase/RUN_ONLY_ADMIN_KYC_MONITORING_AND_VENDOR_ORDER_NOTIFICATIONS_2026_08_10.sql` before production testing these workflows.
+
+## Partner Program
+
+SabSewa Local includes a Partner With Us program for eligible customers, vendors, independent individuals, local promoters and organizations who can help build active hyperlocal marketplaces. Partners are expected to help onboard suitable local vendors and also create customer awareness around those vendors so nearby people know they can order through SabSewa Local.
+
+The initial partner benefit is 10% of eligible SabSewa Local company revenue attributable to vendors successfully onboarded through the partner, subject to final Partner Program Terms and Master Admin configuration. The benefit is not company equity or ownership, and excludes GST/statutory taxes, refundable security deposits, refunds, chargebacks, discounts, payment-gateway charges and other legally required deductions.
+
+Run `supabase/RUN_ONLY_PARTNER_PROGRAM_EXPANSION_2026_08_10.sql` to enable Partner ID/referral code/link generation, partner attribution and management metrics.

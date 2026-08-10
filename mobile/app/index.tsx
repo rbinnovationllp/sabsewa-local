@@ -114,7 +114,7 @@ export default function HomeScreen() {
             style={styles.partnerNavButton}
             onPress={() => router.push("/partner" as any)}
           >
-            <Text style={styles.partnerNavText}>Partner With Us</Text>
+            <Text style={styles.partnerNavText}>ðŸ¤ Partner With Us</Text>
           </TouchableOpacity>
         </View>
         <Text style={styles.brandTitle}>{t("home.title")}</Text>
@@ -132,6 +132,18 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
       ) : null}
+      <TouchableOpacity
+        accessibilityRole="button"
+        accessibilityLabel="Partner With Us - Help SabSewa Local Grow Across India and Earn Benefits"
+        style={styles.partnerHomeBanner}
+        onPress={() => router.push("/partner" as any)}
+      >
+        <Text style={styles.partnerHomeTitle}>ðŸ¤ Partner With Us â€” Help SabSewa Local Grow Across India & Earn Benefits</Text>
+        <Text style={styles.partnerHomeText}>
+          Open to eligible customers, vendors, independent individuals and local promoters who can help onboard vendors and create customer awareness in their locality.
+        </Text>
+      </TouchableOpacity>
+
 
       <View style={styles.categoryRow}>
         {categoryKeys.map((key) => (

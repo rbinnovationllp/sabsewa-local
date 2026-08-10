@@ -1116,3 +1116,16 @@ Gemini XPRIZE Alignment: Outlines compliance status across AI backend logging (g
 - Added service-worker notification click navigation so tapping a push opens the vendor order URL.
 - Manual Supabase SQL required: supabase/RUN_ONLY_ADMIN_KYC_MONITORING_AND_VENDOR_ORDER_NOTIFICATIONS_2026_08_10.sql.
 - Manual backend notification configuration required for push: WEB_PUSH_VAPID_PUBLIC_KEY, WEB_PUSH_VAPID_PRIVATE_KEY, WEB_PUSH_VAPID_SUBJECT and matching frontend EXPO_PUBLIC_WEB_PUSH_VAPID_PUBLIC_KEY.
+
+## 2026-08-10 - Partner Program Expansion
+
+- Confirmed the Partner Program was already partially implemented through `mobile/app/partner.tsx`, `mobile/app/company/PartnerApplications.tsx` and `supabase/RUN_ONLY_PARTNER_PROGRAM_APPLICATIONS.sql`; no duplicate module was created.
+- Expanded the public Partner With Us page for an open-to-everyone program covering existing customers, non-customers, vendors, non-vendors, individuals, local promoters and business-development professionals.
+- Added Partner responsibilities for both vendor onboarding and local customer awareness/usage, including hyperlocal promotion around onboarded vendors.
+- Added Partner benefit wording: initial 10% configurable benefit on eligible company revenue, with taxes, refundable deposits, refunds, gateway charges and similar deductions excluded; it is not company equity.
+- Added safe SQL runner `supabase/RUN_ONLY_PARTNER_PROGRAM_EXPANSION_2026_08_10.sql` for Partner ID/referral code/link generation, configurable benefit settings, expanded applicant/status values, partner attribution and benefit ledger fields.
+- Expanded Company CRM Partner Management to show Partner ID, referral code/link, status counters, referred vendors, activated vendors, eligible revenue, benefit earned, paid and pending benefit amounts.
+- Made the Home Page Partner With Us CTA more prominent for mobile and web.
+
+Manual Supabase action required:
+- Run `supabase/RUN_ONLY_PARTNER_PROGRAM_EXPANSION_2026_08_10.sql` after the original partner-program SQL if it has not already been applied.

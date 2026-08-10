@@ -3,10 +3,17 @@ import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View 
 import BrandHeader from "@/components/BrandHeader";
 import { supabase } from "@/lib/supabase";
 
-const PARTNER_TERMS_VERSION = "2026-08-05";
+const PARTNER_TERMS_VERSION = "partner-program-local-2026-08-10";
+const DEFAULT_BENEFIT_PERCENT = 10;
 
 const partnerTypes = [
+  "Existing Customer",
+  "Non-Customer",
+  "Existing Vendor",
+  "Non-Vendor",
   "Individual",
+  "Local Business Promoter",
+  "Marketing or Business Development Professional",
   "Consultant",
   "Organization",
   "NGO",
@@ -14,27 +21,23 @@ const partnerTypes = [
   "Other Stakeholder",
 ];
 
-const benefits = [
-  "Earn 10% of net revenue from vendors onboarded through verified partner efforts.",
-  "Help local vendors digitize storefronts, credit records, delivery policies and payment workflows.",
-  "Support expansion across cities, districts, campuses, markets and community networks in India.",
-  "Work independently with a transparent application, review and approval process.",
+const vendorExamples = [
+  "Vegetable shops",
+  "Fruit vendors",
+  "Kirana/general stores",
+  "Restaurants",
+  "Pharmacies",
+  "Dairy shops",
+  "Bakeries",
+  "Tiffin providers",
+  "Other supported local businesses",
 ];
 
-const responsibilities = [
-  "Promote SabSewa Local ethically and lawfully.",
-  "Share accurate information with vendors and avoid false commitments.",
-  "Do not collect payments or make binding promises unless the company authorizes it in writing.",
-  "Protect vendor, customer, pricing, business and technical information.",
-];
-
-const legalPoints = [
-  "The partner is an independent business associate, not an employee, agent, franchisee or legal partner of the company.",
-  "There is no salary, fixed remuneration, PF, ESI, gratuity, bonus, leave benefit, medical insurance or other employment benefit.",
-  "Commission is payable only for eligible vendors approved by the company and linked to verified partner efforts.",
-  "Net revenue means revenue after GST, statutory taxes, payment gateway charges, refunds, chargebacks, discounts and legally applicable deductions.",
-  "The partner is responsible for their own taxes, statutory registrations, insurance and legal compliance.",
-  "Disputes are subject to the exclusive jurisdiction of competent courts at Gurugram, Haryana, India.",
+const benefitRules = [
+  "Initial partner benefit is 10% of eligible SabSewa Local company revenue attributable to vendors successfully onboarded through the partner.",
+  "The percentage is configurable by Master Admin and remains subject to final Partner Program Terms.",
+  "GST, statutory taxes, refundable security deposits, refunds, chargebacks, discounts, payment-gateway charges and legally required deductions are excluded.",
+  "This is a referral/revenue benefit only. It is not 10% equity, ownership, shareholding, partnership in law, employment, franchise rights or guaranteed income.",
 ];
 
 export default function PartnerWithUsScreen() {
@@ -49,10 +52,13 @@ export default function PartnerWithUsScreen() {
     phone: "",
     email: "",
     city: "",
+    district: "",
     state: "",
-    coverage_area: "",
+    proposed_area_of_operation: "",
     expected_vendor_reach: "",
     experience_summary: "",
+    vendor_onboarding_plan: "",
+    customer_awareness_plan: "",
     referral_source: "",
   });
 
@@ -65,45 +71,57 @@ export default function PartnerWithUsScreen() {
       form.applicant_name,
       form.partner_type,
       form.phone,
-      form.email,
       form.city,
+      form.district,
       form.state,
-      form.coverage_area,
+      form.proposed_area_of_operation,
       form.experience_summary,
+      form.vendor_onboarding_plan,
+      form.customer_awareness_plan,
     ];
     if (required.some((value) => !String(value || "").trim())) {
-      Alert.alert("Partner application", "Please fill all required fields before submitting.");
+      Alert.alert("Partner application", "Please fill all mandatory fields before submitting.");
       return;
     }
     if (!accepted) {
-      Alert.alert("Terms acceptance required", "Please accept the Partner Program Terms & Conditions before registration.");
+      Alert.alert("Terms acceptance required", "Please accept the Partner Program Terms before submitting.");
       return;
     }
 
     setSubmitting(true);
     try {
+      const acceptanceSummary =
+        "Applicant accepted open-to-everyone Partner Program terms, vendor onboarding and local customer awareness responsibilities, independent associate status, no employment/equity rights, configurable benefit initially 10%, eligible-revenue exclusions and company review rights.";
+
       const { error } = await supabase.from("partner_applications").insert({
         applicant_name: form.applicant_name.trim(),
         partner_type: form.partner_type,
+        applicant_category: form.partner_type,
         organization_name: form.organization_name.trim() || null,
         phone: form.phone.trim(),
-        email: form.email.trim().toLowerCase(),
+        email: form.email.trim() ? form.email.trim().toLowerCase() : null,
         city: form.city.trim(),
+        district: form.district.trim(),
         state: form.state.trim(),
-        coverage_area: form.coverage_area.trim(),
+        coverage_area: form.proposed_area_of_operation.trim(),
+        proposed_area_of_operation: form.proposed_area_of_operation.trim(),
+        hyperlocal_promotion_area: "Normally 500 metres to 1 kilometre around onboarded vendors, subject to final SabSewa Local distance rules.",
         expected_vendor_reach: Number(form.expected_vendor_reach || 0) || null,
         experience_summary: form.experience_summary.trim(),
+        vendor_onboarding_plan: form.vendor_onboarding_plan.trim(),
+        customer_awareness_plan: form.customer_awareness_plan.trim(),
         referral_source: form.referral_source.trim() || null,
-        revenue_share_percent: 10,
+        revenue_share_percent: DEFAULT_BENEFIT_PERCENT,
+        net_revenue_definition:
+          "Eligible company revenue excludes GST/statutory taxes, refundable security deposits, refunds, chargebacks, discounts, payment-gateway charges and legally required deductions. This is not equity or company ownership.",
         terms_version: PARTNER_TERMS_VERSION,
         terms_accepted: true,
         terms_accepted_at: new Date().toISOString(),
-        acceptance_summary:
-          "Applicant accepted independent associate status, no employment benefits, commission-only earnings, 10% net revenue share, compliance responsibilities and Gurugram jurisdiction.",
+        acceptance_summary: acceptanceSummary,
       });
 
       if (error) throw error;
-      Alert.alert("Application submitted", "Thank you. Our team will review your partner application and contact you after verification.");
+      Alert.alert("Application submitted", "Thank you. SabSewa Local will review your partner application in the Company CRM.");
       setForm({
         applicant_name: "",
         partner_type: "Individual",
@@ -111,10 +129,13 @@ export default function PartnerWithUsScreen() {
         phone: "",
         email: "",
         city: "",
+        district: "",
         state: "",
-        coverage_area: "",
+        proposed_area_of_operation: "",
         expected_vendor_reach: "",
         experience_summary: "",
+        vendor_onboarding_plan: "",
+        customer_awareness_plan: "",
         referral_source: "",
       });
       setAccepted(false);
@@ -131,42 +152,64 @@ export default function PartnerWithUsScreen() {
 
       <View style={styles.hero}>
         <Text style={styles.kicker}>Partner With Us</Text>
-        <Text style={styles.title}>Grow SabSewa Local across India</Text>
+        <Text style={styles.title}>Help SabSewa Local Grow Across India & Earn Benefits</Text>
         <Text style={styles.lead}>
-          Individuals, organizations, consultants, NGOs, educational institutions and local ecosystem builders can apply to help onboard trusted vendors and expand digital neighborhood commerce.
+          The Partner Program is open to eligible customers, vendors, independent individuals, local promoters, business-development professionals and organizations who can help create active local SabSewa marketplaces.
         </Text>
         <TouchableOpacity style={styles.heroButton} onPress={() => scrollRef.current?.scrollTo({ y: formOffsetY, animated: true })}>
-          <Text style={styles.heroButtonText}>Apply for Partnership</Text>
+          <Text style={styles.heroButtonText}>Apply to Become a Partner</Text>
         </TouchableOpacity>
       </View>
 
-      <View style={styles.band}>
-        <Text style={styles.sectionTitle}>Revenue Sharing</Text>
-        <Text style={styles.largeMetric}>10%</Text>
-        <Text style={styles.bodyText}>
-          Partners receive 10% of net revenue generated from vendors they successfully onboard, subject to company verification, approval, audit rights and the official Partner Program Terms & Conditions.
+      <View style={styles.principleBox}>
+        <Text style={styles.principleText}>
+          A successful SabSewa Partner does not simply add shops to the platform - the Partner helps create an active SabSewa marketplace in the locality by bringing local vendors and making local customers aware that they can order from those nearby shops through SabSewa Local.
         </Text>
       </View>
 
       <View style={styles.grid}>
-        <InfoPanel title="Benefits" items={benefits} />
-        <InfoPanel title="Responsibilities" items={responsibilities} />
+        <InfoPanel
+          title="1. Build the Local Vendor Network"
+          items={[
+            "Identify, approach, explain and help suitable local vendors join SabSewa Local.",
+            `Supported businesses include ${vendorExamples.join(", ")}.`,
+            "Use the assigned Partner ID, referral code or referral link so vendor attribution is permanently recorded.",
+          ]}
+        />
+        <InfoPanel
+          title="2. Build Customer Awareness"
+          items={[
+            "Tell people in the same locality that nearby shops are available on SabSewa Local.",
+            "Promote mobile-browser/app usage around onboarded vendors, normally within 500 metres to 1 kilometre, subject to final distance rules.",
+            "Customers remain free to buy from any available SabSewa Local vendor in their nearby area, regardless of which Partner onboarded the vendor.",
+          ]}
+        />
+      </View>
+
+      <View style={styles.band}>
+        <Text style={styles.sectionTitle}>Partner Benefit</Text>
+        <Text style={styles.largeMetric}>10%</Text>
+        <Text style={styles.bodyText}>
+          Initial configurable partner benefit on eligible SabSewa Local company revenue attributable to successfully onboarded vendors.
+        </Text>
+        {benefitRules.map((point) => (
+          <Text key={point} style={styles.bullet}>- {point}</Text>
+        ))}
       </View>
 
       <View style={styles.termsBox}>
-        <Text style={styles.sectionTitle}>Partner Program Terms Summary</Text>
-        {legalPoints.map((point) => (
-          <Text key={point} style={styles.bullet}>- {point}</Text>
-        ))}
-        <Text style={styles.termsNote}>
-          By submitting this application, you confirm that you have read and agree to the Partner Program Terms & Conditions, including independent associate status, commission-only compensation and exclusive Gurugram, Haryana jurisdiction.
-        </Text>
+        <Text style={styles.sectionTitle}>Partner Terms Summary</Text>
+        <Text style={styles.bullet}>- Partner is an independent business associate, not an employee, agent, franchisee, legal partner or shareholder.</Text>
+        <Text style={styles.bullet}>- Partner must not collect money, promise approval, promise income, or misrepresent SabSewa Local terms.</Text>
+        <Text style={styles.bullet}>- Partner must help both sides of the local ecosystem: vendor onboarding and customer awareness/usage.</Text>
+        <Text style={styles.bullet}>- Partner benefits are payable only for eligible verified revenue after company review and audit.</Text>
+        <Text style={styles.bullet}>- Master Admin may configure percentage, eligibility, geography, status and payment handling according to final Partner Program Terms.</Text>
       </View>
 
       <View nativeID="application" style={styles.formCard} onLayout={(event) => setFormOffsetY(event.nativeEvent.layout.y)}>
-        <Text style={styles.sectionTitle}>Partner Application</Text>
+        <Text style={styles.sectionTitle}>Apply to Become a Partner</Text>
         <Field label="Full Name *" value={form.applicant_name} onChangeText={(v) => setValue("applicant_name", v)} />
-        <Text style={styles.label}>Partner Type *</Text>
+        <Text style={styles.label}>Applicant Type *</Text>
         <View style={styles.chips}>
           {partnerTypes.map((type) => (
             <TouchableOpacity
@@ -178,22 +221,25 @@ export default function PartnerWithUsScreen() {
             </TouchableOpacity>
           ))}
         </View>
-        <Field label="Organization / Institution Name" value={form.organization_name} onChangeText={(v) => setValue("organization_name", v)} />
+        <Field label="Organization / Business Name" value={form.organization_name} onChangeText={(v) => setValue("organization_name", v)} />
         <Field label="Mobile Number *" value={form.phone} onChangeText={(v) => setValue("phone", v)} keyboardType="phone-pad" />
-        <Field label="Email Address *" value={form.email} onChangeText={(v) => setValue("email", v)} keyboardType="email-address" />
+        <Field label="Email Address (optional)" value={form.email} onChangeText={(v) => setValue("email", v)} keyboardType="email-address" />
         <View style={styles.twoCol}>
           <Field label="City *" value={form.city} onChangeText={(v) => setValue("city", v)} containerStyle={styles.flexField} />
-          <Field label="State *" value={form.state} onChangeText={(v) => setValue("state", v)} containerStyle={styles.flexField} />
+          <Field label="District *" value={form.district} onChangeText={(v) => setValue("district", v)} containerStyle={styles.flexField} />
         </View>
-        <Field label="Coverage Area *" value={form.coverage_area} onChangeText={(v) => setValue("coverage_area", v)} placeholder="Markets, districts, campuses or communities" />
+        <Field label="State *" value={form.state} onChangeText={(v) => setValue("state", v)} />
+        <Field label="Proposed Area of Operation *" value={form.proposed_area_of_operation} onChangeText={(v) => setValue("proposed_area_of_operation", v)} placeholder="Local markets, wards, sectors, towns or districts" />
         <Field label="Expected Vendor Reach" value={form.expected_vendor_reach} onChangeText={(v) => setValue("expected_vendor_reach", v)} keyboardType="numeric" />
-        <Field label="Relevant Experience / Network *" value={form.experience_summary} onChangeText={(v) => setValue("experience_summary", v)} multiline />
+        <Field label="Experience / Background *" value={form.experience_summary} onChangeText={(v) => setValue("experience_summary", v)} multiline />
+        <Field label="How will you onboard local vendors? *" value={form.vendor_onboarding_plan} onChangeText={(v) => setValue("vendor_onboarding_plan", v)} multiline />
+        <Field label="How will you create local customer awareness? *" value={form.customer_awareness_plan} onChangeText={(v) => setValue("customer_awareness_plan", v)} multiline />
         <Field label="Referral Source" value={form.referral_source} onChangeText={(v) => setValue("referral_source", v)} />
 
         <TouchableOpacity style={styles.acceptRow} onPress={() => setAccepted((value) => !value)}>
-          <View style={[styles.checkbox, accepted && styles.checked]}>{accepted ? <Text style={styles.checkText}>✓</Text> : null}</View>
+          <View style={[styles.checkbox, accepted && styles.checked]}>{accepted ? <Text style={styles.checkText}>âœ“</Text> : null}</View>
           <Text style={styles.acceptText}>
-            I have read and agree to the Partner Program Terms & Conditions. I understand this is not employment, there is no guaranteed income, and commission is 10% of eligible net revenue only.
+            I accept that the Partner Program is for vendor onboarding and customer awareness. I understand the initial 10% benefit applies only to eligible company revenue, is configurable by SabSewa Local, and does not mean equity or ownership.
           </Text>
         </TouchableOpacity>
 
@@ -257,16 +303,17 @@ const styles = StyleSheet.create({
   lead: { color: "#334155", lineHeight: 21, marginTop: 10, marginBottom: 16 },
   heroButton: { backgroundColor: "#1166ff", borderRadius: 8, padding: 14, alignItems: "center" },
   heroButtonText: { color: "#fff", fontWeight: "900" },
+  principleBox: { borderWidth: 1, borderColor: "#bbf7d0", backgroundColor: "#f0fdf4", borderRadius: 8, padding: 14, marginBottom: 14 },
+  principleText: { color: "#14532d", fontWeight: "800", lineHeight: 22 },
   band: { borderWidth: 1, borderColor: "#fed7aa", backgroundColor: "#fff7ed", borderRadius: 8, padding: 16, marginBottom: 14 },
   sectionTitle: { color: "#111827", fontSize: 20, fontWeight: "900", marginBottom: 10 },
   largeMetric: { color: "#f97316", fontSize: 46, fontWeight: "900" },
-  bodyText: { color: "#374151", lineHeight: 21 },
+  bodyText: { color: "#374151", lineHeight: 21, marginBottom: 8 },
   grid: { gap: 12, marginBottom: 14 },
   infoPanel: { borderWidth: 1, borderColor: "#e5e7eb", borderRadius: 8, padding: 14, backgroundColor: "#fff" },
   infoTitle: { color: "#0f766e", fontSize: 18, fontWeight: "900", marginBottom: 8 },
   bullet: { color: "#374151", lineHeight: 21, marginBottom: 5 },
   termsBox: { borderWidth: 1, borderColor: "#cbd5e1", backgroundColor: "#f8fafc", borderRadius: 8, padding: 14, marginBottom: 14 },
-  termsNote: { color: "#7c2d12", backgroundColor: "#fff7ed", borderRadius: 8, padding: 10, lineHeight: 19, marginTop: 8 },
   formCard: { borderWidth: 1, borderColor: "#dbeafe", backgroundColor: "#f8fbff", borderRadius: 8, padding: 16 },
   field: { marginBottom: 12 },
   label: { color: "#334155", fontWeight: "800", marginBottom: 6 },

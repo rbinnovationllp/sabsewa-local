@@ -171,6 +171,8 @@ export default function PartnerApplicationsScreen() {
         const earned = referrals.reduce((sum: number, item: any) => sum + Number(item.benefit_earned_amount || 0), 0)
           + commissions.reduce((sum: number, item: any) => sum + Number(item.commission_amount || 0), 0);
         const paid = commissions.filter((item: any) => item.status === "paid").reduce((sum: number, item: any) => sum + Number(item.commission_amount || 0), 0);
+        const identityDoc = latestKycDoc(application, "identity_proof");
+        const photoDoc = latestKycDoc(application, "partner_photo");
 
         return (
           <View key={application.id} style={styles.card}>

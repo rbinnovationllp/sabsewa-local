@@ -146,3 +146,6 @@ Vendors can keep adding products individually, or use `Vendor > Bulk Upload Prod
 ### Scan / Upload Existing Product List
 
 Vendors now have three catalogue creation choices: add products manually, bulk upload a structured Excel/CSV file, or scan/upload an existing printed, handwritten, photographed, scanned or PDF product/price list. The scan flow uses backend AI extraction to identify visible product names and optional brand/category/pack/MRP/price/availability fields, marks uncertain rows for vendor review, supports multiple pages, and imports only after review/confirmation. The uploaded list is not treated as an individual product photograph; product images remain optional.
+### Partner Application confirmation
+
+Partner applications are submitted through the backend at `POST /api/partner/applications` so the applicant only sees success after the database record is saved. The confirmation screen shows the generated Partner Application ID, applicant name, mobile number, proposed area and current status. Duplicate mobile-number submissions return the existing Application ID/status instead of creating another application. Run `supabase/RUN_ONLY_PARTNER_APPLICATION_CONFIRMATION_WORKFLOW_2026_08_10.sql` to enable `SSL-P-000123` style application tracking IDs.

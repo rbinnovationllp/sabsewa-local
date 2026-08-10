@@ -90,6 +90,7 @@ export default function PartnerApplicationsScreen() {
     <ScrollView contentContainerStyle={styles.container}>
       <BrandHeader compact subtitle="Partner Management" />
       <Text style={styles.heading}>Partner Management</Text>
+      <Text style={styles.alertTitle}>Pending Partner Applications: {counts.pending || 0}</Text>
       <Text style={styles.subheading}>
         Review partner applications, activate approved partners, track referral codes, referred vendors, eligible revenue, payable benefits and partner status.
       </Text>
@@ -137,6 +138,7 @@ export default function PartnerApplicationsScreen() {
             </View>
 
             <View style={styles.identityBox}>
+              <Text style={styles.identityText}>Application ID: {application.application_id || application.partner_id || "Generated after SQL update"}</Text>
               <Text style={styles.identityText}>Partner ID: {application.partner_id || "Generated after SQL update"}</Text>
               <Text style={styles.identityText}>Referral Code: {application.referral_code || "Generated after SQL update"}</Text>
               <Text style={styles.identityText}>Referral Link: {application.referral_link || "Generated after SQL update"}</Text>
@@ -185,6 +187,7 @@ const styles = StyleSheet.create({
   container: { paddingTop: 70, paddingBottom: 50, paddingHorizontal: 20, backgroundColor: "#fff", minHeight: "100%" },
   heading: { fontSize: 26, fontWeight: "900", color: "#111827", marginBottom: 8 },
   subheading: { color: "#475569", lineHeight: 20, marginBottom: 14 },
+  alertTitle: { color: "#9a3412", backgroundColor: "#fff7ed", borderWidth: 1, borderColor: "#fdba74", borderRadius: 8, padding: 10, fontWeight: "900", marginBottom: 12 },
   counterGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 12 },
   counterCard: { minWidth: 120, flexGrow: 1, borderWidth: 1, borderColor: "#dbeafe", borderRadius: 8, padding: 10, backgroundColor: "#f8fbff" },
   counterValue: { color: "#1166ff", fontSize: 22, fontWeight: "900" },

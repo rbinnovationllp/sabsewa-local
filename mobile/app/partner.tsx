@@ -1,7 +1,7 @@
 import React, { useRef, useState } from "react";
 import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import BrandHeader from "@/components/BrandHeader";
-import { supabase } from "@/lib/supabase";
+import { apiUrl } from "@/lib/backend";
 
 const PARTNER_TERMS_VERSION = "partner-program-local-2026-08-10";
 const DEFAULT_BENEFIT_PERCENT = 10;
@@ -40,27 +40,41 @@ const benefitRules = [
   "This is a referral/revenue benefit only. It is not 10% equity, ownership, shareholding, partnership in law, employment, franchise rights or guaranteed income.",
 ];
 
+const emptyForm = {
+  applicant_name: "",
+  partner_type: "Individual",
+  organization_name: "",
+  phone: "",
+  email: "",
+  city: "",
+  district: "",
+  state: "",
+  proposed_area_of_operation: "",
+  expected_vendor_reach: "",
+  experience_summary: "",
+  vendor_onboarding_plan: "",
+  customer_awareness_plan: "",
+  referral_source: "",
+};
+
+function labelStatus(status: string) {
+  const normalized = String(status || "pending").replace(/_/g, " ");
+  if (status === "active") return "Approved - Active Marketing Partner";
+  if (status === "approved") return "Approved - Activation Pending";
+  if (status === "under_review") return "Under Review";
+  if (status === "rejected") return "Rejected";
+  if (status === "suspended") return "Suspended";
+  if (status === "revoked") return "Revoked";
+  return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+}
+
 export default function PartnerWithUsScreen() {
   const scrollRef = useRef<ScrollView>(null);
   const [formOffsetY, setFormOffsetY] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [accepted, setAccepted] = useState(false);
-  const [form, setForm] = useState({
-    applicant_name: "",
-    partner_type: "Individual",
-    organization_name: "",
-    phone: "",
-    email: "",
-    city: "",
-    district: "",
-    state: "",
-    proposed_area_of_operation: "",
-    expected_vendor_reach: "",
-    experience_summary: "",
-    vendor_onboarding_plan: "",
-    customer_awareness_plan: "",
-    referral_source: "",
-  });
+  const [form, setForm] = useState({ ...emptyForm });
+  const [confirmation, setConfirmation] = useState<any>(null);
 
   function setValue(key: keyof typeof form, value: string) {
     setForm((current) => ({ ...current, [key]: value }));
@@ -90,57 +104,30 @@ export default function PartnerWithUsScreen() {
 
     setSubmitting(true);
     try {
-      const acceptanceSummary =
-        "Applicant accepted open-to-everyone Partner Program terms, vendor onboarding and local customer awareness responsibilities, independent associate status, no employment/equity rights, configurable benefit initially 10%, eligible-revenue exclusions and company review rights.";
-
-      const { error } = await supabase.from("partner_applications").insert({
-        applicant_name: form.applicant_name.trim(),
-        partner_type: form.partner_type,
-        applicant_category: form.partner_type,
-        organization_name: form.organization_name.trim() || null,
-        phone: form.phone.trim(),
-        email: form.email.trim() ? form.email.trim().toLowerCase() : null,
-        city: form.city.trim(),
-        district: form.district.trim(),
-        state: form.state.trim(),
-        coverage_area: form.proposed_area_of_operation.trim(),
-        proposed_area_of_operation: form.proposed_area_of_operation.trim(),
-        hyperlocal_promotion_area: "Normally 500 metres to 1 kilometre around onboarded vendors, subject to final SabSewa Local distance rules.",
-        expected_vendor_reach: Number(form.expected_vendor_reach || 0) || null,
-        experience_summary: form.experience_summary.trim(),
-        vendor_onboarding_plan: form.vendor_onboarding_plan.trim(),
-        customer_awareness_plan: form.customer_awareness_plan.trim(),
-        referral_source: form.referral_source.trim() || null,
-        revenue_share_percent: DEFAULT_BENEFIT_PERCENT,
-        net_revenue_definition:
-          "Eligible company revenue excludes GST/statutory taxes, refundable security deposits, refunds, chargebacks, discounts, payment-gateway charges and legally required deductions. This is not equity or company ownership.",
-        terms_version: PARTNER_TERMS_VERSION,
-        terms_accepted: true,
-        terms_accepted_at: new Date().toISOString(),
-        acceptance_summary: acceptanceSummary,
+      const response = await fetch(apiUrl("/api/partner/applications"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...form,
+          revenue_share_percent: DEFAULT_BENEFIT_PERCENT,
+          terms_version: PARTNER_TERMS_VERSION,
+          terms_accepted: true,
+        }),
       });
+      const json = await response.json();
+      if (!response.ok || !json.success) throw new Error(json.error || "Unable to submit partner application right now.");
 
-      if (error) throw error;
-      Alert.alert("Application submitted", "Thank you. SabSewa Local will review your partner application in the Company CRM.");
-      setForm({
-        applicant_name: "",
-        partner_type: "Individual",
-        organization_name: "",
-        phone: "",
-        email: "",
-        city: "",
-        district: "",
-        state: "",
-        proposed_area_of_operation: "",
-        expected_vendor_reach: "",
-        experience_summary: "",
-        vendor_onboarding_plan: "",
-        customer_awareness_plan: "",
-        referral_source: "",
+      setConfirmation({
+        duplicate: Boolean(json.duplicate),
+        ...(json.application || {}),
       });
-      setAccepted(false);
+      if (!json.duplicate) {
+        setForm({ ...emptyForm });
+        setAccepted(false);
+      }
+      setTimeout(() => scrollRef.current?.scrollTo({ y: formOffsetY, animated: true }), 50);
     } catch (error: any) {
-      Alert.alert("Submission failed", error?.message || "Unable to submit partner application right now.");
+      Alert.alert("Submission failed", error?.message || "Unable to submit partner application right now. Please try again.");
     } finally {
       setSubmitting(false);
     }
@@ -173,7 +160,7 @@ export default function PartnerWithUsScreen() {
           items={[
             "Identify, approach, explain and help suitable local vendors join SabSewa Local.",
             `Supported businesses include ${vendorExamples.join(", ")}.`,
-            "Use the assigned Partner ID, referral code or referral link so vendor attribution is permanently recorded.",
+            "Use the assigned Partner ID, referral code or referral link so vendor attribution is permanently recorded after approval.",
           ]}
         />
         <InfoPanel
@@ -207,6 +194,34 @@ export default function PartnerWithUsScreen() {
       </View>
 
       <View nativeID="application" style={styles.formCard} onLayout={(event) => setFormOffsetY(event.nativeEvent.layout.y)}>
+        {confirmation ? (
+          <View style={styles.successCard}>
+            <Text style={styles.successTitle}>
+              {confirmation.duplicate
+                ? "Partner Application Already Exists"
+                : "Congratulations! Your Partner Application Has Been Successfully Submitted."}
+            </Text>
+            <Text style={styles.successBody}>
+              {confirmation.duplicate
+                ? "An application is already registered with this mobile number. Please note the Application ID and current status below."
+                : "Thank you for joining the SabSewa Local Partner Program. Your registration has been received successfully. Your application will now be reviewed by SabSewa Local. Once approved, you will be activated as a SabSewa Local Marketing Partner and will be able to start onboarding vendors and promoting SabSewa Local among customers in your approved area."}
+            </Text>
+            {confirmation.status === "active" ? (
+              <Text style={styles.activeMessage}>Congratulations! You are now an approved SabSewa Local Marketing Partner.</Text>
+            ) : null}
+            <View style={styles.confirmGrid}>
+              <ConfirmLine label="Partner Application ID" value={confirmation.application_id} />
+              <ConfirmLine label="Name" value={confirmation.applicant_name} />
+              <ConfirmLine label="Mobile Number" value={confirmation.phone} />
+              <ConfirmLine label="Proposed Area" value={confirmation.proposed_area_of_operation} />
+              <ConfirmLine label="Current Status" value={labelStatus(confirmation.status)} />
+            </View>
+            <TouchableOpacity style={styles.secondaryButton} onPress={() => setConfirmation(null)}>
+              <Text style={styles.secondaryText}>Submit another application</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+
         <Text style={styles.sectionTitle}>Apply to Become a Partner</Text>
         <Field label="Full Name *" value={form.applicant_name} onChangeText={(v) => setValue("applicant_name", v)} />
         <Text style={styles.label}>Applicant Type *</Text>
@@ -258,6 +273,15 @@ function InfoPanel({ title, items }: { title: string; items: string[] }) {
       {items.map((item) => (
         <Text key={item} style={styles.bullet}>- {item}</Text>
       ))}
+    </View>
+  );
+}
+
+function ConfirmLine({ label, value }: { label: string; value?: string | null }) {
+  return (
+    <View style={styles.confirmLine}>
+      <Text style={styles.confirmLabel}>{label}</Text>
+      <Text style={styles.confirmValue}>{value || "-"}</Text>
     </View>
   );
 }
@@ -315,6 +339,16 @@ const styles = StyleSheet.create({
   bullet: { color: "#374151", lineHeight: 21, marginBottom: 5 },
   termsBox: { borderWidth: 1, borderColor: "#cbd5e1", backgroundColor: "#f8fafc", borderRadius: 8, padding: 14, marginBottom: 14 },
   formCard: { borderWidth: 1, borderColor: "#dbeafe", backgroundColor: "#f8fbff", borderRadius: 8, padding: 16 },
+  successCard: { borderWidth: 1, borderColor: "#86efac", backgroundColor: "#f0fdf4", borderRadius: 8, padding: 14, marginBottom: 16 },
+  successTitle: { color: "#14532d", fontSize: 22, fontWeight: "900", marginBottom: 8 },
+  successBody: { color: "#166534", lineHeight: 21, marginBottom: 10 },
+  activeMessage: { color: "#1166ff", fontWeight: "900", marginBottom: 10 },
+  confirmGrid: { borderWidth: 1, borderColor: "#bbf7d0", borderRadius: 8, overflow: "hidden", marginBottom: 10 },
+  confirmLine: { padding: 10, borderBottomWidth: 1, borderBottomColor: "#dcfce7", backgroundColor: "#ffffff" },
+  confirmLabel: { color: "#64748b", fontWeight: "800", marginBottom: 3 },
+  confirmValue: { color: "#111827", fontWeight: "900" },
+  secondaryButton: { borderWidth: 1, borderColor: "#16a34a", borderRadius: 8, padding: 12, alignItems: "center" },
+  secondaryText: { color: "#15803d", fontWeight: "900" },
   field: { marginBottom: 12 },
   label: { color: "#334155", fontWeight: "800", marginBottom: 6 },
   input: { borderWidth: 1, borderColor: "#cbd5e1", backgroundColor: "#fff", borderRadius: 8, padding: 12 },

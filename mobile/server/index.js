@@ -36,6 +36,7 @@ import { getPaymentReadiness } from "./payments/paymentEnvironment.js";
 import razorpayWebhookRouter from "./payments/razorpayWebhookRoutes.js";
 import supabaseWebhookRouter from "./webhooks/supabaseWebhookRoutes.js";
 import webPushRouter from "./notifications/webPushRoutes.js";
+import partnerRouter from "./partner/partnerRoutes.js";
 import settlementRouter from "./settlement/settlementRoutes.js";
 import { createRateLimiter, securityHeaders } from "./security/apiSecurity.js";
 // Database connection
@@ -83,6 +84,7 @@ app.use("/api/auth", deviceAuthRouter);
 app.use("/api/admin/master", masterAdminRouter);
 app.use("/api/company", vendorDirectoryRouter);
 app.use("/api/notifications", webPushRouter);
+app.use("/api/partner", partnerRouter);
 app.use("/api/settlement", settlementRouter);
 // Health Check
 app.get("/", (req, res) => {

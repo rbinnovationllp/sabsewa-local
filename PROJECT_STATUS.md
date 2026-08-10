@@ -1152,3 +1152,11 @@ Manual Supabase action required:
 - Backend extracts visible catalogue rows using Gemini, never treats missing fields as known values, and marks unclear rows for review.
 - Review screen supports edit, delete and add-missing-item before final import.
 - Existing individual product upload and Excel/CSV bulk upload remain available.
+## 2026-08-10 - Partner Application Confirmation Workflow
+
+- Fixed Partner With Us submission so success is shown only after the backend confirms the database record was created or an existing same-mobile application was found.
+- Added public Partner Application ID support through `supabase/RUN_ONLY_PARTNER_APPLICATION_CONFIRMATION_WORKFLOW_2026_08_10.sql`, using `SSL-P-000123` style tracking IDs.
+- Added backend route `POST /api/partner/applications` to validate applications, prevent duplicate same-mobile submissions, return the real Application ID/status and preserve form data on failure.
+- Updated applicant confirmation screen to show Name, Mobile Number, Proposed Area, Application ID and Current Status.
+- Updated Company CRM Partner Management to make pending Partner Applications visible for Master Admin review.
+- Manual action: run `supabase/RUN_ONLY_PARTNER_APPLICATION_CONFIRMATION_WORKFLOW_2026_08_10.sql`, deploy backend, rebuild `mobile/dist`.

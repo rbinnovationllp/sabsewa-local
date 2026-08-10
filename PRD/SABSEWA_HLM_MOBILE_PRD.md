@@ -347,3 +347,12 @@ The HLM MVP is acceptable for hackathon demo when:
 - Nationwide rollout.
 - Complex loyalty/cashback.
 - Fully automated vendor approval without human review.
+
+## Partner Application Workflow
+
+- Partner With Us submissions must show confirmation only after the partner application record is saved in the database.
+- Every submitted application must have a public Partner Application ID such as `SSL-P-000123`.
+- Applicant confirmation must show applicant name, mobile number, proposed area of operation, Application ID and current status.
+- A submitted application is `pending` until Master Admin/Admin review; the applicant must not be told they are an active Marketing Partner until status becomes `active`.
+- Duplicate applications using the same mobile number should show the existing Application ID/status instead of creating another record.
+- Master Admin CRM must show pending Partner Applications for review and update status to approved, rejected, active, suspended or revoked as applicable.

@@ -56,6 +56,6 @@ const onboardingRoutes = read("vendor/onboardingRoutes.js");
 assert.match(onboardingRoutes, /verifyRazorpaySignature/, "onboarding payments verify Razorpay signatures");
 assert.match(onboardingRoutes, /kyc_status !== "kyc_verified"/, "legacy onboarding payment routes block payment before KYC approval");
 assert.match(onboardingRoutes, /getRazorpayMode\(\) === "live"/, "live onboarding payments require gateway signature");
-assert.match(onboardingRoutes, /requireRole\(\["admin", "company_admin", "super_admin"\]\)/, "onboarding admin operations require admin role");
+assert.match(onboardingRoutes, /requireRole\(\[[^\]]*"admin"[^\]]*"company_admin"[^\]]*"super_admin"[^\]]*"master_admin"[^\]]*"kyc_reviewer"[^\]]*\]\)/, "onboarding admin operations require expanded company admin roles");
 
 console.log("Onboarding production validation passed.");

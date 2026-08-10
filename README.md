@@ -175,3 +175,5 @@ Partner activation flow: Application Submitted -> Partner KYC Uploaded/Submitted
 - Language selector note now uses the persisted selector message key.
 - Language restore now reads both the current `sabsewa_local_language` key and the older `user_language` key for compatibility.
 - Customer order and Partner payment screens have core labels connected to localization keys; long legal/user-entered content remains unchanged unless separately translated.
+
+- Partner applicants receive a database-confirmed success/status panel after submission; Partner privileges remain locked until KYC, payment-details verification and Master Admin activation are complete.

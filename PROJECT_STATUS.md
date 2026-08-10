@@ -1183,3 +1183,5 @@ Manual Supabase action required:
 - Language selector note now uses the persisted selector message key.
 - Language restore now reads both the current `sabsewa_local_language` key and the older `user_language` key for compatibility.
 - Customer order and Partner payment screens have core labels connected to localization keys; long legal/user-entered content remains unchanged unless separately translated.
+
+- Partner application post-submission message now clearly shows database-confirmed submission, Application ID, KYC review status, View Application/KYC Status action, and states that onboarding/referral privileges start only after Partner approval and activation.

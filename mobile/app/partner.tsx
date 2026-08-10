@@ -279,16 +279,19 @@ export default function PartnerWithUsScreen() {
       <View nativeID="application" style={styles.formCard} onLayout={(event) => setFormOffsetY(event.nativeEvent.layout.y)}>
         {confirmation ? (
           <View style={styles.successCard}>
-            <Text style={styles.successTitle}>{confirmation.duplicate ? "Partner Application Already Exists" : "Congratulations! Your Partner Application Has Been Successfully Submitted."}</Text>
-            <Text style={styles.successBody}>{confirmation.duplicate ? "An application is already registered with this mobile number. Please note the Application ID and current status below." : "Thank you for joining the SabSewa Local Partner Program. Your registration has been received successfully. Your application will now be reviewed by SabSewa Local."}</Text>
-            <ConfirmLine label="Partner Application ID" value={confirmation.application_id} />
+            <Text style={styles.successTitle}>{confirmation.duplicate ? "Partner Application Already Exists" : "Congratulations! Your SabSewa Local Partner Application has been submitted successfully."}</Text>
+            <Text style={styles.successBody}>{confirmation.duplicate ? "An application is already registered with this mobile number. Please note the Application ID and current status below." : "Your application and KYC documents have been received and are now under verification. Please wait until your KYC is reviewed and approved by SabSewa Local. After your Partner account is approved and activated, you can start onboarding local vendors and promoting SabSewa Local among customers in your approved area. You will be notified once your Partner account is approved."}</Text>
+            <ConfirmLine label="Application ID" value={confirmation.application_id} />
             <ConfirmLine label="Name" value={confirmation.applicant_name} />
             <ConfirmLine label="Mobile Number" value={confirmation.phone} />
             <ConfirmLine label="Proposed Area" value={confirmation.proposed_area_of_operation} />
             <ConfirmLine label="Application Status" value={labelStatus(confirmation.status)} />
-            <ConfirmLine label="KYC Status" value={labelStatus(confirmation.kyc_status)} />
+            <ConfirmLine label="KYC Status" value={confirmation.kyc_status === "documents_submitted" || confirmation.kyc_status === "under_review" ? "Pending Review" : labelStatus(confirmation.kyc_status)} />
             <ConfirmLine label="Commission Payment Method" value={paymentSummary(confirmation)} />
-            <Text style={styles.notice}>Payment details are stored securely. Only masked payment details are shown here.</Text>
+            <Text style={styles.notice}>Payment details are stored securely. Only masked payment details are shown here. Vendor onboarding/referral privileges unlock only after Partner KYC verification, payment-details verification and Master Admin activation.</Text>
+            <TouchableOpacity style={styles.statusButton} onPress={() => scrollRef.current?.scrollTo({ y: formOffsetY, animated: true })}>
+              <Text style={styles.statusButtonText}>View Application / KYC Status</Text>
+            </TouchableOpacity>
             <Text style={styles.sectionTitle}>Partner KYC Upload</Text>
             {requiredKycSectionsFor(confirmation, form.partner_type).map((section: any) => (
               <View key={section.id} style={[styles.kycBox, uploadedDocs[section.id] && styles.kycDone]}>
@@ -409,6 +412,8 @@ const styles = StyleSheet.create({
   successCard: { borderWidth: 1, borderColor: "#86efac", backgroundColor: "#f0fdf4", borderRadius: 8, padding: 14, marginBottom: 16 },
   successTitle: { color: "#14532d", fontSize: 22, fontWeight: "900", marginBottom: 8 },
   successBody: { color: "#166534", lineHeight: 21, marginBottom: 10 },
+  statusButton: { backgroundColor: "#1166ff", borderRadius: 8, padding: 12, alignItems: "center", marginBottom: 12 },
+  statusButtonText: { color: "#fff", fontWeight: "900" },
   confirmLine: { padding: 10, borderBottomWidth: 1, borderBottomColor: "#dcfce7", backgroundColor: "#ffffff" },
   confirmLabel: { color: "#64748b", fontWeight: "800", marginBottom: 3 },
   confirmValue: { color: "#111827", fontWeight: "900" },

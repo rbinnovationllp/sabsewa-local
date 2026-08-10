@@ -1,5 +1,6 @@
 import dotenv from "dotenv";
 dotenv.config();
+
 import express from "express";
 import cors from "cors";
 
@@ -36,19 +37,18 @@ import { getPaymentReadiness } from "./payments/paymentEnvironment.js";
 import razorpayWebhookRouter from "./payments/razorpayWebhookRoutes.js";
 import supabaseWebhookRouter from "./webhooks/supabaseWebhookRoutes.js";
 import webPushRouter from "./notifications/webPushRoutes.js";
+import notificationRoutes from "./notifications/notificationRoutes.js";
 import partnerRouter from "./partner/partnerRoutes.js";
 import settlementRouter from "./settlement/settlementRoutes.js";
 import { createRateLimiter, securityHeaders } from "./security/apiSecurity.js";
+
 // Database connection
 import { supabase } from "./connection.js";
-import notificationRoutes from "./notifications/notificationRoutes.js";
 
-// Mount API endpoint
-app.use("/api/notifications", notificationRoutes);
-
+// --- INITIALIZE EXPRESS APP FIRST ---
 const app = express();
 
-// Middleware
+// --- MIDDLEWARE ---
 app.use(securityHeaders);
 app.use(cors({ origin: process.env.CORS_ORIGIN?.split(",") || true }));
 app.use("/api/payments", razorpayWebhookRouter);
@@ -58,6 +58,9 @@ app.use(createRateLimiter({ windowMs: 60 * 1000, max: Number(process.env.API_RAT
 app.use(express.json({ limit: "2mb" }));
 
 // --- ROUTE MOUNTING ---
+app.use("/api/notifications", notificationRoutes);
+app.use("/api/notifications", webPushRouter);
+
 app.use("/api/rider", riderRoutes);
 app.use("/api/hyperwallet/credit", creditNotificationsRouter);
 
@@ -87,10 +90,10 @@ app.use("/api/rider", riderActionsRouter);
 app.use("/api/auth", deviceAuthRouter);
 app.use("/api/admin/master", masterAdminRouter);
 app.use("/api/company", vendorDirectoryRouter);
-app.use("/api/notifications", webPushRouter);
 app.use("/api/partner", partnerRouter);
 app.use("/api/settlement", settlementRouter);
-// Health Check
+
+// --- HEALTH CHECK & ENVIRONMENT ENDPOINTS ---
 app.get("/", (req, res) => {
   res.json({ status: "SabSewa Backend is running" });
 });
@@ -99,8 +102,7 @@ app.get("/api/admin/payment-environment", (req, res) => {
   res.json({ success: true, payment_environment: getPaymentReadiness() });
 });
 
-// --- OPTIONAL: AUTOMATED CRON JOBS ---
-// (Only import AFTER all routes & BEFORE listen)
+// --- AUTOMATED CRON JOBS ---
 try {
   await import("./cron/reminders.js");
   console.log("Cron jobs loaded");
@@ -108,10 +110,8 @@ try {
   console.log("No cron jobs loaded");
 }
 
+// --- SERVER START ---
 const PORT = process.env.PORT || 5001;
 app.listen(PORT, () => {
   console.log(`SabSewa Backend running on port ${PORT}`);
 });
-
-
-

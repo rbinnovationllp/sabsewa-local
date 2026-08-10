@@ -9,7 +9,7 @@ import { getVendorOnboardingSummary } from "./onboardingPolicyService.js";
 import { KYC_STORAGE_BUCKET, uploadKycDocument } from "./kycService.js";
 
 const router = express.Router();
-const requireAdmin = [requireUserJwt(supabase), requireRole(["admin", "company_admin", "super_admin"])];
+const requireAdmin = [requireUserJwt(supabase), requireRole(["admin", "company_admin", "super_admin", "master_admin", "national_admin", "state_admin", "district_admin", "city_admin", "kyc_reviewer"])];
 const requireAuth = requireUserJwt(supabase);
 const kycUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } });
 
@@ -49,6 +49,21 @@ function runKycMulter(req, res, next) {
 }
 
 router.use("/:vendor_id/kyc-documents", logKycUploadIngress);
+
+function kycReviewDeadlineFrom(dateValue) {
+  const base = dateValue ? new Date(dateValue) : new Date();
+  return new Date(base.getTime() + 48 * 60 * 60 * 1000).toISOString();
+}
+
+async function adminIdentity(userId) {
+  if (!userId) return { admin_id: null, admin_name: null };
+  const { data } = await supabase
+    .from("admin_profiles")
+    .select("admin_id, admin_name")
+    .eq("user_id", userId)
+    .maybeSingle();
+  return { admin_id: data?.admin_id || null, admin_name: data?.admin_name || null };
+}
 
 // Initialize Razorpay instance
 const razorpay = new Razorpay({
@@ -582,6 +597,8 @@ router.post("/:vendor_id/submit-kyc", requireAuth, async (req, res) => {
         kyc_status: "kyc_under_review",
         status: vendor.status === "active" ? "active" : "kyc_pending",
         lifecycle_status: vendor.status === "active" ? "active" : "kyc_pending",
+        kyc_submitted_at: now,
+        kyc_review_deadline_at: kycReviewDeadlineFrom(now),
         updated_at: now,
       })
       .eq("id", req.params.vendor_id)
@@ -702,6 +719,8 @@ router.post("/:vendor_id/kyc-status", ...requireAdmin, async (req, res) => {
       if (vendorForApprovalError || !vendorForApproval) return res.status(404).json({ success: false, error: "Vendor not found." });
       await assertRequiredKycDocumentsSubmitted(req.params.vendor_id, vendorForApproval.category);
     }
+    const reviewerIdentity = await adminIdentity(actor_user_id || req.auth?.user_id);
+
     const nextLifecycle = status === "kyc_rejected"
       ? "kyc_rejected"
       : status === "kyc_verified" && current.onboarding_payment_status === "payment_completed"

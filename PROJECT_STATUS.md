@@ -1103,3 +1103,16 @@ Gemini XPRIZE Alignment: Outlines compliance status across AI backend logging (g
 - Added rate limiting / temporary lockout for repeated incorrect secret attempts and audit logging for successful/failed Master Admin access attempts.
 - Added `mobile/server/scripts/generate-master-admin-secret.mjs` so the secret can be entered privately in PowerShell/terminal and converted into backend-only `.env` values.
 - Manual Supabase action: run `supabase/RUN_ONLY_MASTER_ADMIN_ACCESS_SECURITY_2026_08_09.sql` if audit/user-profile support is not already present.
+
+## 2026-08-10 - Master Admin KYC Monitoring And Vendor Order Notifications
+
+- Added Master Admin CRM KYC monitor counters for new submitted KYC, pending review, approaching 48-hour deadline, overdue, provisionally cleared, approved, rejected and resubmission-required vendors.
+- Added KYC review queue endpoint and UI ordered by oldest submitted KYC first, with SLA risk highlighting and direct Review KYC actions.
+- Added KYC SLA tracking fields on vendors: kyc_submitted_at, kyc_review_deadline_at, kyc_provisional_clearance_at, kyc_final_decision_at and admin reviewer identity fields.
+- Added admin_profiles with Admin Name, generated Admin ID, mobile, optional email, role, status, jurisdiction, created/authorized by, created date/time and last-login fields.
+- Added Admin Directory in Company CRM and admin audit logs that record Admin Name + Admin ID for important actions.
+- Added vendor_notifications and backend vendor new-order notification service. New hyperlocal orders now create an in-app vendor notification and attempt web push when VAPID keys and browser notification permissions are configured.
+- Added Vendor Orders New Orders counter and foreground haptic/vibration alert while the orders page is open.
+- Added service-worker notification click navigation so tapping a push opens the vendor order URL.
+- Manual Supabase SQL required: supabase/RUN_ONLY_ADMIN_KYC_MONITORING_AND_VENDOR_ORDER_NOTIFICATIONS_2026_08_10.sql.
+- Manual backend notification configuration required for push: WEB_PUSH_VAPID_PUBLIC_KEY, WEB_PUSH_VAPID_PRIVATE_KEY, WEB_PUSH_VAPID_SUBJECT and matching frontend EXPO_PUBLIC_WEB_PUSH_VAPID_PUBLIC_KEY.

@@ -122,3 +122,10 @@ SabSewa-Local/
 - Added rate limiting / temporary lockout for repeated incorrect secret attempts and audit logging for successful/failed Master Admin access attempts.
 - Added `mobile/server/scripts/generate-master-admin-secret.mjs` so the secret can be entered privately in PowerShell/terminal and converted into backend-only `.env` values.
 - Manual Supabase action: run `supabase/RUN_ONLY_MASTER_ADMIN_ACCESS_SECURITY_2026_08_09.sql` if audit/user-profile support is not already present.
+
+## Admin KYC Monitoring And Vendor Notifications
+
+- Company CRM includes Master Admin KYC counters and a review queue for pending, SLA-risk, provisional, approved, rejected and resubmission-required vendor KYC cases.
+- Admin profiles now carry Admin Name, generated Admin ID, phone, optional email, role, jurisdiction, status and audit identity.
+- Vendor order operations include in-app notification records, web-push dispatch when VAPID keys are configured, and a visible New Orders counter on the Vendor Orders screen.
+- Run `supabase/RUN_ONLY_ADMIN_KYC_MONITORING_AND_VENDOR_ORDER_NOTIFICATIONS_2026_08_10.sql` before production testing these workflows.

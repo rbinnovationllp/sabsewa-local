@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput, Alert } from "react-native";
 import { useLocalSearchParams, Link } from "expo-router";
 import { apiUrl } from "@/lib/backend";
+import * as Haptics from "expo-haptics";
 import { createSmartRejectionMessage } from "@/services/gemini";
 import { useAuth } from "@/providers/AuthProvider";
 
@@ -12,6 +13,8 @@ export default function VendorOrdersScreen() {
   const { user } = useAuth();
 
   const [orders, setOrders] = useState([]);
+  const [newOrderCount, setNewOrderCount] = useState(0);
+  const [lastPendingOrderIds, setLastPendingOrderIds] = useState<string[]>([]);
   const [rejectionReasons, setRejectionReasons] = useState<Record<string, string>>({});
   const [quotePrices, setQuotePrices] = useState<Record<string, Record<string, string>>>({});
   const [deliveryOverrides, setDeliveryOverrides] = useState<Record<string, string>>({});
@@ -40,7 +43,20 @@ export default function VendorOrdersScreen() {
       return;
     }
 
-    setOrders(json.orders || []);
+    const nextOrders = json.orders || [];
+    const pendingIds = nextOrders.filter((order: any) => order.status === "pending").map((order: any) => String(order.id));
+    const hasNewPending = pendingIds.some((id: string) => !lastPendingOrderIds.includes(id));
+    if (hasNewPending && lastPendingOrderIds.length > 0) {
+      try {
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } catch {}
+      if (typeof navigator !== "undefined" && "vibrate" in navigator) {
+        try { navigator.vibrate?.([200, 100, 200]); } catch {}
+      }
+    }
+    setLastPendingOrderIds(pendingIds);
+    setNewOrderCount(pendingIds.length);
+    setOrders(nextOrders);
   }
 
   async function updateStatus(orderId: string, status: string) {
@@ -212,6 +228,11 @@ export default function VendorOrdersScreen() {
   return (
     <ScrollView style={styles.container}>
       <Text style={styles.heading}>Incoming Orders 📦</Text>
+
+      <View style={styles.counterCard}>
+        <Text style={styles.counterValue}>New Orders ({newOrderCount})</Text>
+        <Text style={styles.counterText}>This page refreshes every 10 seconds while open. Push notification opens this order page when permitted.</Text>
+      </View>
 
       {orders.length === 0 && (
         <Text style={{ marginTop: 40, fontSize: 18 }}>No orders yet…</Text>
@@ -406,6 +427,9 @@ export default function VendorOrdersScreen() {
 const styles = StyleSheet.create({
   container: { padding: 20, paddingTop: 40 },
   heading: { fontSize: 26, fontWeight: "900", marginBottom: 20 },
+  counterCard: { backgroundColor: "#eff6ff", borderWidth: 1, borderColor: "#bfdbfe", borderRadius: 10, padding: 12, marginBottom: 14 },
+  counterValue: { color: "#1166ff", fontWeight: "900", fontSize: 18 },
+  counterText: { color: "#334155", marginTop: 4, lineHeight: 18 },
 
   orderCard: {
     padding: 15,

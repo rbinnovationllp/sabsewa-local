@@ -6,6 +6,7 @@ import {
   assertCreditOrderAllowed,
   recordCreditPurchase,
 } from "../credit/vendorCreditService.js";
+import { notifyVendorNewHyperlocalOrder } from "../notifications/vendorOrderNotificationService.js";
 
 const router = express.Router();
 

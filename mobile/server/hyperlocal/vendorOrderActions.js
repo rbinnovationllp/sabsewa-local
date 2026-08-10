@@ -1,4 +1,4 @@
-﻿import express from "express";
+import express from "express";
 import { supabase } from "../connection.js";
 import { writeOrderAuditLog } from "../audit/orderAudit.js";
 import { notifyCustomerOrderDispatched } from "../notifications/dispatchNotificationService.js";
@@ -94,6 +94,38 @@ function vendorOrderView(order) {
     : limitedOrderSummary(order);
 }
 
+
+router.get("/count", async (req, res) => {
+  try {
+    const vendorId = req.query.vendor_id;
+    const terminalId = req.query.terminal_id;
+    if (!vendorId) return res.status(400).json({ success: false, error: "vendor_id is required" });
+
+    let orderQuery = supabase
+      .from("hyperlocal_orders")
+      .select("id", { count: "exact", head: true })
+      .eq("vendor_id", vendorId)
+      .eq("status", "pending");
+    if (terminalId) orderQuery = orderQuery.eq("terminal_id", terminalId);
+    const { count, error } = await orderQuery;
+    if (error) throw error;
+
+    const { count: unreadNotifications, error: notificationError } = await supabase
+      .from("vendor_notifications")
+      .select("id", { count: "exact", head: true })
+      .eq("vendor_id", vendorId)
+      .is("read_at", null);
+    if (notificationError) throw notificationError;
+
+    return res.json({
+      success: true,
+      pending_orders: count || 0,
+      unread_notifications: unreadNotifications || 0,
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
 router.get("/", async (req, res) => {
   try {
     const vendorId = req.query.vendor_id;

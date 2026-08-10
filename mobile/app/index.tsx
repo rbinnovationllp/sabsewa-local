@@ -1,7 +1,6 @@
 import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, Image } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 
 import BrandHeader from "@/components/BrandHeader";
@@ -25,7 +24,7 @@ function sanitizeGreetingName(value?: string | null) {
 export default function HomeScreen() {
   const router = useRouter();
   const { user, loading, signOut } = useAuth();
-  const { t, setLanguage, isLanguageAvailable, language } = useLanguage();
+  const { t, setLanguage, isLanguageAvailable } = useLanguage();
   const [profileName, setProfileName] = useState("");
   const role = user?.user_metadata?.role;
   const isCustomer = role === "customer";
@@ -58,17 +57,6 @@ export default function HomeScreen() {
   // Load language preference persistently
   useEffect(() => {
     let active = true;
-    async function loadStoredLanguage() {
-      try {
-        const savedLang = await AsyncStorage.getItem("user_language");
-        if (savedLang && isLanguageAvailable(savedLang as any) && savedLang !== language) {
-          setLanguage(savedLang as any);
-        }
-      } catch (e) {
-        console.error("Failed to load persistent language", e);
-      }
-    }
-    loadStoredLanguage();
 
     async function loadProfile() {
       if (!user?.id) {
@@ -87,7 +75,6 @@ export default function HomeScreen() {
       const preferredLanguage = data?.preferred_language;
       if (preferredLanguage && isLanguageAvailable(preferredLanguage as any)) {
         setLanguage(preferredLanguage as any);
-        await AsyncStorage.setItem("user_language", preferredLanguage);
       }
     }
 
@@ -110,11 +97,11 @@ export default function HomeScreen() {
         <View style={styles.topNav}>
           <TouchableOpacity
             accessibilityRole="button"
-            accessibilityLabel="Partner With Us"
+            accessibilityLabel={t("home.partnerWithUs")}
             style={styles.partnerNavButton}
             onPress={() => router.push("/partner" as any)}
           >
-            <Text style={styles.partnerNavText}>ðŸ¤ Partner With Us</Text>
+            <Text style={styles.partnerNavText}>{t("home.partnerWithUs")}</Text>
           </TouchableOpacity>
         </View>
         <Text style={styles.brandTitle}>{t("home.title")}</Text>
@@ -138,10 +125,8 @@ export default function HomeScreen() {
         style={styles.partnerHomeBanner}
         onPress={() => router.push("/partner" as any)}
       >
-        <Text style={styles.partnerHomeTitle}>ðŸ¤ Partner With Us â€” Help SabSewa Local Grow Across India & Earn Benefits</Text>
-        <Text style={styles.partnerHomeText}>
-          Open to eligible customers, vendors, independent individuals and local promoters who can help onboard vendors and create customer awareness in their locality.
-        </Text>
+        <Text style={styles.partnerHomeTitle}>{t("home.partnerBannerTitle")}</Text>
+        <Text style={styles.partnerHomeText}>{t("home.partnerBannerText")}</Text>
       </TouchableOpacity>
 
 

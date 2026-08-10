@@ -156,7 +156,8 @@
   "delivery.totalPayable": "Total payable amount",
   "delivery.provider": "Delivery provider",
   "delivery.vendorProvider": "Vendor delivery",
-  "delivery.safetyStatement": "The delivery time shown is an estimate provided by the vendor and is not a guaranteed deadline. SabSewa Local does not support unsafe or unrealistic delivery commitments. Actual delivery time may vary, and road safety will always take priority over speed.",} as const;
+  "delivery.safetyStatement": "The delivery time shown is an estimate provided by the vendor and is not a guaranteed deadline. SabSewa Local does not support unsafe or unrealistic delivery commitments. Actual delivery time may vary, and road safety will always take priority over speed.",
+} as const;
 
 export type CommonTranslationKey = keyof typeof enCommon;
 

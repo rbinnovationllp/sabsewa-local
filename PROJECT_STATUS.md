@@ -1169,3 +1169,17 @@ Manual Supabase action required:
 - Added Master Admin/authorized admin Partner review controls for KYC approval/correction/rejection, payment-detail verification, activation, suspension, reinstatement and termination.
 - Added Partner Payout Management CRM screen and basic Partner Dashboard for commission statements.
 - Manual action required: run `supabase/RUN_ONLY_PARTNER_COMMISSION_PAYMENT_KYC_AND_COMPLIANCE_2026_08_10.sql`, configure `PARTNER_PAYMENT_DETAILS_ENCRYPTION_KEY` on the EC2 backend, rebuild `mobile/dist`, deploy to Hostinger, then update EC2.
+
+
+### 2026-08-10 language selection functionality
+- Connected language selection to the shared LanguageProvider persistence path for English, Hindi and Kannada.
+- Added Hindi/Kannada translation keys for core navigation, Home, customer order placement, Vendor KYC, Partner Program/KYC, commission/payment labels and notification titles.
+- Dynamic user-entered data such as shop names, vendor names and product names remains untranslated by design.
+- Required validation: run `cd mobile && npm.cmd run test:localization && npm.cmd run deploy:validate`, then rebuild `mobile/dist`.
+
+
+### 2026-08-10 language completion repair
+- Completed missing English locale keys so Hindi/Kannada additions are part of the typed localization dictionary.
+- Language selector note now uses the persisted selector message key.
+- Language restore now reads both the current `sabsewa_local_language` key and the older `user_language` key for compatibility.
+- Customer order and Partner payment screens have core labels connected to localization keys; long legal/user-entered content remains unchanged unless separately translated.

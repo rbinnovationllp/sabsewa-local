@@ -26,7 +26,7 @@ export default function LanguageSelector() {
         </TouchableOpacity>
       );})}
       </ScrollView>
-      <Text style={styles.note}>{t("language.note")}</Text>
+      <Text style={styles.note}>{t("language.selectorNote")}</Text>
     </View>
   );
 }

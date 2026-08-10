@@ -3,12 +3,13 @@ import { Stack, useRouter, usePathname } from "expo-router";
 import { Platform, View, TouchableOpacity, Text, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
-import { LanguageProvider } from "@/providers/LanguageProvider";
+import { LanguageProvider, useLanguage } from "@/providers/LanguageProvider";
 import AuthProvider, { useAuth } from "@/providers/AuthProvider";
 import { UserProvider } from "@/contexts/UserContext";
 import PwaInstallPrompt from "@/components/PwaInstallPrompt";
 
 function TopNavigationBar() {
+  const { t } = useLanguage();
   const router = useRouter();
   const pathname = usePathname();
   const { role } = useAuth();
@@ -31,7 +32,7 @@ function TopNavigationBar() {
           <TouchableOpacity 
             style={styles.navButton} 
             onPress={() => router.back()}
-            accessibilityLabel="Go back"
+            accessibilityLabel={t("common.back")}
           >
             <Ionicons name="arrow-back" size={22} color="#0f766e" />
           </TouchableOpacity>
@@ -39,10 +40,10 @@ function TopNavigationBar() {
         <TouchableOpacity 
           style={styles.homeButton} 
           onPress={handleGoHome}
-          accessibilityLabel="Go to Home"
+          accessibilityLabel={t("common.home")}
         >
           <Ionicons name="home" size={20} color="#0f766e" />
-          <Text style={styles.homeText}>Home</Text>
+          <Text style={styles.homeText}>{t("common.home")}</Text>
         </TouchableOpacity>
       </View>
     </View>

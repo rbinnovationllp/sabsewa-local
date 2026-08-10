@@ -32,6 +32,7 @@ function imageUrl(value?: string | null) {
 }
 
 export default function GeminiOrderScreen() {
+  const { t } = useLanguage();
   const params: any = useLocalSearchParams();
   const router = useRouter();
   const { user } = useAuth();
@@ -326,7 +327,7 @@ export default function GeminiOrderScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.heading}>Place Your Order</Text>
+      <Text style={styles.heading}>{t("customerOrder.title")}</Text>
       <Text style={styles.subtitle}>Select a nearby shop and type or speak what you need.</Text>
       <Text style={styles.subtitleSmall}>We will prepare a cart for your review before placing the order.</Text>
 
@@ -353,7 +354,7 @@ export default function GeminiOrderScreen() {
               setDropdownOpen(true);
             }}
             onFocus={() => setDropdownOpen(true)}
-            placeholder="Shop name, category or product"
+            placeholder={t("customerOrder.searchPlaceholder")}
           />
           {dropdownOpen ? (
             <View style={styles.dropdown}>

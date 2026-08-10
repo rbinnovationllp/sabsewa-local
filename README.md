@@ -161,3 +161,17 @@ Required setup after pulling this code:
 3. Restart PM2 and rebuild/upload `mobile/dist`.
 
 Partner activation flow: Application Submitted -> Partner KYC Uploaded/Submitted -> Partner KYC Verified -> Payment Details Verified -> Master Admin Approval -> Active Partner. Commission statements are accounting records only and do not automatically transfer funds.
+
+
+### 2026-08-10 language selection functionality
+- Connected language selection to the shared LanguageProvider persistence path for English, Hindi and Kannada.
+- Added Hindi/Kannada translation keys for core navigation, Home, customer order placement, Vendor KYC, Partner Program/KYC, commission/payment labels and notification titles.
+- Dynamic user-entered data such as shop names, vendor names and product names remains untranslated by design.
+- Required validation: run `cd mobile && npm.cmd run test:localization && npm.cmd run deploy:validate`, then rebuild `mobile/dist`.
+
+
+### 2026-08-10 language completion repair
+- Completed missing English locale keys so Hindi/Kannada additions are part of the typed localization dictionary.
+- Language selector note now uses the persisted selector message key.
+- Language restore now reads both the current `sabsewa_local_language` key and the older `user_language` key for compatibility.
+- Customer order and Partner payment screens have core labels connected to localization keys; long legal/user-entered content remains unchanged unless separately translated.

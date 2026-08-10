@@ -3,6 +3,7 @@ import { Alert, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpac
 import * as ImagePicker from "expo-image-picker";
 import * as DocumentPicker from "expo-document-picker";
 import BrandHeader from "@/components/BrandHeader";
+import { useLanguage } from "@/providers/LanguageProvider";
 import { apiUrl } from "@/lib/backend";
 
 const PARTNER_TERMS_VERSION = "partner-program-local-2026-08-10";
@@ -79,6 +80,7 @@ function paymentSummary(application: any) {
 }
 
 export default function PartnerWithUsScreen() {
+  const { t } = useLanguage();
   const scrollRef = useRef<ScrollView>(null);
   const [formOffsetY, setFormOffsetY] = useState(0);
   const [submitting, setSubmitting] = useState(false);
@@ -319,7 +321,7 @@ export default function PartnerWithUsScreen() {
           <Field label="GSTIN (optional / where applicable)" value={form.gstin} onChangeText={(v) => setValue("gstin", v.toUpperCase())} />
         </View>
 
-        <View style={styles.formSection}><Text style={styles.sectionTitle}>Commission Payment Details</Text>
+        <View style={styles.formSection}><Text style={styles.sectionTitle}>{t("partner.commissionTitle")}</Text>
           <Text style={styles.notice}>Commission will be paid only after Partner KYC, payment details and Master Admin approval are completed. Do not enter OTP, PIN, CVV, card password or net-banking password.</Text>
           <View style={styles.chips}><Chip label="UPI" active={form.payment_method === "upi"} onPress={() => setValue("payment_method", "upi")} /><Chip label="Bank Account" active={form.payment_method === "bank_account"} onPress={() => setValue("payment_method", "bank_account")} /></View>
           {form.payment_method === "bank_account" ? (
@@ -344,7 +346,7 @@ export default function PartnerWithUsScreen() {
         <TouchableOpacity style={styles.acceptRow} onPress={() => setAccepted((value) => !value)}><View style={[styles.checkbox, accepted && styles.checked]}>{accepted ? <Text style={styles.checkText}>âœ“</Text> : null}</View><Text style={styles.acceptText}>I accept that the Partner Program is for vendor onboarding and customer awareness. I understand the initial 10% benefit applies only to eligible company revenue, is configurable by SabSewa Local, and does not mean equity or ownership.</Text></TouchableOpacity>
         <TouchableOpacity style={styles.acceptRow} onPress={() => setKycAccepted((value) => !value)}><View style={[styles.checkbox, kycAccepted && styles.checked]}>{kycAccepted ? <Text style={styles.checkText}>âœ“</Text> : null}</View><Text style={styles.acceptText}>I declare that the information and documents provided by me are true, valid and belong to me or the organization I am authorized to represent. I authorize SabSewa Local to use these documents for Partner Program identity, KYC, payment and compliance verification. I understand false, forged or misleading information may result in suspension or termination and withholding of payments where legally permitted.</Text></TouchableOpacity>
 
-        <TouchableOpacity style={[styles.submitButton, submitting && styles.disabled]} onPress={submitApplication} disabled={submitting}><Text style={styles.submitText}>{submitting ? "Submitting..." : "Submit Partner Application"}</Text></TouchableOpacity>
+        <TouchableOpacity style={[styles.submitButton, submitting && styles.disabled]} onPress={submitApplication} disabled={submitting}><Text style={styles.submitText}>{submitting ? t("common.loading") : t("partner.submit")}</Text></TouchableOpacity>
       </View>
     </ScrollView>
   );

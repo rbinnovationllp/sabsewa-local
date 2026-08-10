@@ -19,6 +19,7 @@ type LanguageContextType = {
 };
 
 const STORAGE_KEY = "sabsewa_local_language";
+const LEGACY_LANGUAGE_STORAGE_KEYS = ["user_language"];
 const LanguageContext = createContext<LanguageContextType | null>(null);
 
 const BUNDLED_TRANSLATIONS: Partial<Record<SabSewaLanguageCode, Record<string, string>>> = {
@@ -45,11 +46,17 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
     try {
       let saved: string | null = null;
       if (Platform.OS === "web") {
-        saved = globalThis.localStorage?.getItem(STORAGE_KEY) || null;
+        saved = globalThis.localStorage?.getItem(STORAGE_KEY) || LEGACY_LANGUAGE_STORAGE_KEYS.map((key) => globalThis.localStorage?.getItem(key)).find(Boolean) || null;
       } else {
         saved = await SecureStore.getItemAsync(STORAGE_KEY);
         if (!saved) {
           saved = await AsyncStorage.getItem(STORAGE_KEY);
+        }
+        if (!saved) {
+          for (const legacyKey of LEGACY_LANGUAGE_STORAGE_KEYS) {
+            saved = await AsyncStorage.getItem(legacyKey);
+            if (saved) break;
+          }
         }
       }
 
@@ -68,10 +75,16 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
     try {
       if (Platform.OS === "web") {
         globalThis.localStorage?.setItem(STORAGE_KEY, nextLanguage);
+        for (const legacyKey of LEGACY_LANGUAGE_STORAGE_KEYS) {
+          globalThis.localStorage?.setItem(legacyKey, nextLanguage);
+        }
         return;
       }
       await SecureStore.setItemAsync(STORAGE_KEY, nextLanguage);
       await AsyncStorage.setItem(STORAGE_KEY, nextLanguage);
+      for (const legacyKey of LEGACY_LANGUAGE_STORAGE_KEYS) {
+        await AsyncStorage.setItem(legacyKey, nextLanguage);
+      }
     } catch (e) {
       console.warn("Could not save language choice", e);
     }

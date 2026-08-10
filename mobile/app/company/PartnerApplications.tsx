@@ -140,7 +140,8 @@ export default function PartnerApplicationsScreen() {
       </TouchableOpacity>
 
       {filtered.map((application) => {
-        const referrals = application.referrals || application.raw?.partner_referred_vendors || [];`r`n        const commissions = application.commission_events || application.raw?.partner_commission_events || [];
+        const referrals = application.referrals || application.raw?.partner_referred_vendors || [];
+        const commissions = application.commission_events || application.raw?.partner_commission_events || [];
         const activated = referrals.filter((item: any) => ["approved", "commission_eligible"].includes(item.referral_status)).length;
         const eligibleRevenue = referrals.reduce((sum: number, item: any) => sum + Number(item.eligible_revenue_amount || 0), 0);
         const earned = referrals.reduce((sum: number, item: any) => sum + Number(item.benefit_earned_amount || 0), 0)
@@ -165,7 +166,10 @@ export default function PartnerApplicationsScreen() {
               <Text style={styles.identityText}>Partner ID: {application.partner_id || "Generated after SQL update"}</Text>
               <Text style={styles.identityText}>Referral Code: {application.referral_code || "Generated after SQL update"}</Text>
               <Text style={styles.identityText}>Referral Link: {application.referral_link || "Generated after SQL update"}</Text>
-              <Text style={styles.identityText}>Benefit %: {Number(application.raw?.revenue_share_percent || 10).toFixed(2)}%</Text>`r`n              <Text style={styles.identityText}>Partner KYC: {String(application.kyc_status || "not_submitted").replace(/_/g, " ")}</Text>`r`n              <Text style={styles.identityText}>Payment Details: {String(application.payment_details_status || "pending_verification").replace(/_/g, " ")}</Text>`r`n              <Text style={styles.identityText}>Payment Method: {application.payment_detail?.payment_method || "-"}</Text>
+              <Text style={styles.identityText}>Benefit %: {Number(application.raw?.revenue_share_percent || 10).toFixed(2)}%</Text>
+              <Text style={styles.identityText}>Partner KYC: {String(application.kyc_status || "not_submitted").replace(/_/g, " ")}</Text>
+              <Text style={styles.identityText}>Payment Details: {String(application.payment_details_status || "pending_verification").replace(/_/g, " ")}</Text>
+              <Text style={styles.identityText}>Payment Method: {application.payment_detail?.payment_method || "-"}</Text>
             </View>
 
             <Text style={styles.body}>Area: {application.proposed_area_of_operation || application.coverage_area}</Text>
@@ -181,7 +185,12 @@ export default function PartnerApplicationsScreen() {
               <Metric label="Pending" value={fmtMoney(Math.max(0, earned - paid))} />
             </View>
 
-            <View style={styles.actions}>`r`n              <TouchableOpacity style={styles.actionButton} onPress={() => reviewPartner(application.id, "approve_kyc")}><Text style={styles.actionText}>Approve KYC</Text></TouchableOpacity>`r`n              <TouchableOpacity style={styles.actionButton} onPress={() => reviewPartner(application.id, "request_kyc_correction")}><Text style={styles.actionText}>Request KYC Correction</Text></TouchableOpacity>`r`n              <TouchableOpacity style={styles.actionButton} onPress={() => reviewPartner(application.id, "verify_payment_details")}><Text style={styles.actionText}>Verify Payment Details</Text></TouchableOpacity>`r`n              <TouchableOpacity style={styles.actionButton} onPress={() => reviewPartner(application.id, "reject_payment_details")}><Text style={styles.actionText}>Reject Payment Details</Text></TouchableOpacity>`r`n              {statuses.map((status) => (
+            <View style={styles.actions}>
+              <TouchableOpacity style={styles.actionButton} onPress={() => reviewPartner(application.id, "approve_kyc")}><Text style={styles.actionText}>Approve KYC</Text></TouchableOpacity>
+              <TouchableOpacity style={styles.actionButton} onPress={() => reviewPartner(application.id, "request_kyc_correction")}><Text style={styles.actionText}>Request KYC Correction</Text></TouchableOpacity>
+              <TouchableOpacity style={styles.actionButton} onPress={() => reviewPartner(application.id, "verify_payment_details")}><Text style={styles.actionText}>Verify Payment Details</Text></TouchableOpacity>
+              <TouchableOpacity style={styles.actionButton} onPress={() => reviewPartner(application.id, "reject_payment_details")}><Text style={styles.actionText}>Reject Payment Details</Text></TouchableOpacity>
+              {statuses.map((status) => (
                 <TouchableOpacity key={status} style={styles.actionButton} onPress={() => updateStatus(application.id, status)}>
                   <Text style={styles.actionText}>{status.replace(/_/g, " ")}</Text>
                 </TouchableOpacity>

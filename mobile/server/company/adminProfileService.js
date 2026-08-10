@@ -31,7 +31,7 @@ export async function getAdminProfile(userId) {
   return data || null;
 }
 
-export async function requireCompanyAdmin(permission = "kyc.review") {
+export function requireCompanyAdmin(permission = "kyc.review") {
   return async function companyAdminGuard(req, res, next) {
     try {
       if (!req.auth?.user_id) return res.status(401).json({ success: false, error: "Authentication is required." });

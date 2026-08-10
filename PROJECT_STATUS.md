@@ -1138,3 +1138,17 @@ Manual Supabase action required:
 - Existing Recent Shops, Saved Shops, Order Again, Use My Location, Find Nearby Shops, unserved-area request and cart-preparation flows are preserved.
 - Discovery still excludes suspended, payment-pending, unverified or inactive vendors through existing backend filters for active status, KYC verification and completed onboarding payment.
 - Backend discovery payload now includes a `locality` field for customer display.
+## 2026-08-10 - Bulk Product Catalogue Upload
+
+- Added CSV/XLSX preview and import endpoints for vendor catalogues.
+- Added vendor-facing Bulk Upload Products page with sample template download, validation summary, duplicate detection, preview and import.
+- Added Company CRM assisted Bulk Catalogue Upload page for Admin/Partner support, linked by vendor ID.
+- Product photographs remain optional; rows without image URLs are imported with `image_pending` placeholder behavior.
+- Existing individual product/photo upload flow remains available and unchanged.
+## 2026-08-10 - Scan Existing Product List
+
+- Added Option 3 for catalogue setup: Scan / Upload Existing Product List.
+- Supports camera, gallery and PDF/document upload for printed, handwritten, scanned or digitally prepared product lists.
+- Backend extracts visible catalogue rows using Gemini, never treats missing fields as known values, and marks unclear rows for review.
+- Review screen supports edit, delete and add-missing-item before final import.
+- Existing individual product upload and Excel/CSV bulk upload remain available.

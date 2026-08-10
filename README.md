@@ -140,3 +140,9 @@ Run `supabase/RUN_ONLY_PARTNER_PROGRAM_EXPANSION_2026_08_10.sql` to enable Partn
 ## Customer Vendor Dropdown
 
 The customer Place Your Order screen provides a database-driven nearby-vendor dropdown in the "Shop name, category or product" field. It refreshes from the existing discovery API when category, GPS location, PIN code or locality changes, shows verified active vendors only, and lets the customer choose the preferred shop before preparing the order/cart.
+### Bulk catalogue upload
+
+Vendors can keep adding products individually, or use `Vendor > Bulk Upload Products` to import a CSV/XLSX catalogue. Only Product/Medicine Name is mandatory; brand, category, pack, price, MRP, stock status and image URL are optional. Product photographs are not required, and rows without images use the catalogue placeholder flow. Company Admin/Partner assisted imports are available from `Company CRM > Bulk Catalogue Upload` and must be linked to the correct vendor ID.
+### Scan / Upload Existing Product List
+
+Vendors now have three catalogue creation choices: add products manually, bulk upload a structured Excel/CSV file, or scan/upload an existing printed, handwritten, photographed, scanned or PDF product/price list. The scan flow uses backend AI extraction to identify visible product names and optional brand/category/pack/MRP/price/availability fields, marks uncertain rows for vendor review, supports multiple pages, and imports only after review/confirmation. The uploaded list is not treated as an individual product photograph; product images remain optional.

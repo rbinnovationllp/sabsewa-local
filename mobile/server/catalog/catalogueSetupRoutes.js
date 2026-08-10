@@ -1,4 +1,6 @@
 import express from "express";
+import multer from "multer";
+import XLSX from "xlsx";
 import { supabase } from "../connection.js";
 import { genAI, geminiModel } from "../gemini/geminiClient.js";
 import { extractJsonObject } from "../gemini/json.js";
@@ -6,6 +8,11 @@ import { writeGeminiAuditLog } from "../gemini/auditLog.js";
 import { assertVendorCanPublishProducts } from "../vendor/onboardingPolicyService.js";
 
 const router = express.Router();
+
+const bulkCatalogueUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+});
 
 const ALLOWED_CATEGORIES = new Set([
   "kirana",
@@ -139,6 +146,185 @@ async function validateVendorTerminal(vendorId, terminalId) {
   return { ok: true };
 }
 
+
+const BULK_SAMPLE_HEADERS = [
+  "Product/Medicine Name",
+  "Brand/Manufacturer",
+  "Category",
+  "Pack/Quantity/Unit",
+  "Selling Price",
+  "MRP",
+  "Availability/In Stock",
+  "Product Photo/Image URL",
+];
+
+function csvCell(value) {
+  const text = String(value ?? "");
+  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+function bulkSampleCsv() {
+  const rows = [
+    BULK_SAMPLE_HEADERS,
+    ["Paracetamol 500 mg Tablet", "Generic", "pharmacy", "10 tablets", "", "", "Yes", ""],
+    ["Aashirvaad Atta", "Aashirvaad", "kirana", "5 kg", "245", "270", "Yes", ""],
+    ["Fresh Tomato", "", "vegetables", "1 kg", "30", "", "Yes", ""],
+  ];
+  return rows.map((row) => row.map(csvCell).join(",")).join("\r\n");
+}
+
+function headerValue(row, aliases) {
+  const normalized = new Map(Object.entries(row || {}).map(([key, value]) => [normalize(key), value]));
+  for (const alias of aliases) {
+    const value = normalized.get(normalize(alias));
+    if (value !== undefined && value !== null && clean(value) !== "") return value;
+  }
+  return "";
+}
+
+function parsePrice(value) {
+  const cleaned = clean(value).replace(/[^\d.]/g, "");
+  return numberOrNull(cleaned);
+}
+
+function parseAvailability(value) {
+  const text = normalize(value);
+  if (!text) return true;
+  if (["no", "n", "false", "0", "out", "out of stock", "unavailable", "not available"].includes(text)) return false;
+  return true;
+}
+
+function parsePack(value) {
+  const text = clean(value);
+  if (!text) return { pack_size: null, pack_unit: null, pack_text: null };
+  const match = text.match(/^(\d+(?:\.\d+)?)\s*(.*)$/);
+  if (!match) return { pack_size: null, pack_unit: text, pack_text: text };
+  return {
+    pack_size: numberOrNull(match[1]),
+    pack_unit: clean(match[2]) || null,
+    pack_text: text,
+  };
+}
+
+function normalizeBulkCategory(value) {
+  const text = normalize(value).replace(/\s+/g, "-");
+  if (!text) return "other";
+  if (text === "grocery" || text === "grocery-kirana" || text === "general-store") return "kirana";
+  if (text === "medical-store" || text === "medicine" || text === "medicines") return "pharmacy";
+  if (text === "restaurant-tiffin" || text === "tiffin-service") return "tiffin";
+  return ALLOWED_CATEGORIES.has(text) ? text : "other";
+}
+
+function bulkKey(row) {
+  return normalize([
+    row.product_name,
+    row.brand_name,
+    row.pack_size,
+    row.pack_unit,
+  ].filter(Boolean).join("|"));
+}
+
+function normalizeBulkRow(rawRow, index) {
+  const productName = clean(headerValue(rawRow, [
+    "Product/Medicine Name",
+    "Product Name",
+    "Medicine Name",
+    "Item Name",
+    "Name",
+  ]));
+  const brand = clean(headerValue(rawRow, ["Brand/Manufacturer", "Brand", "Manufacturer", "Company"]));
+  const category = normalizeBulkCategory(headerValue(rawRow, ["Category", "Business Category", "Product Category"]));
+  const pack = parsePack(headerValue(rawRow, ["Pack/Quantity/Unit", "Pack", "Quantity", "Unit", "Pack Size"]));
+  const price = parsePrice(headerValue(rawRow, ["Selling Price", "Price", "Sale Price", "Vendor Price"]));
+  const mrp = parsePrice(headerValue(rawRow, ["MRP", "Maximum Retail Price"]));
+  const available = parseAvailability(headerValue(rawRow, ["Availability/In Stock", "Availability", "In Stock", "Available"]));
+  const imageUrl = clean(headerValue(rawRow, ["Product Photo/Image URL", "Image URL", "Photo URL", "Product Image URL"]));
+  const errors = [];
+
+  if (!productName) errors.push("Product/Medicine Name is mandatory.");
+  if (price !== null && price < 0) errors.push("Selling Price cannot be negative.");
+  if (mrp !== null && mrp < 0) errors.push("MRP cannot be negative.");
+  if (imageUrl && !/^https?:\/\//i.test(imageUrl)) errors.push("Image URL must start with http:// or https://.");
+
+  const row = {
+    row_number: index + 2,
+    product_name: productName,
+    brand_name: brand || null,
+    category,
+    pack_size: pack.pack_size,
+    pack_unit: pack.pack_unit,
+    pack_text: pack.pack_text,
+    price,
+    mrp,
+    available_today: available,
+    image_url: imageUrl || null,
+    errors,
+  };
+  return { ...row, import_key: bulkKey(row), status: errors.length ? "error" : "valid" };
+}
+
+function parseBulkWorkbook(file) {
+  const workbook = XLSX.read(file.buffer, { type: "buffer", raw: false });
+  const sheetName = workbook.SheetNames?.[0];
+  if (!sheetName) return [];
+  return XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: "" });
+}
+
+async function existingBulkKeys(vendorId, terminalId) {
+  let query = supabase
+    .from("vendor_items")
+    .select("item_name, generic_product_name, brand_name, pack_size, pack_unit")
+    .eq("vendor_id", vendorId)
+    .limit(5000);
+
+  query = terminalId ? query.eq("terminal_id", terminalId) : query.is("terminal_id", null);
+  const { data, error } = await query;
+  if (error) throw error;
+
+  return new Set((data || []).map((item) => bulkKey({
+    product_name: item.generic_product_name || item.item_name,
+    brand_name: item.brand_name,
+    pack_size: item.pack_size,
+    pack_unit: item.pack_unit,
+  })).filter(Boolean));
+}
+
+function summarizeBulkRows(rows) {
+  return {
+    total_rows: rows.length,
+    valid_count: rows.filter((row) => row.status === "valid").length,
+    duplicate_count: rows.filter((row) => row.status === "duplicate").length,
+    error_count: rows.filter((row) => row.status === "error").length,
+  };
+}
+
+async function buildBulkPreview(file, vendorId, terminalId) {
+  const rawRows = parseBulkWorkbook(file);
+  if (rawRows.length > 2000) {
+    throw new Error("Bulk upload supports up to 2000 rows per file. Please split very large catalogues.");
+  }
+
+  const existing = await existingBulkKeys(vendorId, terminalId);
+  const seen = new Set();
+  return rawRows.map((rawRow, index) => {
+    const row = normalizeBulkRow(rawRow, index);
+    if (row.status === "valid") {
+      if (!row.import_key) {
+        row.status = "error";
+        row.errors = ["Unable to create duplicate-check key for this row."];
+      } else if (existing.has(row.import_key)) {
+        row.status = "duplicate";
+        row.duplicate_reason = "Already exists in this vendor catalogue.";
+      } else if (seen.has(row.import_key)) {
+        row.status = "duplicate";
+        row.duplicate_reason = "Duplicate row inside this upload file.";
+      } else {
+        seen.add(row.import_key);
+      }
+    }
+    return row;
+  });
+}
 function validationErrorResponse(res, validation) {
   return res.status(validation.status).json({
     success: false,
@@ -148,6 +334,274 @@ function validationErrorResponse(res, validation) {
   });
 }
 
+
+
+function supportedListMime(file) {
+  const mime = clean(file?.mimetype).toLowerCase();
+  return mime.startsWith("image/") || mime === "application/pdf";
+}
+
+function aiRowToBulkRow(item, index) {
+  const pack = clean(item.pack || item.pack_text || item.quantity_unit || [item.quantity, item.unit].filter(Boolean).join(" "));
+  return normalizeBulkRow({
+    "Product/Medicine Name": item.product_name || item.name || item.item_name || "",
+    "Brand/Manufacturer": item.brand || item.brand_name || item.manufacturer || "",
+    "Category": item.category || "",
+    "Pack/Quantity/Unit": pack,
+    "Selling Price": item.selling_price ?? item.price ?? "",
+    "MRP": item.mrp ?? "",
+    "Availability/In Stock": item.availability ?? item.available ?? "",
+    "Product Photo/Image URL": "",
+  }, index);
+}
+
+async function extractCatalogueRowsFromFiles(files, { vendorId, userId }) {
+  if (!process.env.GEMINI_API_KEY) {
+    throw new Error("AI extraction is not configured. GEMINI_API_KEY is missing on the backend.");
+  }
+  const parts = [{
+    text: `You are extracting a local Indian shop catalogue from uploaded photos, scans or PDFs.
+Return strict JSON only, without markdown:
+{
+  "items": [
+    {
+      "product_name": "string",
+      "brand": "string|null",
+      "category": "kirana|vegetables|fruits|dairy|bakery|beverages|household|personal-care|packaged-food|pharmacy|stationery|hardware|tiffin|restaurant|other|null",
+      "pack": "string|null",
+      "mrp": number|null,
+      "selling_price": number|null,
+      "availability": "Yes|No|null",
+      "confidence": number,
+      "needs_vendor_review": boolean,
+      "review_reason": "string|null"
+    }
+  ],
+  "notes": "string"
+}
+Rules:
+- Extract only text visible in the supplied list/pages.
+- Product/Item/Medicine Name is the primary field.
+- Never invent product names, prices, quantities, brands or availability.
+- If a field cannot be confidently read, return null for that field.
+- Mark needs_vendor_review true when the row is unclear, handwritten, partly unreadable, or price/quantity might be confused.
+- The uploaded list itself is not a product photograph. Do not create image URLs.`
+  }];
+
+  for (const file of files) {
+    parts.push({
+      inlineData: {
+        mimeType: file.mimetype || "image/jpeg",
+        data: file.buffer.toString("base64"),
+      },
+    });
+  }
+
+  const response = await genAI.models.generateContent({
+    model: geminiModel,
+    contents: [{ role: "user", parts }],
+    config: { temperature: 0.1, maxOutputTokens: 8192 },
+  });
+
+  const parsed = extractJsonObject(response.text || "{}");
+  const items = Array.isArray(parsed.items) ? parsed.items : [];
+
+  await writeGeminiAuditLog({
+    agentType: "catalogue_list_extraction",
+    inputType: "document",
+    inputSummary: `${files.length} catalogue list file(s) uploaded for extraction.`,
+    model: geminiModel,
+    responseJson: {
+      item_count: items.length,
+      notes: parsed.notes || null,
+    },
+    userId,
+    vendorId,
+  });
+
+  return {
+    notes: parsed.notes || null,
+    rows: items.map((item, index) => {
+      const row = aiRowToBulkRow(item, index);
+      const confidence = Number(item.confidence || 0);
+      return {
+        ...row,
+        confidence: Number.isFinite(confidence) ? confidence : 0,
+        review_required: Boolean(item.needs_vendor_review) || confidence < 0.75,
+        review_reason: clean(item.review_reason) || (confidence < 0.75 ? "Low extraction confidence; please review before import." : null),
+        image_url: null,
+      };
+    }),
+  };
+}
+router.get("/setup/bulk-template.csv", (_req, res) => {
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader("Content-Disposition", 'attachment; filename="sabsewa-bulk-product-template.csv"');
+  return res.send(bulkSampleCsv());
+});
+
+router.post("/setup/bulk-preview", bulkCatalogueUpload.single("file"), async (req, res) => {
+  try {
+    const vendorId = clean(req.body?.vendor_id);
+    const terminalId = clean(req.body?.terminal_id);
+    if (!vendorId) return res.status(400).json({ success: false, error: "Vendor ID is required." });
+    if (!req.file) return res.status(400).json({ success: false, error: "Upload an Excel or CSV file." });
+
+    const validation = await validateVendorTerminal(vendorId, terminalId);
+    if (!validation.ok) return validationErrorResponse(res, validation);
+
+    const rows = await buildBulkPreview(req.file, vendorId, terminalId);
+    return res.json({ success: true, file_name: req.file.originalname, summary: summarizeBulkRows(rows), rows });
+  } catch (error) {
+    console.error("Bulk catalogue preview failed", error);
+    return res.status(500).json({ success: false, error: error.message || "Bulk catalogue preview failed." });
+  }
+});
+
+
+router.post("/setup/list-scan-preview", bulkCatalogueUpload.array("files", 8), async (req, res) => {
+  try {
+    const vendorId = clean(req.body?.vendor_id);
+    const terminalId = clean(req.body?.terminal_id);
+    const actorUserId = clean(req.body?.actor_user_id);
+    const files = Array.isArray(req.files) ? req.files : [];
+
+    if (!vendorId) return res.status(400).json({ success: false, error: "Vendor ID is required." });
+    if (files.length === 0) return res.status(400).json({ success: false, error: "Upload at least one product-list photo, scan or PDF." });
+    if (files.some((file) => !supportedListMime(file))) {
+      return res.status(400).json({ success: false, error: "Only images and PDF documents are supported for list scanning." });
+    }
+
+    const validation = await validateVendorTerminal(vendorId, terminalId);
+    if (!validation.ok) return validationErrorResponse(res, validation);
+
+    const extracted = await extractCatalogueRowsFromFiles(files, { vendorId, userId: actorUserId });
+    const existing = await existingBulkKeys(vendorId, terminalId);
+    const seen = new Set();
+    const rows = extracted.rows.map((row) => {
+      if (row.status === "valid") {
+        if (!row.import_key) {
+          row.status = "error";
+          row.errors = ["Unable to create duplicate-check key for this extracted row."];
+        } else if (existing.has(row.import_key)) {
+          row.status = "duplicate";
+          row.duplicate_reason = "Already exists in this vendor catalogue.";
+        } else if (seen.has(row.import_key)) {
+          row.status = "duplicate";
+          row.duplicate_reason = "Duplicate detected across uploaded pages.";
+        } else {
+          seen.add(row.import_key);
+        }
+      }
+      return row;
+    });
+
+    const summary = summarizeBulkRows(rows);
+    summary.review_required_count = rows.filter((row) => row.review_required && row.status === "valid").length;
+    summary.clear_count = rows.filter((row) => !row.review_required && row.status === "valid").length;
+
+    return res.json({
+      success: true,
+      source: "ai_list_extraction",
+      file_names: files.map((file) => file.originalname),
+      notes: extracted.notes,
+      summary,
+      rows,
+    });
+  } catch (error) {
+    console.error("Catalogue list scan preview failed", error);
+    return res.status(500).json({ success: false, error: error.message || "Catalogue list scan failed." });
+  }
+});
+router.post("/setup/bulk-import", async (req, res) => {
+  try {
+    const {
+      vendor_id: vendorId,
+      terminal_id: terminalId,
+      actor_user_id: actorUserId,
+      rows = [],
+    } = req.body || {};
+
+    if (!vendorId) return res.status(400).json({ success: false, error: "Vendor ID is required." });
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return res.status(400).json({ success: false, error: "No preview rows were selected for import." });
+    }
+
+    const validation = await validateVendorTerminal(vendorId, terminalId);
+    if (!validation.ok) return validationErrorResponse(res, validation);
+
+    const existing = await existingBulkKeys(vendorId, terminalId);
+    const seen = new Set();
+    const skipped = [];
+    const accepted = [];
+
+    rows.slice(0, 2000).forEach((input, index) => {
+      const row = normalizeBulkRow(input, index);
+      const key = row.import_key;
+      if (row.errors.length) {
+        skipped.push({ ...row, status: "error" });
+      } else if (!key || existing.has(key) || seen.has(key)) {
+        skipped.push({ ...row, status: "duplicate", duplicate_reason: existing.has(key) ? "Already exists in catalogue." : "Duplicate inside import request." });
+      } else {
+        seen.add(key);
+        accepted.push(row);
+      }
+    });
+
+    if (accepted.length === 0) {
+      return res.json({ success: true, imported_count: 0, skipped_count: skipped.length, skipped });
+    }
+
+    const now = new Date().toISOString();
+    const insertRows = accepted.map((row) => ({
+      vendor_id: vendorId,
+      terminal_id: terminalId || null,
+      item_name: row.product_name,
+      generic_product_name: row.product_name,
+      brand_name: row.brand_name || null,
+      pack_size: numberOrNull(row.pack_size),
+      pack_unit: clean(row.pack_unit || row.pack_text) || null,
+      mrp: numberOrNull(row.mrp),
+      mrp_pricing_policy: "manual",
+      mrp_discount_percent: 0,
+      master_mrp_snapshot: numberOrNull(row.mrp),
+      price: numberOrNull(row.price) || 0,
+      price_display_mode: numberOrNull(row.price) ? "show_price" : "hide_price",
+      price_unit_label: clean(row.pack_unit || row.pack_text) || null,
+      available_today: row.available_today !== false,
+      is_available: row.available_today !== false,
+      daily_availability_status: row.available_today === false ? "temporarily_unavailable" : "available",
+      stock_status: row.available_today === false ? "temporarily_unavailable" : "in_stock",
+      listing_review_status: "pending_review",
+      listing_review_reason: "Vendor bulk-uploaded product pending master-catalogue moderation.",
+      master_catalogue_status: "pending_review",
+      image_reference_type: clean(row.image_url) ? "vendor_private" : "image_pending",
+      item_pic: clean(row.image_url) || null,
+      source_type: "vendor_bulk_upload",
+      price_updated_at: now,
+      price_updated_by: actorUserId || null,
+      daily_availability_updated_at: now,
+    }));
+
+    const { data: inserted, error: insertError } = await supabase
+      .from("vendor_items")
+      .insert(insertRows)
+      .select();
+
+    if (insertError) throw insertError;
+
+    return res.status(201).json({
+      success: true,
+      imported_count: inserted?.length || 0,
+      skipped_count: skipped.length,
+      skipped,
+      items: inserted || [],
+    });
+  } catch (error) {
+    console.error("Bulk catalogue import failed", error);
+    return res.status(500).json({ success: false, error: error.message || "Bulk catalogue import failed." });
+  }
+});
 router.get("/setup/master-products", async (req, res) => {
   try {
     const search = clean(req.query.search);

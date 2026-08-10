@@ -149,3 +149,15 @@ Vendors now have three catalogue creation choices: add products manually, bulk u
 ### Partner Application confirmation
 
 Partner applications are submitted through the backend at `POST /api/partner/applications` so the applicant only sees success after the database record is saved. The confirmation screen shows the generated Partner Application ID, applicant name, mobile number, proposed area and current status. Duplicate mobile-number submissions return the existing Application ID/status instead of creating another application. Run `supabase/RUN_ONLY_PARTNER_APPLICATION_CONFIRMATION_WORKFLOW_2026_08_10.sql` to enable `SSL-P-000123` style application tracking IDs.
+
+## Partner Commission Payment, KYC and Compliance Workflow
+
+The Partner Program now supports commission payment details, Partner KYC, admin review, compliance actions and payout ledger tracking. Partner payment details are submitted through the backend and sensitive account/UPI values require the server-only `PARTNER_PAYMENT_DETAILS_ENCRYPTION_KEY`; do not expose this value in frontend `EXPO_PUBLIC_*` variables or commit it to GitHub.
+
+Required setup after pulling this code:
+
+1. Run `supabase/RUN_ONLY_PARTNER_COMMISSION_PAYMENT_KYC_AND_COMPLIANCE_2026_08_10.sql` in the production Supabase SQL Editor.
+2. Set `PARTNER_PAYMENT_DETAILS_ENCRYPTION_KEY` only on the backend EC2 `.env`.
+3. Restart PM2 and rebuild/upload `mobile/dist`.
+
+Partner activation flow: Application Submitted -> Partner KYC Uploaded/Submitted -> Partner KYC Verified -> Payment Details Verified -> Master Admin Approval -> Active Partner. Commission statements are accounting records only and do not automatically transfer funds.

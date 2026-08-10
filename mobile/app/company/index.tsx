@@ -117,6 +117,9 @@ export default function CompanyCrmHome() {
       <TouchableOpacity style={styles.button} onPress={() => router.push("/company/PartnerApplications" as any)}>
         <Text style={styles.buttonText}>Partner Applications</Text>
       </TouchableOpacity>
+      <TouchableOpacity style={styles.button} onPress={() => router.push("/company/PartnerPayoutManagement" as any)}>
+        <Text style={styles.buttonText}>Partner Payout Management</Text>
+      </TouchableOpacity>
       <TouchableOpacity style={styles.button} onPress={() => router.push("/company/VendorBulkUpload" as any)}>
         <Text style={styles.buttonText}>Bulk Catalogue Upload</Text>
       </TouchableOpacity>

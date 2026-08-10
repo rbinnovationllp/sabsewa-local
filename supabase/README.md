@@ -87,3 +87,7 @@ SUPABASE_SERVICE_ROLE_KEY=YOUR_NEW_SERVICE_ROLE_KEY
 ```
 
 Then rotate any old service-role key that was accidentally stored in local `.env` files.
+
+## Partner Commission Payment/KYC SQL - 2026-08-10
+
+Run `RUN_ONLY_PARTNER_COMMISSION_PAYMENT_KYC_AND_COMPLIANCE_2026_08_10.sql` after the Partner Program expansion SQL. It adds Partner payment detail storage, Partner KYC document metadata, Partner monthly commission statements, compliance cases and audit logs. The `partner-kyc-private` bucket remains private; never make Partner KYC documents public.

@@ -1160,3 +1160,12 @@ Manual Supabase action required:
 - Updated applicant confirmation screen to show Name, Mobile Number, Proposed Area, Application ID and Current Status.
 - Updated Company CRM Partner Management to make pending Partner Applications visible for Master Admin review.
 - Manual action: run `supabase/RUN_ONLY_PARTNER_APPLICATION_CONFIRMATION_WORKFLOW_2026_08_10.sql`, deploy backend, rebuild `mobile/dist`.
+
+### Partner Commission Payment, KYC and Compliance Workflow - 2026-08-10
+- Added mandatory Partner commission payment details to the Partner Application: UPI or bank account with repeat-entry validation and masked confirmation display.
+- Added server-side encryption requirement for sensitive Partner payment details using `PARTNER_PAYMENT_DETAILS_ENCRYPTION_KEY`; raw bank/UPI values are not returned to the frontend.
+- Added separate Partner KYC workflow and private `partner-kyc-private` storage path, keeping Partner KYC separate from Vendor KYC.
+- Added Partner KYC statuses, payment-detail verification statuses, admin audit logs, compliance case tracking, and monthly commission statement ledger.
+- Added Master Admin/authorized admin Partner review controls for KYC approval/correction/rejection, payment-detail verification, activation, suspension, reinstatement and termination.
+- Added Partner Payout Management CRM screen and basic Partner Dashboard for commission statements.
+- Manual action required: run `supabase/RUN_ONLY_PARTNER_COMMISSION_PAYMENT_KYC_AND_COMPLIANCE_2026_08_10.sql`, configure `PARTNER_PAYMENT_DETAILS_ENCRYPTION_KEY` on the EC2 backend, rebuild `mobile/dist`, deploy to Hostinger, then update EC2.

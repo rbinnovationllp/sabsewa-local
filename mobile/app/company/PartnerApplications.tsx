@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import BrandHeader from "@/components/BrandHeader";
-import { supabase } from "@/lib/supabase";
-import { useAuth } from "@/providers/AuthProvider";
+import { authenticatedFetch } from "@/lib/backend";
 
 const statuses = ["pending", "under_review", "approved", "rejected", "active", "suspended", "revoked"] as const;
 
@@ -12,21 +11,17 @@ function fmtMoney(value: any) {
 }
 
 export default function PartnerApplicationsScreen() {
-  const { user } = useAuth();
-  const [applications, setApplications] = useState<any[]>([]);
+    const [applications, setApplications] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
 
   async function loadApplications() {
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from("partner_applications")
-        .select("*, partner_referred_vendors(id, referral_status, vendor_id, eligible_revenue_amount, benefit_earned_amount), partner_commission_events(id, status, gross_revenue, net_revenue, commission_amount)")
-        .order("created_at", { ascending: false })
-        .limit(200);
-      if (error) throw error;
-      setApplications(data || []);
+      const response = await authenticatedFetch("/api/partner/admin/applications");
+      const json = await response.json();
+      if (!response.ok || !json.success) throw new Error(json.error || "Unable to load applications.");
+      setApplications(json.applications || []);
     } catch (error: any) {
       Alert.alert("Partner applications", error?.message || "Unable to load applications.");
     } finally {
@@ -35,24 +30,53 @@ export default function PartnerApplicationsScreen() {
   }
 
   async function updateStatus(id: string, status: string) {
-    const patch: any = {
-      status,
-      reviewed_by: user?.id || null,
-      reviewed_at: new Date().toISOString(),
+    const actionMap: Record<string, string> = {
+      approved: "activate_partner",
+      active: "activate_partner",
+      suspended: "suspend_partner",
+      revoked: "terminate_partner",
+      rejected: "reject_kyc",
+      under_review: "request_kyc_correction",
+      pending: "request_kyc_correction",
     };
-    if (status === "approved") patch.approved_at = new Date().toISOString();
-    if (status === "active") patch.active_at = new Date().toISOString();
-    if (status === "rejected") patch.rejected_at = new Date().toISOString();
-    if (status === "suspended") patch.suspended_at = new Date().toISOString();
-
-    const { error } = await supabase
-      .from("partner_applications")
-      .update(patch)
-      .eq("id", id);
-    if (error) {
-      Alert.alert("Update failed", error.message);
+    const action = actionMap[status] || "request_kyc_correction";
+    const reason = action.includes("suspend") || action.includes("terminate") || action.includes("reject")
+      ? prompt("Enter reason for this Partner action") || ""
+      : "";
+    const response = await authenticatedFetch(`/api/partner/admin/applications/${id}/review`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, reason }),
+    });
+    const json = await response.json();
+    if (!response.ok || !json.success) {
+      Alert.alert("Update failed", json.error || "Unable to update Partner record.");
       return;
     }
+    loadApplications();
+  }
+
+  async function reviewPartner(id: string, action: string) {
+    const reason = action.includes("reject") || action.includes("correction") ? prompt("Reason/comments") || "" : "";
+    const response = await authenticatedFetch(`/api/partner/admin/applications/${id}/review`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, reason }),
+    });
+    const json = await response.json();
+    if (!response.ok || !json.success) return Alert.alert("Partner review", json.error || "Unable to update Partner.");
+    loadApplications();
+  }
+
+  async function reviewPartner(id: string, action: string) {
+    const reason = action.includes("reject") || action.includes("correction") ? prompt("Reason/comments") || "" : "";
+    const response = await authenticatedFetch(`/api/partner/admin/applications/${id}/review`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, reason }),
+    });
+    const json = await response.json();
+    if (!response.ok || !json.success) return Alert.alert("Partner review", json.error || "Unable to update Partner.");
     loadApplications();
   }
 
@@ -116,8 +140,7 @@ export default function PartnerApplicationsScreen() {
       </TouchableOpacity>
 
       {filtered.map((application) => {
-        const referrals = application.partner_referred_vendors || [];
-        const commissions = application.partner_commission_events || [];
+        const referrals = application.referrals || application.raw?.partner_referred_vendors || [];`r`n        const commissions = application.commission_events || application.raw?.partner_commission_events || [];
         const activated = referrals.filter((item: any) => ["approved", "commission_eligible"].includes(item.referral_status)).length;
         const eligibleRevenue = referrals.reduce((sum: number, item: any) => sum + Number(item.eligible_revenue_amount || 0), 0);
         const earned = referrals.reduce((sum: number, item: any) => sum + Number(item.benefit_earned_amount || 0), 0)
@@ -142,7 +165,7 @@ export default function PartnerApplicationsScreen() {
               <Text style={styles.identityText}>Partner ID: {application.partner_id || "Generated after SQL update"}</Text>
               <Text style={styles.identityText}>Referral Code: {application.referral_code || "Generated after SQL update"}</Text>
               <Text style={styles.identityText}>Referral Link: {application.referral_link || "Generated after SQL update"}</Text>
-              <Text style={styles.identityText}>Benefit %: {Number(application.revenue_share_percent || 10).toFixed(2)}%</Text>
+              <Text style={styles.identityText}>Benefit %: {Number(application.raw?.revenue_share_percent || 10).toFixed(2)}%</Text>`r`n              <Text style={styles.identityText}>Partner KYC: {String(application.kyc_status || "not_submitted").replace(/_/g, " ")}</Text>`r`n              <Text style={styles.identityText}>Payment Details: {String(application.payment_details_status || "pending_verification").replace(/_/g, " ")}</Text>`r`n              <Text style={styles.identityText}>Payment Method: {application.payment_detail?.payment_method || "-"}</Text>
             </View>
 
             <Text style={styles.body}>Area: {application.proposed_area_of_operation || application.coverage_area}</Text>
@@ -158,8 +181,7 @@ export default function PartnerApplicationsScreen() {
               <Metric label="Pending" value={fmtMoney(Math.max(0, earned - paid))} />
             </View>
 
-            <View style={styles.actions}>
-              {statuses.map((status) => (
+            <View style={styles.actions}>`r`n              <TouchableOpacity style={styles.actionButton} onPress={() => reviewPartner(application.id, "approve_kyc")}><Text style={styles.actionText}>Approve KYC</Text></TouchableOpacity>`r`n              <TouchableOpacity style={styles.actionButton} onPress={() => reviewPartner(application.id, "request_kyc_correction")}><Text style={styles.actionText}>Request KYC Correction</Text></TouchableOpacity>`r`n              <TouchableOpacity style={styles.actionButton} onPress={() => reviewPartner(application.id, "verify_payment_details")}><Text style={styles.actionText}>Verify Payment Details</Text></TouchableOpacity>`r`n              <TouchableOpacity style={styles.actionButton} onPress={() => reviewPartner(application.id, "reject_payment_details")}><Text style={styles.actionText}>Reject Payment Details</Text></TouchableOpacity>`r`n              {statuses.map((status) => (
                 <TouchableOpacity key={status} style={styles.actionButton} onPress={() => updateStatus(application.id, status)}>
                   <Text style={styles.actionText}>{status.replace(/_/g, " ")}</Text>
                 </TouchableOpacity>

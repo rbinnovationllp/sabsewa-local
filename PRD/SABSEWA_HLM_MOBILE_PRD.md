@@ -356,3 +356,10 @@ The HLM MVP is acceptable for hackathon demo when:
 - A submitted application is `pending` until Master Admin/Admin review; the applicant must not be told they are an active Marketing Partner until status becomes `active`.
 - Duplicate applications using the same mobile number should show the existing Application ID/status instead of creating another record.
 - Master Admin CRM must show pending Partner Applications for review and update status to approved, rejected, active, suspended or revoked as applicable.
+
+### Partner KYC, Commission Payment and Compliance - 2026-08-10
+- Partner Application collects PAN/tax profile and commission payment method with strict masking and server-side encryption for sensitive payout destination details.
+- Partner KYC is mandatory before Partner activation and payout eligibility. Required sections are Identity Proof, Address Proof where needed, Partner Photograph/Selfie, and organization documents for organization applicants.
+- Master Admin/authorized staff can verify Partner KYC, verify payment details, activate, suspend, reinstate or terminate Partners with audit trails and reasons.
+- Monthly Partner commission statements track eligible revenue, configurable percentage, deductions/TDS, net payable, payout status, date and reference number without automatic fund transfer.
+- Partner conduct/confidentiality and protective suspension rules are part of Partner workflow and documentation.

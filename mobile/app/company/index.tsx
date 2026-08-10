@@ -20,6 +20,7 @@ export default function CompanyCrmHome() {
   const [paymentEnvironment, setPaymentEnvironment] = useState<any>(null);
   const [kycSummary, setKycSummary] = useState<KycSummary | null>(null);
   const [loadingKyc, setLoadingKyc] = useState(false);
+  const [partnerKycPending, setPartnerKycPending] = useState(0);
 
   useEffect(() => {
     fetch(apiUrl("/api/admin/payment-environment"))
@@ -29,6 +30,7 @@ export default function CompanyCrmHome() {
       })
       .catch(() => setPaymentEnvironment(null));
     loadKycSummary();
+    loadPartnerKycSummary();
   }, []);
 
   async function loadKycSummary() {
@@ -44,6 +46,20 @@ export default function CompanyCrmHome() {
 
   function openQueue(filter: string) {
     router.push({ pathname: "/company/KycReviewQueue", params: { filter } } as any);
+  }
+
+  async function loadPartnerKycSummary() {
+    try {
+      const response = await authenticatedFetch("/api/partner/admin/applications");
+      const json = await response.json();
+      if (!response.ok || !json.success) return;
+      const pending = (json.applications || []).filter((application: any) =>
+        ["documents_submitted", "under_review"].includes(String(application.kyc_status || ""))
+      ).length;
+      setPartnerKycPending(pending);
+    } catch {
+      setPartnerKycPending(0);
+    }
   }
 
   return (
@@ -116,6 +132,9 @@ export default function CompanyCrmHome() {
       </TouchableOpacity>
       <TouchableOpacity style={styles.button} onPress={() => router.push("/company/PartnerApplications" as any)}>
         <Text style={styles.buttonText}>Partner Applications</Text>
+      </TouchableOpacity>
+      <TouchableOpacity style={[styles.button, styles.warnCard]} onPress={() => router.push("/company/PartnerApplications" as any)}>
+        <Text style={styles.buttonText}>Partner KYC Pending Review: {partnerKycPending}</Text>
       </TouchableOpacity>
       <TouchableOpacity style={styles.button} onPress={() => router.push("/company/PartnerPayoutManagement" as any)}>
         <Text style={styles.buttonText}>Partner Payout Management</Text>

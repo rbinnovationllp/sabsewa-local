@@ -45,14 +45,14 @@ const emptyForm = {
 };
 
 const kycSections = [
-  { id: "identity_proof", title: "Identity Proof", required: true, options: [
+  { id: "identity_proof", title: "Government-Issued Identity Proof", required: true, options: [
     ["aadhaar", "Aadhaar Card"], ["pan_card", "PAN Card"], ["voter_id", "Voter ID Card"], ["driving_licence", "Driving Licence"], ["passport", "Passport"], ["other_identity_proof", "Other government-issued identity proof"],
   ] },
   { id: "address_proof", title: "Address Proof", required: true, options: [
     ["aadhaar_address", "Aadhaar with address"], ["driving_licence_address", "Driving Licence with address"], ["passport_address", "Passport with address"], ["voter_id_address", "Voter ID with address"], ["utility_bill", "Recent utility bill"], ["other_address_proof", "Other legal address proof"],
   ] },
-  { id: "partner_photo", title: "Partner Photograph / Selfie", required: true, options: [
-    ["partner_selfie", "Recent partner selfie"], ["authorized_person_photo", "Authorized person photograph"],
+  { id: "partner_photo", title: "Partner Photograph", required: true, options: [
+    ["partner_selfie", "Recent passport-size partner photograph"], ["authorized_person_photo", "Authorized person photograph"],
   ] },
   { id: "organization_document", title: "Organization Document", required: false, options: [
     ["incorporation_certificate", "Registration/Incorporation Certificate"], ["organization_pan", "Organization PAN"], ["gst_certificate", "GST certificate"], ["authorization_letter", "Authorization letter"], ["representative_identity", "Representative identity proof"], ["other_organization_document", "Other organization document"],
@@ -69,6 +69,20 @@ function labelStatus(status: string) {
 
 function isOrganizationType(value: string) {
   return /organization|ngo|institution|company|llp/i.test(String(value || ""));
+}
+
+function requiredKycSectionsFor(application: any, fallbackPartnerType: string) {
+  return kycSections.filter((section) =>
+    section.required ||
+    (section.id === "organization_document" && isOrganizationType(application?.partner_type || fallbackPartnerType))
+  );
+}
+
+function uploadedKycText(section: any, doc: any) {
+  if (!doc) return "Missing";
+  if (section.id === "identity_proof") return "\u2713 Identity Proof Uploaded Successfully";
+  if (section.id === "partner_photo") return "\u2713 Partner Photograph Uploaded Successfully";
+  return `\u2713 ${doc.document_label || section.title} Uploaded Successfully`;
 }
 
 function paymentSummary(application: any) {
@@ -220,7 +234,7 @@ export default function PartnerWithUsScreen() {
 
   async function submitKycForReview() {
     if (!confirmation?.id || !confirmation?.phone) return;
-    const needed = kycSections.filter((section) => section.required || (section.id === "organization_document" && isOrganizationType(confirmation.partner_type || form.partner_type)));
+    const needed = requiredKycSectionsFor(confirmation, form.partner_type);
     const missing = needed.filter((section) => !uploadedDocs[section.id]);
     if (missing.length) return Alert.alert("KYC documents missing", missing.map((section) => `${section.title} missing`).join("\n"));
     const response = await fetch(apiUrl(`/api/partner/applications/${confirmation.id}/submit-kyc`), {
@@ -276,7 +290,7 @@ export default function PartnerWithUsScreen() {
             <ConfirmLine label="Commission Payment Method" value={paymentSummary(confirmation)} />
             <Text style={styles.notice}>Payment details are stored securely. Only masked payment details are shown here.</Text>
             <Text style={styles.sectionTitle}>Partner KYC Upload</Text>
-            {kycSections.filter((section) => section.required || (section.id === "organization_document" && isOrganizationType(confirmation.partner_type || form.partner_type))).map((section: any) => (
+            {requiredKycSectionsFor(confirmation, form.partner_type).map((section: any) => (
               <View key={section.id} style={[styles.kycBox, uploadedDocs[section.id] && styles.kycDone]}>
                 <Text style={styles.label}>{section.title} *</Text>
                 <View style={styles.chips}>{section.options.map((option: any) => (
@@ -284,15 +298,24 @@ export default function PartnerWithUsScreen() {
                     <Text style={[styles.chipText, selectedDocs[section.id] === option[0] && styles.chipTextSelected]}>{option[1]}</Text>
                   </TouchableOpacity>
                 ))}</View>
-                <Text style={uploadedDocs[section.id] ? styles.successText : styles.missingText}>{uploading === section.id ? "Uploading..." : uploadedDocs[section.id] ? `${uploadedDocs[section.id].document_label || section.title} Uploaded Successfully` : "Missing"}</Text>
+                <Text style={uploadedDocs[section.id] ? styles.successText : styles.missingText}>{uploading === section.id ? "Uploading..." : uploadedKycText(section, uploadedDocs[section.id])}</Text>
                 <View style={styles.actions}>
-                  <TouchableOpacity style={styles.secondaryBtn} onPress={() => uploadKyc(section, "camera")}><Text style={styles.secondaryText}>{section.id === "partner_photo" ? "Take Selfie" : "Take Photo"}</Text></TouchableOpacity>
+                  <TouchableOpacity style={styles.secondaryBtn} onPress={() => uploadKyc(section, "camera")}><Text style={styles.secondaryText}>{section.id === "partner_photo" ? "Take Photo" : "Take Photo"}</Text></TouchableOpacity>
                   <TouchableOpacity style={styles.secondaryBtn} onPress={() => uploadKyc(section, "gallery")}><Text style={styles.secondaryText}>Gallery</Text></TouchableOpacity>
                   <TouchableOpacity style={styles.secondaryBtn} onPress={() => uploadKyc(section, "files")}><Text style={styles.secondaryText}>Files</Text></TouchableOpacity>
                 </View>
               </View>
             ))}
-            <TouchableOpacity style={styles.primaryButton} onPress={submitKycForReview}><Text style={styles.primaryText}>Submit Partner KYC for Review</Text></TouchableOpacity>
+            {requiredKycSectionsFor(confirmation, form.partner_type).filter((section: any) => !uploadedDocs[section.id]).map((section: any) => (
+              <Text key={section.id} style={styles.missingText}>{section.title} missing - upload before submitting.</Text>
+            ))}
+            <TouchableOpacity
+              style={[styles.primaryButton, (uploading || requiredKycSectionsFor(confirmation, form.partner_type).some((section: any) => !uploadedDocs[section.id])) && styles.disabled]}
+              disabled={Boolean(uploading) || requiredKycSectionsFor(confirmation, form.partner_type).some((section: any) => !uploadedDocs[section.id])}
+              onPress={submitKycForReview}
+            >
+              <Text style={styles.primaryText}>{uploading ? "Upload in progress..." : "Submit Partner KYC for Review"}</Text>
+            </TouchableOpacity>
             <TouchableOpacity style={styles.secondaryButton} onPress={() => setConfirmation(null)}><Text style={styles.secondaryText}>Submit another application</Text></TouchableOpacity>
           </View>
         ) : null}
@@ -343,8 +366,8 @@ export default function PartnerWithUsScreen() {
           )}
         </View>
 
-        <TouchableOpacity style={styles.acceptRow} onPress={() => setAccepted((value) => !value)}><View style={[styles.checkbox, accepted && styles.checked]}>{accepted ? <Text style={styles.checkText}>âœ“</Text> : null}</View><Text style={styles.acceptText}>I accept that the Partner Program is for vendor onboarding and customer awareness. I understand the initial 10% benefit applies only to eligible company revenue, is configurable by SabSewa Local, and does not mean equity or ownership.</Text></TouchableOpacity>
-        <TouchableOpacity style={styles.acceptRow} onPress={() => setKycAccepted((value) => !value)}><View style={[styles.checkbox, kycAccepted && styles.checked]}>{kycAccepted ? <Text style={styles.checkText}>âœ“</Text> : null}</View><Text style={styles.acceptText}>I declare that the information and documents provided by me are true, valid and belong to me or the organization I am authorized to represent. I authorize SabSewa Local to use these documents for Partner Program identity, KYC, payment and compliance verification. I understand false, forged or misleading information may result in suspension or termination and withholding of payments where legally permitted.</Text></TouchableOpacity>
+        <TouchableOpacity style={styles.acceptRow} onPress={() => setAccepted((value) => !value)}><View style={[styles.checkbox, accepted && styles.checked]}>{accepted ? <Text style={styles.checkText}>{"\u2713"}</Text> : null}</View><Text style={styles.acceptText}>I accept that the Partner Program is for vendor onboarding and customer awareness. I understand the initial 10% benefit applies only to eligible company revenue, is configurable by SabSewa Local, and does not mean equity or ownership.</Text></TouchableOpacity>
+        <TouchableOpacity style={styles.acceptRow} onPress={() => setKycAccepted((value) => !value)}><View style={[styles.checkbox, kycAccepted && styles.checked]}>{kycAccepted ? <Text style={styles.checkText}>{"\u2713"}</Text> : null}</View><Text style={styles.acceptText}>I declare that the information and documents provided by me are true, valid and belong to me or the organization I am authorized to represent. I authorize SabSewa Local to use these documents for Partner Program identity, KYC, payment and compliance verification. I understand false, forged or misleading information may result in suspension or termination and withholding of payments where legally permitted.</Text></TouchableOpacity>
 
         <TouchableOpacity style={[styles.submitButton, submitting && styles.disabled]} onPress={submitApplication} disabled={submitting}><Text style={styles.submitText}>{submitting ? t("common.loading") : t("partner.submit")}</Text></TouchableOpacity>
       </View>

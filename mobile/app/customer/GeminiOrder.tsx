@@ -12,6 +12,7 @@ import {
 import * as Location from "expo-location";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useAuth } from "@/providers/AuthProvider";
+import { useLanguage } from "@/providers/LanguageProvider";
 import { apiUrl } from "@/lib/backend";
 import { supabase } from "@/lib/supabase";
 import { parseOrderWithGemini } from "@/services/gemini";

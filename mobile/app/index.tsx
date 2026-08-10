@@ -276,6 +276,9 @@ const styles = StyleSheet.create({
   },
   greetingText: { color: "#0f766e", fontSize: 18, fontWeight: "900", lineHeight: 24 },
   switchText: { color: "#1166ff", fontWeight: "900", marginTop: 8 },
+  partnerHomeBanner: { borderWidth: 1, borderColor: "#fdba74", backgroundColor: "#fff7ed", borderRadius: 8, padding: 14, marginBottom: 14 },
+  partnerHomeTitle: { color: "#9a3412", fontSize: 18, fontWeight: "900", marginBottom: 4 },
+  partnerHomeText: { color: "#7c2d12", lineHeight: 20 },
   
   // Showcase Card Styles
   showcaseSection: { marginBottom: 16 },

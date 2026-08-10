@@ -10,6 +10,28 @@ function fmtMoney(value: any) {
   return `Rs ${n.toFixed(2)}`;
 }
 
+function latestKycDoc(application: any, section: string) {
+  const docs = application.kyc_documents || application.raw?.partner_kyc_documents || [];
+  return docs
+    .filter((doc: any) => doc.document_section === section && doc.status !== "deleted")
+    .sort((a: any, b: any) => String(b.created_at || "").localeCompare(String(a.created_at || "")))[0] || null;
+}
+
+function kycStatusText(doc: any) {
+  if (!doc) return "Missing";
+  return `${String(doc.status || "uploaded").replace(/_/g, " ")}${doc.document_label ? ` - ${doc.document_label}` : ""}`;
+}
+
+function timePendingText(value: any) {
+  if (!value) return "-";
+  const started = new Date(value).getTime();
+  if (!Number.isFinite(started)) return "-";
+  const hours = Math.max(0, Math.floor((Date.now() - started) / 36e5));
+  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"}`;
+  const days = Math.floor(hours / 24);
+  return `${days} day${days === 1 ? "" : "s"} ${hours % 24}h`;
+}
+
 export default function PartnerApplicationsScreen() {
     const [applications, setApplications] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -68,17 +90,19 @@ export default function PartnerApplicationsScreen() {
     loadApplications();
   }
 
-  async function reviewPartner(id: string, action: string) {
-    const reason = action.includes("reject") || action.includes("correction") ? prompt("Reason/comments") || "" : "";
-    const response = await authenticatedFetch(`/api/partner/admin/applications/${id}/review`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action, reason }),
-    });
+  async function previewKycDocument(documentId: string) {
+    const response = await authenticatedFetch(`/api/partner/admin/kyc-documents/${documentId}/view`);
     const json = await response.json();
-    if (!response.ok || !json.success) return Alert.alert("Partner review", json.error || "Unable to update Partner.");
-    loadApplications();
+    if (!response.ok || !json.success || !json.url) {
+      Alert.alert("Partner KYC document", json.error || "Unable to open secure KYC preview.");
+      return;
+    }
+    const openWindow = (globalThis as any).open;
+    if (openWindow) openWindow(json.url, "_blank", "noopener,noreferrer");
+    else Alert.alert("Secure KYC preview", json.url);
   }
+
+
 
   useEffect(() => {
     loadApplications();
@@ -168,6 +192,12 @@ export default function PartnerApplicationsScreen() {
               <Text style={styles.identityText}>Referral Link: {application.referral_link || "Generated after SQL update"}</Text>
               <Text style={styles.identityText}>Benefit %: {Number(application.raw?.revenue_share_percent || 10).toFixed(2)}%</Text>
               <Text style={styles.identityText}>Partner KYC: {String(application.kyc_status || "not_submitted").replace(/_/g, " ")}</Text>
+              <Text style={styles.identityText}>Application Date: {application.submitted_at || application.raw?.created_at || "-"}</Text>
+              <Text style={styles.identityText}>Identity Document Type: {identityDoc?.document_label || identityDoc?.document_type || "-"}</Text>
+              <Text style={styles.identityText}>Identity Proof Status: {kycStatusText(identityDoc)}</Text>
+              <Text style={styles.identityText}>Photograph Status: {kycStatusText(photoDoc)}</Text>
+              <Text style={styles.identityText}>KYC Submission Date: {application.raw?.kyc_submitted_at || "-"}</Text>
+              <Text style={styles.identityText}>Time Pending: {timePendingText(application.raw?.kyc_submitted_at)}</Text>
               <Text style={styles.identityText}>Payment Details: {String(application.payment_details_status || "pending_verification").replace(/_/g, " ")}</Text>
               <Text style={styles.identityText}>Payment Method: {application.payment_detail?.payment_method || "-"}</Text>
             </View>
@@ -186,6 +216,13 @@ export default function PartnerApplicationsScreen() {
             </View>
 
             <View style={styles.actions}>
+              {(identityDoc?.id || photoDoc?.id) ? (
+                <TouchableOpacity style={styles.actionButton} onPress={() => previewKycDocument(identityDoc?.id || photoDoc?.id)}>
+                  <Text style={styles.actionText}>Review KYC</Text>
+                </TouchableOpacity>
+              ) : null}
+              {identityDoc?.id ? <TouchableOpacity style={styles.actionButton} onPress={() => previewKycDocument(identityDoc.id)}><Text style={styles.actionText}>Review Identity Proof</Text></TouchableOpacity> : null}
+              {photoDoc?.id ? <TouchableOpacity style={styles.actionButton} onPress={() => previewKycDocument(photoDoc.id)}><Text style={styles.actionText}>Review Photograph</Text></TouchableOpacity> : null}
               <TouchableOpacity style={styles.actionButton} onPress={() => reviewPartner(application.id, "approve_kyc")}><Text style={styles.actionText}>Approve KYC</Text></TouchableOpacity>
               <TouchableOpacity style={styles.actionButton} onPress={() => reviewPartner(application.id, "request_kyc_correction")}><Text style={styles.actionText}>Request KYC Correction</Text></TouchableOpacity>
               <TouchableOpacity style={styles.actionButton} onPress={() => reviewPartner(application.id, "verify_payment_details")}><Text style={styles.actionText}>Verify Payment Details</Text></TouchableOpacity>

@@ -60,7 +60,7 @@ function maskGstin(value) {
 }
 
 function encryptionKey() {
-  const secret = process.env.PARTNER_PAYMENT_DETAILS_ENCRYPTION_KEY;
+  const secret = process.env.PARTNER_PAYMENT_DETAILS_ENCRYPTION_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!secret) throw Object.assign(new Error("Partner payment detail encryption is not configured."), { statusCode: 500 });
   return crypto.createHash("sha256").update(secret).digest();
 }
@@ -73,6 +73,12 @@ function encryptSensitive(value) {
   const encrypted = Buffer.concat([cipher.update(text, "utf8"), cipher.final()]);
   const tag = cipher.getAuthTag();
   return `v1:${iv.toString("base64")}:${tag.toString("base64")}:${encrypted.toString("base64")}`;
+}
+
+function generateReferralCode(applicantName) {
+  const prefix = clean(applicantName).replace(/[^a-zA-Z]/g, "").slice(0, 3).toUpperCase() || "SSL";
+  const randomHex = crypto.randomBytes(3).toString("hex").toUpperCase();
+  return `REF-${prefix}-${randomHex}`;
 }
 
 function publicPaymentDetail(detail) {
@@ -185,6 +191,53 @@ async function insertPaymentDetail(applicationId, payment) {
   return data;
 }
 
+/**
+ * @route POST /api/partner/referrals/attribute
+ * @desc Attributes a newly registered vendor to an active partner via referral code
+ */
+router.post("/referrals/attribute", async (req, res) => {
+  try {
+    const { vendor_id, referral_code } = req.body || {};
+    const cleanCode = clean(referral_code).toUpperCase();
+
+    if (!vendor_id || !cleanCode) {
+      return res.status(400).json({ success: false, error: "Vendor ID and referral code are required." });
+    }
+
+    const { data: partner, error: partnerError } = await supabase
+      .from("partner_applications")
+      .select("id, partner_id, status")
+      .eq("referral_code", cleanCode)
+      .maybeSingle();
+
+    if (partnerError || !partner) {
+      return res.status(404).json({ success: false, error: "Invalid or inactive partner referral code." });
+    }
+
+    if (partner.status !== "active") {
+      return res.status(400).json({ success: false, error: "This partner program account is currently not active." });
+    }
+
+    const { data: referral, error: referralError } = await supabase
+      .from("partner_referred_vendors")
+      .insert({
+        partner_application_id: partner.id,
+        vendor_id,
+        referral_code: cleanCode,
+        referral_status: "attributed",
+        attributed_at: new Date().toISOString(),
+      })
+      .select()
+      .single();
+
+    if (referralError) throw referralError;
+
+    return res.status(201).json({ success: true, referral });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 router.post("/applications", async (req, res) => {
   let insertedApplication = null;
   try {
@@ -241,6 +294,7 @@ router.post("/applications", async (req, res) => {
       vendor_onboarding_plan: clean(body.vendor_onboarding_plan),
       customer_awareness_plan: clean(body.customer_awareness_plan),
       referral_source: clean(body.referral_source) || null,
+      referral_code: generateReferralCode(body.applicant_name),
       revenue_share_percent: DEFAULT_BENEFIT_PERCENT,
       net_revenue_definition:
         "Eligible company revenue excludes GST/statutory taxes, refundable security deposits, refunds, chargebacks, discounts, payment-gateway charges and legally required deductions. This is not equity or company ownership.",
@@ -420,19 +474,23 @@ router.post("/admin/applications/:application_id/review", ...requireAdmin, async
     else if (action === "reject_kyc") Object.assign(patch, { kyc_status: "rejected", kyc_reviewed_by: req.auth.user_id, kyc_reviewed_at: new Date().toISOString(), kyc_review_notes: reason || null });
     else if (action === "verify_payment_details") Object.assign(patch, { payment_details_status: "verified", payment_details_reviewed_by: req.auth.user_id, payment_details_reviewed_at: new Date().toISOString(), payment_details_review_notes: reason || null });
     else if (action === "reject_payment_details") Object.assign(patch, { payment_details_status: "rejected_correction_required", payment_details_reviewed_by: req.auth.user_id, payment_details_reviewed_at: new Date().toISOString(), payment_details_review_notes: reason || null });
-    else if (action === "activate_partner") Object.assign(patch, { status: "active", active_at: new Date().toISOString(), approved_at: new Date().toISOString() });
-    else if (action === "suspend_partner") Object.assign(patch, { status: "suspended", compliance_status: "suspended_investigation_pending", suspension_reason: reason || "Suspended pending investigation", suspended_by: req.auth.user_id, suspended_at: new Date().toISOString() });
-    else if (action === "reinstate_partner") Object.assign(patch, { status: "active", compliance_status: "clear", suspension_reason: null });
-    else if (action === "terminate_partner") Object.assign(patch, { status: "revoked", compliance_status: "terminated", terminated_by: req.auth.user_id, terminated_at: new Date().toISOString() });
-    else return res.status(400).json({ success: false, error: "Unsupported Partner review action." });
-
-    if (action === "activate_partner") {
-      const { data: current, error: currentError } = await supabase.from("partner_applications").select("kyc_status, payment_details_status").eq("id", applicationId).single();
+    else if (action === "activate_partner") {
+      const { data: current, error: currentError } = await supabase.from("partner_applications").select("applicant_name, kyc_status, payment_details_status, referral_code").eq("id", applicationId).single();
       if (currentError) throw currentError;
       if (current.kyc_status !== "verified" || current.payment_details_status !== "verified") {
         return res.status(400).json({ success: false, error: "Partner can be activated only after KYC and payment details are verified." });
       }
+      Object.assign(patch, {
+        status: "active",
+        active_at: new Date().toISOString(),
+        approved_at: new Date().toISOString(),
+        referral_code: current.referral_code || generateReferralCode(current.applicant_name),
+      });
     }
+    else if (action === "suspend_partner") Object.assign(patch, { status: "suspended", compliance_status: "suspended_investigation_pending", suspension_reason: reason || "Suspended pending investigation", suspended_by: req.auth.user_id, suspended_at: new Date().toISOString() });
+    else if (action === "reinstate_partner") Object.assign(patch, { status: "active", compliance_status: "clear", suspension_reason: null });
+    else if (action === "terminate_partner") Object.assign(patch, { status: "revoked", compliance_status: "terminated", terminated_by: req.auth.user_id, terminated_at: new Date().toISOString() });
+    else return res.status(400).json({ success: false, error: "Unsupported Partner review action." });
 
     const { data, error } = await supabase.from("partner_applications").update(patch).eq("id", applicationId).select("*").single();
     if (error) throw error;
@@ -451,6 +509,71 @@ router.post("/admin/applications/:application_id/review", ...requireAdmin, async
     return res.json({ success: true, application: publicApplication(data, await currentPaymentDetail(data.id)) });
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message || "Unable to update Partner record." });
+  }
+});
+
+/**
+ * @route POST /api/partner/admin/generate-monthly-ledger
+ * @desc Admin endpoint to calculate and generate monthly benefit ledger statements (10% rate)
+ */
+router.post("/admin/generate-monthly-ledger", ...requireAdmin, async (req, res) => {
+  try {
+    const { period_month } = req.body || {}; // e.g. "2026-07"
+    if (!period_month || !/^\d{4}-\d{2}$/.test(period_month)) {
+      return res.status(400).json({ success: false, error: "Valid period_month format (YYYY-MM) is required." });
+    }
+
+    const { data: activePartners, error: partnerError } = await supabase
+      .from("partner_applications")
+      .select("id, revenue_share_percent")
+      .eq("status", "active");
+
+    if (partnerError) throw partnerError;
+
+    const statementsGenerated = [];
+
+    for (const partner of activePartners || []) {
+      const { data: referrals } = await supabase
+        .from("partner_referred_vendors")
+        .select("vendor_id, eligible_revenue_amount")
+        .eq("partner_application_id", partner.id);
+
+      const eligibleCount = referrals?.length || 0;
+      const totalEligibleRevenue = (referrals || []).reduce((acc, curr) => acc + Number(curr.eligible_revenue_amount || 0), 0);
+      const commissionRate = partner.revenue_share_percent || DEFAULT_BENEFIT_PERCENT;
+      const grossCommission = Math.round((totalEligibleRevenue * commissionRate) / 100);
+      const tdsTax = Math.round((grossCommission * 5) / 100); // 5% TDS deduction
+      const netPayable = grossCommission - tdsTax;
+
+      const { data: statement, error: stmtError } = await supabase
+        .from("partner_monthly_commission_statements")
+        .upsert(
+          {
+            partner_application_id: partner.id,
+            period_month,
+            eligible_vendor_count: eligibleCount,
+            eligible_revenue: totalEligibleRevenue,
+            commission_rate: commissionRate,
+            gross_commission: grossCommission,
+            deductions: 0,
+            tds_tax: tdsTax,
+            net_payable: netPayable,
+            payment_status: netPayable > 0 ? "processing" : "no_payable_revenue",
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "partner_application_id, period_month" }
+        )
+        .select()
+        .single();
+
+      if (!stmtError && statement) {
+        statementsGenerated.push(statement);
+      }
+    }
+
+    return res.json({ success: true, count: statementsGenerated.length, statements: statementsGenerated });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: error.message });
   }
 });
 

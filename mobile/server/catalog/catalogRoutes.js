@@ -8,9 +8,6 @@ import { analyzeProductWithAI } from "../services/aiValidationService.js";
 const router = express.Router();
 const upload = multer({ limits: { fileSize: 10 * 1024 * 1024 } });
 
-/**
- * Image Optimizer (WebP format, strip metadata, resize to max 1024px)
- */
 async function processAndStoreImage(buffer, vendorId) {
   const processedBuffer = await sharp(buffer)
     .resize(1024, 1024, { fit: "inside", withoutEnlargement: true })
@@ -30,9 +27,41 @@ async function processAndStoreImage(buffer, vendorId) {
 }
 
 /**
- * POST /api/catalog/upload-product
- * Mobile direct photo upload with Gemini AI product validation
+ * @route GET /api/catalog/vendor/:vendor_id/public-photo
+ * @desc Public route to stream owner/shop photo ONLY if document is explicitly marked as verified
  */
+router.get("/vendor/:vendor_id/public-photo", async (req, res) => {
+  try {
+    const { vendor_id } = req.params;
+
+    const { data: doc, error } = await supabase
+      .from("vendor_kyc_documents")
+      .select("storage_bucket, storage_path, status")
+      .eq("vendor_id", vendor_id)
+      .eq("document_type", "owner_shop_photo")
+      .eq("status", "verified") // STRICT REQUIREMENT: Must be verified by KYC reviewer
+      .order("created_at", { ascending: false })
+      .maybeSingle();
+
+    if (error || !doc) {
+      return res.status(404).json({
+        success: false,
+        error: "Verified shop photograph is not available for this vendor."
+      });
+    }
+
+    const { data, error: urlError } = await supabase.storage
+      .from(doc.storage_bucket || "vendor-kyc-private")
+      .createSignedUrl(doc.storage_path, 3600);
+
+    if (urlError) throw urlError;
+
+    return res.json({ success: true, photo_url: data.signedUrl });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 router.post("/upload-product", upload.single("image"), async (req, res) => {
   try {
     const {
@@ -106,7 +135,6 @@ router.post("/upload-product", upload.single("image"), async (req, res) => {
     const isRestricted = aiAnalysis.is_restricted || aiAnalysis.is_prohibited;
     const restrictionStatus = isRestricted ? "pending_licence_verification" : "unrestricted";
 
-    // Insert Vendor Item
     const { data: item, error: itemError } = await supabase
       .from("vendor_items")
       .insert({
@@ -133,7 +161,6 @@ router.post("/upload-product", upload.single("image"), async (req, res) => {
 
     if (itemError) throw itemError;
 
-    // Log AI Validation
     await supabase.from("ai_product_validation_logs").insert({
       vendor_id,
       vendor_item_id: item.id,
@@ -152,7 +179,6 @@ router.post("/upload-product", upload.single("image"), async (req, res) => {
       raw_ai_response: aiAnalysis,
     });
 
-    // Stage in Master Catalogue (Auto-promote after 6 hours)
     if (!isRestricted && imageUrl) {
       await supabase.from("master_product_catalogue").insert({
         product_name: aiAnalysis.suggested_english_name || product_name,
@@ -183,9 +209,6 @@ router.post("/upload-product", upload.single("image"), async (req, res) => {
   }
 });
 
-/**
- * GET: List all master catalog items
- */
 router.get("/list", async (req, res) => {
   try {
     const search = String(req.query.search || "").trim();

@@ -71,10 +71,6 @@ const razorpay = new Razorpay({
   key_secret: process.env.RAZORPAY_KEY_SECRET,
 });
 
-/**
- * Fallback Matrix for Canonical Category IDs
- * Note: perOrderCharge values are in Rupees (e.g., 20 = Rs. 20)
- */
 const CANONICAL_FEE_MATRIX = {
   FRUIT_VEGETABLE: { onboardingFee: 500, securityDeposit: 5000, perOrderCharge: 15, taxRate: 18 },
   KIRANA_GENERAL: { onboardingFee: 1000, securityDeposit: 5000, perOrderCharge: 20, taxRate: 18 },
@@ -87,9 +83,6 @@ const CANONICAL_FEE_MATRIX = {
   OTHER: { onboardingFee: 2000, securityDeposit: 5000, perOrderCharge: 25, taxRate: 18 }
 };
 
-/**
- * Resolves legacy free-text categories or controlled dropdown IDs to canonical category_id
- */
 function resolveCanonicalId(rawCategory) {
   if (!rawCategory) return "OTHER";
   const clean = String(rawCategory).trim().toUpperCase();
@@ -109,14 +102,12 @@ function resolveCanonicalId(rawCategory) {
   return "OTHER";
 }
 
-/**
- * @route POST /api/vendor/onboarding/:vendor_id/register-category
- * @desc Saves controlled dropdown selection or custom 'OTHER' category description
- */
-router.post("/:vendor_id/register-category", async (req, res) => {
+router.post("/:vendor_id/register-category", requireAuth, async (req, res) => {
   try {
     const { vendor_id } = req.params;
-    const { category_id, custom_category_description, actor_user_id } = req.body || {};
+    await assertVendorOwnerOrAdmin(req, vendor_id);
+
+    const { category_id, custom_category_description } = req.body || {};
 
     if (!category_id) {
       return res.status(400).json({ success: false, error: "Category selection is required." });
@@ -139,7 +130,7 @@ router.post("/:vendor_id/register-category", async (req, res) => {
 
     if (canonicalId === "OTHER" && custom_category_description) {
       await supabase.from("audit_logs").insert({
-        actor_user_id: actor_user_id || null,
+        actor_user_id: req.auth?.user_id || null,
         action: "custom_category_submitted",
         entity_type: "vendors",
         entity_id: vendor_id,
@@ -149,29 +140,16 @@ router.post("/:vendor_id/register-category", async (req, res) => {
 
     return res.json({ success: true, vendor: updatedVendor });
   } catch (error) {
-    return res.status(500).json({ success: false, error: error.message });
+    return res.status(error.statusCode || 500).json({ success: false, error: error.message });
   }
 });
 
-/**
- * @route POST /api/vendor/onboarding/:vendor_id/create-razorpay-order
- * @desc Dynamically calculates Onboarding Fee + GST + Security Deposit based on canonical category
- */
 router.post("/:vendor_id/create-razorpay-order", requireAuth, async (req, res) => {
   try {
     const { vendor_id } = req.params;
+    const vendor = await assertVendorOwnerOrAdmin(req, vendor_id);
 
-    const { data: vendor, error: vendorError } = await supabase
-      .from("vendors")
-      .select("id, public_vendor_id, category, shop_name, phone_number, email, kyc_status")
-      .eq("id", vendor_id)
-      .single();
-
-    if (vendorError || !vendor) {
-      return res.status(404).json({ success: false, error: "Vendor profile not found." });
-    }
-    await assertVendorOwnerOrAdmin(req, vendor_id);
-    if (vendor.kyc_status !== "kyc_verified") {
+    if (!["kyc_verified", "provisional_approved"].includes(vendor.kyc_status)) {
       return res.status(409).json({ success: false, error: "Complete KYC verification before creating an onboarding payment order." });
     }
 
@@ -230,7 +208,7 @@ router.post("/:vendor_id/create-razorpay-order", requireAuth, async (req, res) =
     });
   } catch (error) {
     console.error("Error creating Razorpay order:", error);
-    return res.status(500).json({ success: false, error: error.message });
+    return res.status(error.statusCode || 500).json({ success: false, error: error.message });
   }
 });
 
@@ -382,7 +360,7 @@ async function assertRequiredKycDocumentsSubmitted(vendorId, category) {
 async function assertVendorOwnerOrAdmin(req, vendorId) {
   const { data: vendor, error } = await supabase
     .from("vendors")
-    .select("id, owner_user_id, category, kyc_status, onboarding_payment_status, status")
+    .select("id, public_vendor_id, owner_user_id, category, kyc_status, onboarding_payment_status, status")
     .eq("id", vendorId)
     .single();
   if (error || !vendor) {
@@ -427,21 +405,6 @@ router.get("/:vendor_id/kyc-requirements", requireAuth, async (req, res) => {
 
 router.post("/:vendor_id/kyc-documents", requireAuth, runKycMulter, async (req, res) => {
   try {
-    console.info("KYC upload request received", {
-      vendor_id: req.params.vendor_id,
-      user_id: req.auth?.user_id || null,
-      body: {
-        document_type: req.body?.document_type || null,
-        document_section: req.body?.document_section || null,
-        document_label: req.body?.document_label || null,
-      },
-      file: req.file ? {
-        originalname: req.file.originalname,
-        mimetype: req.file.mimetype,
-        size: req.file.size,
-        has_buffer: Boolean(req.file.buffer?.length),
-      } : null,
-    });
     const vendor = await assertVendorOwnerOrAdmin(req, req.params.vendor_id);
     const requirements = requiredKycDocumentsForCategory(vendor.category);
     const documentType = String(req.body?.document_type || "").trim();
@@ -494,42 +457,18 @@ router.post("/:vendor_id/kyc-documents", requireAuth, runKycMulter, async (req, 
       })
       .select("id, document_type, status, file_name, mime_type, file_size_bytes, rejection_reason, metadata, created_at, reviewed_at")
       .single();
+
     if (insertError) {
-      const diagnostic = {
-        stage: "metadata_insert",
-        vendor_id: req.params.vendor_id,
-        document_type: documentType,
-        document_section: documentSection,
-        storage_bucket: uploaded.storage_bucket,
-        storage_path: uploaded.storage_path,
-        code: insertError?.code || null,
-        message: insertError?.message || String(insertError),
-        details: insertError?.details || null,
-        hint: insertError?.hint || null,
-      };
-      console.error("KYC metadata insert failed", diagnostic);
       await supabase.storage.from(uploaded.storage_bucket).remove([uploaded.storage_path]);
-      const err = new Error(`KYC database record failed: ${diagnostic.message}`);
+      const err = new Error(`KYC database record failed: ${insertError.message}`);
       err.statusCode = 500;
-      err.publicMessage = err.message;
-      err.diagnostic = diagnostic;
       throw err;
     }
 
     const currentKycStatus = vendor.kyc_status || "kyc_not_started";
     return res.status(201).json({ success: true, document: documentRow, kyc_status: currentKycStatus });
   } catch (error) {
-    console.error("KYC document upload route failed", {
-      vendor_id: req.params.vendor_id,
-      message: error.message,
-      details: error,
-    });
-    return res.status(error.statusCode || 500).json({
-      success: false,
-      error: error.publicMessage || error.message || "Upload failed. Please try again.",
-      technical_error: error.message || null,
-      diagnostic: error.diagnostic || undefined,
-    });
+    return res.status(error.statusCode || 500).json({ success: false, error: error.message });
   }
 });
 
@@ -551,7 +490,6 @@ router.get("/:vendor_id/kyc-documents/:document_id/view", requireAuth, async (re
 
     return res.json({ success: true, url: data.signedUrl, file_name: documentRow.file_name });
   } catch (error) {
-    console.error("KYC document preview failed", { vendor_id: req.params.vendor_id, document_id: req.params.document_id, error });
     return res.status(error.statusCode || 500).json({ success: false, error: "Unable to open this document. Please try again." });
   }
 });
@@ -577,7 +515,6 @@ router.delete("/:vendor_id/kyc-documents/:document_id", requireAuth, async (req,
 
     return res.json({ success: true });
   } catch (error) {
-    console.error("KYC document delete failed", { vendor_id: req.params.vendor_id, document_id: req.params.document_id, error });
     return res.status(error.statusCode || 500).json({ success: false, error: "Unable to delete this document. Please try again." });
   }
 });
@@ -637,26 +574,22 @@ router.get("/categories/fee-rules", async (_req, res) => {
 
 router.post("/:vendor_id/payment-record", requireAuth, async (req, res) => {
   try {
-    const { gateway_order_id, gateway_payment_id, gateway_signature, actor_user_id, metadata = {} } = req.body || {};
+    const { gateway_order_id, gateway_payment_id, gateway_signature, metadata = {} } = req.body || {};
 
     if (!gateway_order_id || !gateway_payment_id) {
       return res.status(400).json({ success: false, error: "Verified gateway order id and payment id are required." });
     }
-    const { data: vendorForPayment, error: vendorForPaymentError } = await supabase
-      .from("vendors")
-      .select("id, kyc_status")
-      .eq("id", req.params.vendor_id)
-      .single();
-    if (vendorForPaymentError || !vendorForPayment) {
-      return res.status(404).json({ success: false, error: "Vendor profile not found." });
-    }
-    await assertVendorOwnerOrAdmin(req, req.params.vendor_id);
-    if (vendorForPayment.kyc_status !== "kyc_verified") {
+
+    const vendorForPayment = await assertVendorOwnerOrAdmin(req, req.params.vendor_id);
+
+    if (!["kyc_verified", "provisional_approved"].includes(vendorForPayment.kyc_status)) {
       return res.status(409).json({ success: false, error: "Complete KYC verification before recording onboarding payment." });
     }
+
     if (getRazorpayMode() === "live" && !gateway_signature) {
       return res.status(400).json({ success: false, error: "Gateway signature is required in live payment mode." });
     }
+
     if (gateway_signature) {
       const validSignature = verifyRazorpaySignature({
         razorpayOrderId: gateway_order_id,
@@ -675,7 +608,7 @@ router.post("/:vendor_id/payment-record", requireAuth, async (req, res) => {
       p_gateway_signature: gateway_signature || null,
       p_metadata: {
         ...metadata,
-        actor_user_id: actor_user_id || null,
+        actor_user_id: req.auth?.user_id || null,
         recorded_from: "mobile_server_vendor_onboarding_route",
       },
     });
@@ -701,8 +634,8 @@ router.get("/admin/config", ...requireAdmin, async (_req, res) => {
 
 router.post("/:vendor_id/kyc-status", ...requireAdmin, async (req, res) => {
   try {
-    const { status, actor_user_id, reason } = req.body || {};
-    const allowed = new Set(["kyc_not_started", "kyc_submitted", "kyc_under_review", "additional_information_required", "kyc_verified", "kyc_rejected"]);
+    const { status, reason } = req.body || {};
+    const allowed = new Set(["kyc_not_started", "kyc_submitted", "kyc_under_review", "additional_information_required", "kyc_verified", "kyc_rejected", "provisional_approved"]);
     if (!allowed.has(status)) return res.status(400).json({ success: false, error: "Invalid KYC status." });
 
     const { data: current, error: currentError } = await supabase
@@ -721,14 +654,13 @@ router.post("/:vendor_id/kyc-status", ...requireAdmin, async (req, res) => {
       if (vendorForApprovalError || !vendorForApproval) return res.status(404).json({ success: false, error: "Vendor not found." });
       await assertRequiredKycDocumentsSubmitted(req.params.vendor_id, vendorForApproval.category);
     }
-    const reviewerIdentity = await adminIdentity(actor_user_id || req.auth?.user_id);
 
     if (status === "kyc_verified") {
       const { error: documentVerifyError } = await supabase
         .from("vendor_kyc_documents")
         .update({
           status: "verified",
-          reviewer_user_id: actor_user_id || req.auth?.user_id || null,
+          reviewer_user_id: req.auth?.user_id || null,
           reviewed_at: new Date().toISOString(),
           rejection_reason: null,
         })
@@ -741,7 +673,7 @@ router.post("/:vendor_id/kyc-status", ...requireAdmin, async (req, res) => {
       ? "kyc_rejected"
       : status === "kyc_verified" && current.onboarding_payment_status === "payment_completed"
         ? "approval_pending"
-        : status === "kyc_verified"
+        : status === "kyc_verified" || status === "provisional_approved"
           ? "payment_pending"
           : "kyc_pending";
 
@@ -761,7 +693,7 @@ router.post("/:vendor_id/kyc-status", ...requireAdmin, async (req, res) => {
       vendor_id: req.params.vendor_id,
       previous_status: current.kyc_status,
       next_status: status,
-      changed_by: actor_user_id || null,
+      changed_by: req.auth?.user_id || null,
       change_reason: reason || "KYC status updated",
     });
 
@@ -773,15 +705,16 @@ router.post("/:vendor_id/kyc-status", ...requireAdmin, async (req, res) => {
 
 router.post("/:vendor_id/activate", ...requireAdmin, async (req, res) => {
   try {
-    const { actor_user_id, reason } = req.body || {};
+    const { reason } = req.body || {};
     const { data: vendor, error: vendorError } = await supabase
       .from("vendors")
       .select("id, status, kyc_status, onboarding_payment_status")
       .eq("id", req.params.vendor_id)
       .single();
     if (vendorError || !vendor) return res.status(404).json({ success: false, error: "Vendor not found." });
-    if (vendor.kyc_status !== "kyc_verified" || vendor.onboarding_payment_status !== "payment_completed") {
-      return res.status(409).json({ success: false, error: "Vendor can be activated only after verified KYC and completed onboarding payment." });
+
+    if (!["kyc_verified", "provisional_approved"].includes(vendor.kyc_status) || vendor.onboarding_payment_status !== "payment_completed") {
+      return res.status(409).json({ success: false, error: "Vendor can be activated only after verified/provisional KYC and completed onboarding payment." });
     }
 
     const now = new Date().toISOString();
@@ -790,9 +723,9 @@ router.post("/:vendor_id/activate", ...requireAdmin, async (req, res) => {
       .update({
         status: "active",
         lifecycle_status: "active",
-        public_verification_badge: true,
+        public_verification_badge: vendor.kyc_status === "kyc_verified",
         activated_at: now,
-        activated_by: actor_user_id || null,
+        activated_by: req.auth?.user_id || null,
       })
       .eq("id", req.params.vendor_id)
       .select()
@@ -803,7 +736,7 @@ router.post("/:vendor_id/activate", ...requireAdmin, async (req, res) => {
       vendor_id: req.params.vendor_id,
       previous_status: vendor.status,
       next_status: "active",
-      changed_by: actor_user_id || null,
+      changed_by: req.auth?.user_id || null,
       change_reason: reason || "Admin approved final activation",
     });
 
@@ -814,7 +747,3 @@ router.post("/:vendor_id/activate", ...requireAdmin, async (req, res) => {
 });
 
 export default router;
-
-
-
-

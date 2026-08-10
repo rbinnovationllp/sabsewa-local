@@ -41,6 +41,10 @@ import settlementRouter from "./settlement/settlementRoutes.js";
 import { createRateLimiter, securityHeaders } from "./security/apiSecurity.js";
 // Database connection
 import { supabase } from "./connection.js";
+import notificationRoutes from "./notifications/notificationRoutes.js";
+
+// Mount API endpoint
+app.use("/api/notifications", notificationRoutes);
 
 const app = express();
 

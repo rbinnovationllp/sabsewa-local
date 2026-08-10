@@ -1129,3 +1129,12 @@ Gemini XPRIZE Alignment: Outlines compliance status across AI backend logging (g
 
 Manual Supabase action required:
 - Run `supabase/RUN_ONLY_PARTNER_PROGRAM_EXPANSION_2026_08_10.sql` after the original partner-program SQL if it has not already been applied.
+## 2026-08-10 - Customer Order Vendor Dropdown
+
+- Updated `mobile/app/customer/GeminiOrder.tsx` so the "Shop name, category or product" field opens a database-driven nearby-vendor dropdown.
+- The dropdown refreshes when category, PIN code, locality or GPS location changes and uses the existing `GET /api/discovery/vendors` backend API.
+- Customers can choose their preferred verified shop instead of being automatically assigned the nearest vendor.
+- Dropdown rows show shop name, business category, locality, approximate distance, verified status and customer-safe vendor/shop photograph where available.
+- Existing Recent Shops, Saved Shops, Order Again, Use My Location, Find Nearby Shops, unserved-area request and cart-preparation flows are preserved.
+- Discovery still excludes suspended, payment-pending, unverified or inactive vendors through existing backend filters for active status, KYC verification and completed onboarding payment.
+- Backend discovery payload now includes a `locality` field for customer display.

@@ -125,6 +125,7 @@ function vendorCard({ vendor, terminal, items, distanceM }) {
     public_terminal_id: terminal.public_terminal_id,
     shop_name: vendor.shop_name,
     category: vendor.category,
+    locality: vendor.locality_code || terminal.city || null,
     distance_m: Math.round(distanceM),
     distance_label: distanceM < 1000 ? `${Math.round(distanceM)} m` : `${(distanceM / 1000).toFixed(1)} km`,
     open_now: vendor.status === "active" && terminal.status === "active" && terminal.is_open_today !== false,

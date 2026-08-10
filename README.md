@@ -137,3 +137,6 @@ SabSewa Local includes a Partner With Us program for eligible customers, vendors
 The initial partner benefit is 10% of eligible SabSewa Local company revenue attributable to vendors successfully onboarded through the partner, subject to final Partner Program Terms and Master Admin configuration. The benefit is not company equity or ownership, and excludes GST/statutory taxes, refundable security deposits, refunds, chargebacks, discounts, payment-gateway charges and other legally required deductions.
 
 Run `supabase/RUN_ONLY_PARTNER_PROGRAM_EXPANSION_2026_08_10.sql` to enable Partner ID/referral code/link generation, partner attribution and management metrics.
+## Customer Vendor Dropdown
+
+The customer Place Your Order screen provides a database-driven nearby-vendor dropdown in the "Shop name, category or product" field. It refreshes from the existing discovery API when category, GPS location, PIN code or locality changes, shows verified active vendors only, and lets the customer choose the preferred shop before preparing the order/cart.

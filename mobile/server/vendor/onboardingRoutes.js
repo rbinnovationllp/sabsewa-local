@@ -157,7 +157,7 @@ router.post("/:vendor_id/register-category", async (req, res) => {
  * @route POST /api/vendor/onboarding/:vendor_id/create-razorpay-order
  * @desc Dynamically calculates Onboarding Fee + GST + Security Deposit based on canonical category
  */
-router.post("/:vendor_id/create-razorpay-order", async (req, res) => {
+router.post("/:vendor_id/create-razorpay-order", requireAuth, async (req, res) => {
   try {
     const { vendor_id } = req.params;
 
@@ -170,6 +170,7 @@ router.post("/:vendor_id/create-razorpay-order", async (req, res) => {
     if (vendorError || !vendor) {
       return res.status(404).json({ success: false, error: "Vendor profile not found." });
     }
+    await assertVendorOwnerOrAdmin(req, vendor_id);
     if (vendor.kyc_status !== "kyc_verified") {
       return res.status(409).json({ success: false, error: "Complete KYC verification before creating an onboarding payment order." });
     }
@@ -634,7 +635,7 @@ router.get("/categories/fee-rules", async (_req, res) => {
   }
 });
 
-router.post("/:vendor_id/payment-record", async (req, res) => {
+router.post("/:vendor_id/payment-record", requireAuth, async (req, res) => {
   try {
     const { gateway_order_id, gateway_payment_id, gateway_signature, actor_user_id, metadata = {} } = req.body || {};
 
@@ -649,6 +650,7 @@ router.post("/:vendor_id/payment-record", async (req, res) => {
     if (vendorForPaymentError || !vendorForPayment) {
       return res.status(404).json({ success: false, error: "Vendor profile not found." });
     }
+    await assertVendorOwnerOrAdmin(req, req.params.vendor_id);
     if (vendorForPayment.kyc_status !== "kyc_verified") {
       return res.status(409).json({ success: false, error: "Complete KYC verification before recording onboarding payment." });
     }
@@ -720,6 +722,20 @@ router.post("/:vendor_id/kyc-status", ...requireAdmin, async (req, res) => {
       await assertRequiredKycDocumentsSubmitted(req.params.vendor_id, vendorForApproval.category);
     }
     const reviewerIdentity = await adminIdentity(actor_user_id || req.auth?.user_id);
+
+    if (status === "kyc_verified") {
+      const { error: documentVerifyError } = await supabase
+        .from("vendor_kyc_documents")
+        .update({
+          status: "verified",
+          reviewer_user_id: actor_user_id || req.auth?.user_id || null,
+          reviewed_at: new Date().toISOString(),
+          rejection_reason: null,
+        })
+        .eq("vendor_id", req.params.vendor_id)
+        .neq("status", "rejected");
+      if (documentVerifyError) throw documentVerifyError;
+    }
 
     const nextLifecycle = status === "kyc_rejected"
       ? "kyc_rejected"

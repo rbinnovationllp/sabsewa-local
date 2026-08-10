@@ -44,7 +44,7 @@ async function latestApprovedOwnerShopPhoto(vendorId) {
     .select("id, vendor_id, document_type, status, storage_bucket, storage_path, mime_type, file_name, metadata, created_at")
     .eq("vendor_id", vendorId)
     .eq("document_type", "owner_shop_photo")
-    .neq("status", "rejected")
+    .eq("status", "verified")
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();

@@ -1,11 +1,14 @@
 ﻿import express from "express";
 import { supabase } from "../connection.js";
+import { requireUserJwt } from "../security/apiSecurity.js";
 
 const router = express.Router();
+const requireAuth = requireUserJwt(supabase);
 
-router.post("/web-push-subscriptions", async (req, res) => {
+router.post("/web-push-subscriptions", requireAuth, async (req, res) => {
   try {
-    const { user_id, endpoint, subscription, user_agent } = req.body || {};
+    const { endpoint, subscription, user_agent } = req.body || {};
+    const user_id = req.auth.user_id;
 
     if (!endpoint || !subscription?.keys?.p256dh || !subscription?.keys?.auth) {
       return res.status(400).json({ success: false, error: "Valid web push subscription is required." });
@@ -35,11 +38,11 @@ router.post("/web-push-subscriptions", async (req, res) => {
   }
 });
 
-router.delete("/web-push-subscriptions", async (req, res) => {
+router.delete("/web-push-subscriptions", requireAuth, async (req, res) => {
   try {
-    const { endpoint, user_id } = req.body || {};
-    if (!endpoint && !user_id) {
-      return res.status(400).json({ success: false, error: "Endpoint or user ID is required." });
+    const { endpoint } = req.body || {};
+    if (!endpoint) {
+      return res.status(400).json({ success: false, error: "Endpoint is required." });
     }
 
     let query = supabase
@@ -49,8 +52,7 @@ router.delete("/web-push-subscriptions", async (req, res) => {
         revoked_at: new Date().toISOString(),
       });
 
-    if (endpoint) query = query.eq("endpoint", endpoint);
-    if (user_id) query = query.eq("user_id", user_id);
+    query = query.eq("endpoint", endpoint).eq("user_id", req.auth.user_id);
 
     const { error } = await query;
     if (error) throw error;
@@ -61,11 +63,12 @@ router.delete("/web-push-subscriptions", async (req, res) => {
 });
 
 
-router.post("/fcm-tokens", async (req, res) => {
+router.post("/fcm-tokens", requireAuth, async (req, res) => {
   try {
-    const { user_id, token, platform = "web", app_role = "customer", user_agent, metadata = {} } = req.body || {};
-    if (!user_id || !token) {
-      return res.status(400).json({ success: false, error: "User id and FCM token are required." });
+    const { token, platform = "web", app_role = "customer", user_agent, metadata = {} } = req.body || {};
+    const user_id = req.auth.user_id;
+    if (!token) {
+      return res.status(400).json({ success: false, error: "FCM token is required." });
     }
 
     const { data, error } = await supabase
@@ -95,14 +98,13 @@ router.post("/fcm-tokens", async (req, res) => {
   }
 });
 
-router.delete("/fcm-tokens", async (req, res) => {
+router.delete("/fcm-tokens", requireAuth, async (req, res) => {
   try {
-    const { token, user_id } = req.body || {};
-    if (!token && !user_id) return res.status(400).json({ success: false, error: "Token or user ID is required." });
+    const { token } = req.body || {};
+    if (!token) return res.status(400).json({ success: false, error: "Token is required." });
 
     let query = supabase.from("device_push_tokens").update({ consent_status: "revoked", revoked_at: new Date().toISOString() });
-    if (token) query = query.eq("token", token);
-    if (user_id) query = query.eq("user_id", user_id);
+    query = query.eq("token", token).eq("user_id", req.auth.user_id);
     const { error } = await query;
     if (error) throw error;
     return res.json({ success: true });

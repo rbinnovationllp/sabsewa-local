@@ -1,7 +1,7 @@
 import { usePathname } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import { Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { apiUrl } from "@/lib/backend";
+import { apiUrl, authenticatedFetch } from "@/lib/backend";
 import { useAuth } from "@/providers/AuthProvider";
 import { useLanguage } from "@/providers/LanguageProvider";
 
@@ -321,6 +321,10 @@ export default function PwaInstallPrompt() {
       setPushMessage(copy.pushNeedsKeys);
       return;
     }
+    if (!user?.id) {
+      setPushMessage("Please login before enabling notifications.");
+      return;
+    }
     const permission = await Notification.requestPermission();
     if (permission !== "granted") {
       setPushMessage(copy.pushDenied);
@@ -331,16 +335,19 @@ export default function PwaInstallPrompt() {
       userVisibleOnly: true,
       applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
     });
-    await fetch(apiUrl("/api/notifications/web-push-subscriptions"), {
+    const response = await authenticatedFetch("/api/notifications/web-push-subscriptions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        user_id: user?.id || null,
         endpoint: subscription.endpoint,
         subscription,
         user_agent: window.navigator.userAgent,
       }),
     });
+    const json = await response.json().catch(() => ({}));
+    if (!response.ok || json.success === false) {
+      throw new Error(json.error || "Unable to enable notifications for this device.");
+    }
     setPushMessage(copy.pushEnabled);
     trackPwaEvent("push_enabled");
   }

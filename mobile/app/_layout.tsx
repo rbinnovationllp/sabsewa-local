@@ -16,10 +16,31 @@ function TopNavigationBar() {
 
   const isHome = pathname === "/" || pathname === "/index";
   const handleGoHome = () => {
-    if (role === "vendor") {
+    const normalizedRole = String(role || "").toLowerCase();
+    const adminRoles = new Set([
+      "admin",
+      "company_admin",
+      "super_admin",
+      "master_admin",
+      "national_admin",
+      "state_admin",
+      "district_admin",
+      "city_admin",
+      "kyc_reviewer",
+      "finance_admin",
+      "support_admin",
+    ]);
+
+    if (normalizedRole === "vendor") {
       router.replace("/vendor/dashboard" as any);
-    } else if (role === "customer") {
+    } else if (normalizedRole === "customer") {
       router.replace("/customer/dashboard" as any);
+    } else if (normalizedRole === "partner") {
+      router.replace("/partner-dashboard" as any);
+    } else if (normalizedRole === "rider") {
+      router.replace("/rider" as any);
+    } else if (adminRoles.has(normalizedRole)) {
+      router.replace("/company" as any);
     } else {
       router.replace("/" as any);
     }

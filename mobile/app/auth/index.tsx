@@ -15,21 +15,19 @@ import { routeUser } from "@/src/utils/roleRouter";
 
 export default function AuthEntryScreen() {
   const router = useRouter();
-  const { user, loading } = useAuth();
-
-  const role = user?.user_metadata?.role || null;
+  const { user, loading, role, roleLoading } = useAuth();
 
   // Auto-route logged-in users
  
 useEffect(() => {
-  if (!loading && user && role) {
+  if (!loading && !roleLoading && user && role) {
     // module can come from:
     // 1. localStorage
     // 2. user metadata
     // 3. last visited screen
     router.replace(routeUser(role, user.user_metadata?.last_module) as any);
   }
-}, [loading, user, role]);
+}, [loading, roleLoading, user, role, router]);
 
 
   const goLogin = () => router.push("/auth/Login");

@@ -137,17 +137,42 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
     if (loading || roleLoading || !user || !role) return;
 
     const firstSegment = String(segments[0] || "");
+    const normalizedRole = String(role || "").toLowerCase();
+    const adminRoles = new Set([
+      "admin",
+      "company_admin",
+      "super_admin",
+      "master_admin",
+      "national_admin",
+      "state_admin",
+      "district_admin",
+      "city_admin",
+      "kyc_reviewer",
+      "finance_admin",
+      "support_admin",
+    ]);
     const inAuthGroup = firstSegment === "auth";
     const onPublicHome = pathname === "/" || pathname === "/index";
     const inCustomerArea = firstSegment === "customer" || firstSegment === "hlm" || firstSegment === "hyperlocal";
     const inVendorArea = firstSegment === "vendor";
+    const inCompanyArea = firstSegment === "company";
 
-    if (role === "vendor" && (inAuthGroup || onPublicHome || inCustomerArea)) {
+    if (adminRoles.has(normalizedRole) && !inCompanyArea && (inAuthGroup || onPublicHome || inCustomerArea || inVendorArea)) {
+      router.replace("/company" as any);
+      return;
+    }
+
+    if (normalizedRole === "partner" && (inAuthGroup || onPublicHome || inCustomerArea || inVendorArea)) {
+      router.replace("/partner-dashboard" as any);
+      return;
+    }
+
+    if (normalizedRole === "vendor" && (inAuthGroup || onPublicHome || inCustomerArea)) {
       router.replace("/vendor/dashboard" as any);
       return;
     }
 
-    if (role !== "vendor" && inVendorArea) {
+    if (normalizedRole !== "vendor" && inVendorArea) {
       router.replace(roleHome(role) as any);
       return;
     }

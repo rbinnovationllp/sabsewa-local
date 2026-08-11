@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { StyleSheet, Text, TextInput, TouchableOpacity, View, ScrollView, Alert, Platform } from "react-native";
-import StackHeader from "@/components/StackHeader";
+import StackHeader from "../../components/StackHeader"; // Adjust the number of '../' based on your actual structure
 import { Link, router } from "expo-router";
 import { apiUrl } from "@/lib/backend";
 

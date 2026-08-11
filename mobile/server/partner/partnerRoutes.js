@@ -5,6 +5,14 @@ import { supabase } from "../connection.js";
 import { requireUserJwt } from "../security/apiSecurity.js";
 import { requireCompanyAdmin, writeAdminAudit } from "../company/adminProfileService.js";
 import { uploadPartnerKycDocument } from "./partnerKycService.js";
+import { createClient } from "@supabase/supabase-js";
+
+// Use service role key for administrative inserts to bypass client-level RLS restrictions
+const supabaseAdmin = createClient(
+  process.env.SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY,
+  { auth: { persistSession: false, autoRefreshToken: false } }
+);
 
 const router = express.Router();
 const requireAuth = requireUserJwt(supabase);
@@ -546,7 +554,7 @@ router.post("/admin/applications/:application_id/review", ...requireAdmin, async
     else if (action === "verify_payment_details") Object.assign(patch, { payment_details_status: "verified", payment_details_reviewed_by: req.auth.user_id, payment_details_reviewed_at: new Date().toISOString(), payment_details_review_notes: reason || null });
     else if (action === "reject_payment_details") Object.assign(patch, { payment_details_status: "rejected_correction_required", payment_details_reviewed_by: req.auth.user_id, payment_details_reviewed_at: new Date().toISOString(), payment_details_review_notes: reason || null });
     else if (action === "activate_partner") {
-      const { data: current, error: currentError } = await supabase.from("partner_applications").select("applicant_name, kyc_status, payment_details_status, referral_code").eq("id", applicationId).single();
+      const { data: current, error: currentError } = await supabaseAdmin.from("partner_applications").select("applicant_name, kyc_status, payment_details_status, referral_code").eq("id", applicationId).single();
       if (currentError) throw currentError;
       if (current.kyc_status !== "verified" || current.payment_details_status !== "verified") {
         return res.status(400).json({ success: false, error: "Partner can be activated only after KYC and payment details are verified." });

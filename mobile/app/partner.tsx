@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Alert, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import * as DocumentPicker from "expo-document-picker";
@@ -8,6 +8,7 @@ import { apiUrl } from "@/lib/backend";
 
 const PARTNER_TERMS_VERSION = "partner-program-local-2026-08-10";
 const DEFAULT_BENEFIT_PERCENT = 10;
+const STORAGE_KEY_PHONE = "sabsewa_partner_registered_phone";
 
 const partnerTypes = [
   "Existing Customer", "Non-Customer", "Existing Vendor", "Non-Vendor", "Individual", 
@@ -78,7 +79,7 @@ function labelStatus(status: string) {
   const normalized = String(status || "pending").replace(/_/g, " ");
   if (status === "active") return "Approved - Active Marketing Partner";
   if (status === "approved") return "Approved - Activation Pending";
-  if (status === "under_review") return "Under Review (In Verification)";
+  if (status === "under_review" || status === "documents_submitted") return "Under Review (In Verification)";
   return normalized.charAt(0).toUpperCase() + normalized.slice(1);
 }
 
@@ -96,22 +97,26 @@ function requiredKycSectionsFor(application: any, fallbackPartnerType: string) {
 export default function PartnerWithUsScreen() {
   const { t } = useLanguage();
   const scrollRef = useRef<ScrollView>(null);
-  const kycSectionRef = useRef<View>(null);
 
   const [formOffsetY, setFormOffsetY] = useState(0);
-  const [kycOffsetY, setKycOffsetY] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [submittingKyc, setSubmittingKyc] = useState(false);
+  const [checkingStatus, setCheckingStatus] = useState(false);
+  
   const [accepted, setAccepted] = useState(false);
   const [kycAccepted, setKycAccepted] = useState(false);
   const [form, setForm] = useState({ ...emptyForm });
+  
+  // Status Resume Search
+  const [lookupPhone, setLookupPhone] = useState("");
+  const [showLookupBox, setShowLookupBox] = useState(false);
   
   // Specific Error Feedback States
   const [errorMessage, setErrorMessage] = useState<string>("");
   const [errorField, setErrorField] = useState<string>("");
   const [kycSuccessMessage, setKycSuccessMessage] = useState<string>("");
   
-  // Application Success State
+  // Persistent Application Record State
   const [confirmation, setConfirmation] = useState<any>(null);
   
   const [selectedDocs, setSelectedDocs] = useState<Record<string, string>>({
@@ -122,6 +127,63 @@ export default function PartnerWithUsScreen() {
   });
   const [uploadedDocs, setUploadedDocs] = useState<Record<string, any>>({});
   const [uploading, setUploading] = useState<string | null>(null);
+
+  // Load persistent application state from localStorage / Backend on mount
+  useEffect(() => {
+    if (Platform.OS === "web" && typeof window !== "undefined") {
+      const savedPhone = window.localStorage.getItem(STORAGE_KEY_PHONE);
+      if (savedPhone) {
+        fetchApplicationByPhone(savedPhone, true);
+      }
+    }
+  }, []);
+
+  async function fetchApplicationByPhone(phoneToFetch: string, silent = false) {
+    if (!phoneToFetch.trim()) {
+      if (!silent) Alert.alert("Mobile Number Required", "Please enter your registered mobile number to look up your status.");
+      return;
+    }
+
+    if (!silent) setCheckingStatus(true);
+    setErrorMessage("");
+
+    try {
+      const cleanPhone = phoneToFetch.replace(/\D/g, "");
+      const response = await fetch(apiUrl(`/api/partner/applications/status?phone=${encodeURIComponent(cleanPhone)}`));
+      const json = await response.json();
+
+      if (json.success && json.application) {
+        setConfirmation(json.application);
+        
+        // Save to browser cache for refresh survival
+        if (Platform.OS === "web" && typeof window !== "undefined") {
+          window.localStorage.setItem(STORAGE_KEY_PHONE, cleanPhone);
+        }
+
+        // Map existing uploaded documents
+        if (json.application.kyc_documents && Array.isArray(json.application.kyc_documents)) {
+          const docMap: Record<string, any> = {};
+          json.application.kyc_documents.forEach((doc: any) => {
+            if (doc.document_section) {
+              docMap[doc.document_section] = doc;
+            }
+          });
+          setUploadedDocs(docMap);
+        }
+
+        setShowLookupBox(false);
+      } else {
+        if (!silent) {
+          setErrorMessage("No active Partner Application found for this mobile number. Please fill out the form below.");
+          setConfirmation(null);
+        }
+      }
+    } catch (err: any) {
+      if (!silent) Alert.alert("Search Error", err?.message || "Unable to retrieve application status.");
+    } finally {
+      if (!silent) setCheckingStatus(false);
+    }
+  }
 
   function setValue(key: keyof typeof form, value: string) {
     if (errorField === key) setErrorField("");
@@ -211,14 +273,18 @@ export default function PartnerWithUsScreen() {
         setErrorMessage(serverError);
         if (serverError.toLowerCase().includes("mobile")) setErrorField("phone");
         else if (serverError.toLowerCase().includes("pan")) setErrorField("pan_number");
-        else if (serverError.toLowerCase().includes("account")) setErrorField("account_number");
-        else if (serverError.toLowerCase().includes("upi")) setErrorField("upi_id");
 
         scrollRef.current?.scrollTo({ y: formOffsetY, animated: true });
         return;
       }
 
       setConfirmation({ duplicate: Boolean(json.duplicate), ...(json.application || {}) });
+      
+      // Store in localStorage for reload survival
+      if (Platform.OS === "web" && typeof window !== "undefined") {
+        window.localStorage.setItem(STORAGE_KEY_PHONE, form.phone.replace(/\D/g, ""));
+      }
+
       setErrorMessage("");
       setErrorField("");
 
@@ -230,19 +296,12 @@ export default function PartnerWithUsScreen() {
 
       setTimeout(() => scrollRef.current?.scrollTo({ y: 0, animated: true }), 100);
     } catch (error: any) {
-      console.error("Partner Application Error:", error);
       setErrorMessage(error?.message || "Server or network error. Please try again.");
       scrollRef.current?.scrollTo({ y: formOffsetY, animated: true });
     } finally {
       setSubmitting(false);
     }
   }
-
-  const handleProceedToKyc = () => {
-    if (kycOffsetY > 0) {
-      scrollRef.current?.scrollTo({ y: kycOffsetY - 20, animated: true });
-    }
-  };
 
   async function appendFile(formData: FormData, picked: any) {
     const name = picked.name || picked.fileName || "partner-kyc-document.jpg";
@@ -326,11 +385,8 @@ export default function PartnerWithUsScreen() {
         return;
       }
 
-      // Update State Immediately
       setConfirmation({ ...confirmation, ...(json.application || {}), kyc_status: "under_review" });
       setKycSuccessMessage("🎉 Partner KYC Package Submitted Successfully! Status updated to Under Review.");
-
-      // Smooth Scroll to Banner
       setTimeout(() => scrollRef.current?.scrollTo({ y: 0, animated: true }), 100);
     } catch (err: any) {
       Alert.alert("Submission Error", err?.message || "Network error submitting KYC.");
@@ -339,11 +395,44 @@ export default function PartnerWithUsScreen() {
     }
   }
 
+  function handleLogoutSession() {
+    setConfirmation(null);
+    setUploadedDocs({});
+    if (Platform.OS === "web" && typeof window !== "undefined") {
+      window.localStorage.removeItem(STORAGE_KEY_PHONE);
+    }
+  }
+
   const isKycSubmitted = confirmation?.kyc_status === "under_review" || confirmation?.kyc_status === "verified";
 
   return (
     <ScrollView ref={scrollRef} style={styles.screen} contentContainerStyle={styles.content}>
       <BrandHeader compact subtitle="Partner Program" />
+
+      {/* TOP RESUME / STATUS CHECKER TOOLBAR */}
+      <View style={styles.resumeToolbar}>
+        <Text style={styles.resumeToolbarTitle}>Already Applied as a Partner?</Text>
+        <TouchableOpacity style={styles.resumeBtn} onPress={() => setShowLookupBox(!showLookupBox)}>
+          <Text style={styles.resumeBtnText}>{showLookupBox ? "Close Search" : "Resume Incomplete KYC / Check Status"}</Text>
+        </TouchableOpacity>
+      </View>
+
+      {showLookupBox && (
+        <View style={styles.lookupCard}>
+          <Text style={styles.lookupTitle}>Retrieve Existing Application</Text>
+          <Text style={styles.lookupSub}>Enter your registered 10-digit mobile number to open your application record and resume KYC upload.</Text>
+          <TextInput
+            style={styles.lookupInput}
+            placeholder="Enter Registered Mobile Number *"
+            keyboardType="phone-pad"
+            value={lookupPhone}
+            onChangeText={setLookupPhone}
+          />
+          <TouchableOpacity style={styles.lookupSubmitBtn} onPress={() => fetchApplicationByPhone(lookupPhone)} disabled={checkingStatus}>
+            <Text style={styles.lookupSubmitText}>{checkingStatus ? "Searching Database..." : "Verify & Resume KYC"}</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* PROMINENT SUCCESS CONFIRMATION BANNER */}
       {confirmation && (
@@ -354,19 +443,12 @@ export default function PartnerWithUsScreen() {
           <Text style={isKycSubmitted ? styles.kycSubmittedSub : styles.successBannerSub}>
             {isKycSubmitted
               ? "Your Partner KYC package and identity documents have been submitted to SabSewa Local. Verification will be completed within 48 hours."
-              : "Thank you for applying to become a SabSewa Local Partner. Your application details have been saved successfully."}
+              : "Your Partner Application record is active. Complete your KYC document upload below."}
           </Text>
 
-          {!isKycSubmitted && (
-            <>
-              <Text style={styles.successBannerInstruction}>
-                Now proceed to Partner KYC to upload your required identity document and photograph for verification.
-              </Text>
-              <TouchableOpacity style={styles.proceedKycBtn} onPress={handleProceedToKyc}>
-                <Text style={styles.proceedKycText}>Proceed to KYC Document Upload →</Text>
-              </TouchableOpacity>
-            </>
-          )}
+          <TouchableOpacity style={styles.clearSessionBtn} onPress={handleLogoutSession}>
+            <Text style={styles.clearSessionText}>Submit Another Application / Change Mobile Number</Text>
+          </TouchableOpacity>
         </View>
       )}
 
@@ -380,7 +462,7 @@ export default function PartnerWithUsScreen() {
       {/* ERROR FEEDBACK CARD */}
       {errorMessage ? (
         <View style={styles.errorBox}>
-          <Text style={styles.errorBoxTitle}>⚠️ Submission Issue</Text>
+          <Text style={styles.errorBoxTitle}>⚠️ Notice</Text>
           <Text style={styles.errorBoxText}>{errorMessage}</Text>
         </View>
       ) : null}
@@ -391,31 +473,12 @@ export default function PartnerWithUsScreen() {
         <Text style={styles.lead}>
           The Partner Program is open to eligible customers, vendors, independent individuals, local promoters, business-development professionals and organizations who can help create active local SabSewa marketplaces.
         </Text>
-        {!confirmation && (
-          <TouchableOpacity style={styles.heroButton} onPress={() => scrollRef.current?.scrollTo({ y: formOffsetY, animated: true })}>
-            <Text style={styles.heroButtonText}>Apply to Become a Partner</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-
-      <View style={styles.principleBox}>
-        <Text style={styles.principleText}>
-          A successful SabSewa Partner does not simply add shops to the platform - the Partner helps create an active SabSewa marketplace in the locality by bringing local vendors and making local customers aware that they can order from those nearby shops through SabSewa Local.
-        </Text>
-      </View>
-
-      <View style={styles.band}>
-        <Text style={styles.sectionTitle}>Partner Benefit</Text>
-        <Text style={styles.largeMetric}>10%</Text>
-        <Text style={styles.bodyText}>
-          Initial configurable partner benefit on eligible SabSewa Local company revenue attributable to successfully onboarded vendors. GST, taxes, refundable security deposits, refunds, chargebacks, discounts, payment-gateway charges and legally required deductions are excluded. This is not equity or ownership.
-        </Text>
       </View>
 
       {/* PARTNER APPLICATION DETAILS CONFIRMATION & KYC SECTION */}
       {confirmation && (
-        <View ref={kycSectionRef} onLayout={(e) => setKycOffsetY(e.nativeEvent.layout.y)} style={styles.formCard}>
-          <Text style={styles.sectionTitle}>Partner Application Record</Text>
+        <View style={styles.formCard}>
+          <Text style={styles.sectionTitle}>Active Partner Application Record</Text>
           <ConfirmLine label="Application / Partner ID" value={confirmation.application_id || confirmation.partner_id} />
           <ConfirmLine label="Applicant Name" value={confirmation.applicant_name} />
           <ConfirmLine label="Mobile Number" value={confirmation.phone} />
@@ -634,6 +697,19 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#ffffff" },
   content: { padding: 20, paddingTop: 40, paddingBottom: 50 },
 
+  // RESUME TOOLBAR
+  resumeToolbar: { backgroundColor: "#fff7ed", borderWidth: 1, borderColor: "#fed7aa", borderRadius: 8, padding: 12, marginBottom: 14, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  resumeToolbarTitle: { fontSize: 13, fontWeight: "800", color: "#9a3412" },
+  resumeBtn: { backgroundColor: "#ea580c", paddingVertical: 6, paddingHorizontal: 12, borderRadius: 6 },
+  resumeBtnText: { color: "#ffffff", fontWeight: "800", fontSize: 12 },
+
+  lookupCard: { backgroundColor: "#f8fafc", borderWidth: 1, borderColor: "#cbd5e1", borderRadius: 10, padding: 14, marginBottom: 16 },
+  lookupTitle: { fontSize: 16, fontWeight: "900", color: "#0f172a", marginBottom: 4 },
+  lookupSub: { fontSize: 12, color: "#475569", marginBottom: 10 },
+  lookupInput: { borderWidth: 1, borderColor: "#cbd5e1", backgroundColor: "#ffffff", borderRadius: 6, padding: 10, marginBottom: 10 },
+  lookupSubmitBtn: { backgroundColor: "#0f766e", paddingVertical: 10, borderRadius: 6, alignItems: "center" },
+  lookupSubmitText: { color: "#ffffff", fontWeight: "800" },
+
   // SUCCESS BANNERS
   successBanner: {
     backgroundColor: "#f0fdf4",
@@ -647,8 +723,6 @@ const styles = StyleSheet.create({
   successBannerTitle: { fontSize: 22, fontWeight: "900", color: "#15803d", marginBottom: 6 },
   successBannerSub: { fontSize: 14, color: "#166534", lineHeight: 20, marginBottom: 8 },
   successBannerInstruction: { fontSize: 13, fontWeight: "700", color: "#0f766e", marginBottom: 14 },
-  proceedKycBtn: { backgroundColor: "#15803d", paddingVertical: 14, paddingHorizontal: 18, borderRadius: 8, alignItems: "center" },
-  proceedKycText: { color: "#ffffff", fontWeight: "900", fontSize: 15 },
 
   kycSubmittedBanner: {
     backgroundColor: "#ecfeff",
@@ -661,10 +735,12 @@ const styles = StyleSheet.create({
   kycSubmittedTitle: { fontSize: 22, fontWeight: "900", color: "#0e7490", marginBottom: 6 },
   kycSubmittedSub: { fontSize: 14, color: "#155e75", lineHeight: 20 },
 
+  clearSessionBtn: { marginTop: 10, paddingVertical: 6 },
+  clearSessionText: { color: "#0284c7", fontSize: 12, fontWeight: "800", textDecorationLine: "underline" },
+
   kycSuccessBox: { backgroundColor: "#dcfce7", borderWidth: 1, borderColor: "#22c55e", borderRadius: 8, padding: 12, marginBottom: 16 },
   kycSuccessText: { color: "#15803d", fontWeight: "800", fontSize: 13, textAlign: "center" },
 
-  // ERROR CARD
   errorBox: { backgroundColor: "#fef2f2", borderWidth: 2, borderColor: "#dc2626", borderRadius: 10, padding: 14, marginBottom: 16 },
   errorBoxTitle: { fontSize: 16, fontWeight: "900", color: "#991b1b", marginBottom: 4 },
   errorBoxText: { fontSize: 14, color: "#b91c1c", fontWeight: "600" },
@@ -673,8 +749,6 @@ const styles = StyleSheet.create({
   kicker: { color: "#f97316", fontWeight: "900", marginBottom: 8, textTransform: "uppercase" },
   title: { color: "#0f172a", fontSize: 26, fontWeight: "900", lineHeight: 32 },
   lead: { color: "#334155", lineHeight: 21, marginTop: 10, marginBottom: 16 },
-  heroButton: { backgroundColor: "#1166ff", borderRadius: 8, padding: 14, alignItems: "center" },
-  heroButtonText: { color: "#fff", fontWeight: "900" },
 
   principleBox: { borderWidth: 1, borderColor: "#bbf7d0", backgroundColor: "#f0fdf4", borderRadius: 8, padding: 14, marginBottom: 14 },
   principleText: { color: "#14532d", fontWeight: "800", lineHeight: 22 },

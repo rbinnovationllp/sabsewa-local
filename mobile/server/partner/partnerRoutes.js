@@ -410,13 +410,35 @@ router.post("/applications", async (req, res) => {
   }
 });
 
+/**
+ * @route GET /api/partner/applications/status
+ * @desc Public endpoint to check partner application & KYC status by registered mobile number
+ */
 router.get("/applications/status", async (req, res) => {
   try {
     const phone = clean(req.query.phone);
     if (!phone) return res.status(400).json({ success: false, error: "Mobile number is required." });
+    
     const existing = await findExistingByPhone(phone);
-    const payment = existing ? await currentPaymentDetail(existing.id) : null;
-    return res.json({ success: true, application: publicApplication(existing, payment) });
+    if (!existing) {
+      return res.json({ success: true, application: null });
+    }
+
+    const payment = await currentPaymentDetail(existing.id);
+
+    // Fetch existing KYC documents
+    const { data: kycDocs } = await supabase
+      .from("partner_kyc_documents")
+      .select("id, document_section, document_type, document_label, status, file_name, created_at")
+      .eq("partner_application_id", existing.id)
+      .neq("status", "deleted");
+
+    const appData = {
+      ...publicApplication(existing, payment),
+      kyc_documents: kycDocs || [],
+    };
+
+    return res.json({ success: true, application: appData });
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message || "Unable to check Partner Application status." });
   }

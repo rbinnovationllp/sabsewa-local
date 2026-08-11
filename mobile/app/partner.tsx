@@ -78,7 +78,7 @@ function labelStatus(status: string) {
   const normalized = String(status || "pending").replace(/_/g, " ");
   if (status === "active") return "Approved - Active Marketing Partner";
   if (status === "approved") return "Approved - Activation Pending";
-  if (status === "under_review") return "Under Review";
+  if (status === "under_review") return "Under Review (In Verification)";
   return normalized.charAt(0).toUpperCase() + normalized.slice(1);
 }
 
@@ -101,6 +101,7 @@ export default function PartnerWithUsScreen() {
   const [formOffsetY, setFormOffsetY] = useState(0);
   const [kycOffsetY, setKycOffsetY] = useState(0);
   const [submitting, setSubmitting] = useState(false);
+  const [submittingKyc, setSubmittingKyc] = useState(false);
   const [accepted, setAccepted] = useState(false);
   const [kycAccepted, setKycAccepted] = useState(false);
   const [form, setForm] = useState({ ...emptyForm });
@@ -108,6 +109,7 @@ export default function PartnerWithUsScreen() {
   // Specific Error Feedback States
   const [errorMessage, setErrorMessage] = useState<string>("");
   const [errorField, setErrorField] = useState<string>("");
+  const [kycSuccessMessage, setKycSuccessMessage] = useState<string>("");
   
   // Application Success State
   const [confirmation, setConfirmation] = useState<any>(null);
@@ -145,7 +147,6 @@ export default function PartnerWithUsScreen() {
     }
     if (!form.pan_name.trim()) return { valid: false, field: "pan_name", message: "Name as per PAN is required." };
 
-    // Payment validation
     if (form.payment_method === "bank_account") {
       if (!form.account_holder_name.trim()) return { valid: false, field: "account_holder_name", message: "Account Holder Name is required." };
       if (!form.bank_name.trim()) return { valid: false, field: "bank_name", message: "Bank Name is required." };
@@ -206,7 +207,6 @@ export default function PartnerWithUsScreen() {
       const json = await response.json();
 
       if (!response.ok || !json.success) {
-        // Specific Human Readable Failure Handlers
         const serverError = json.error || "Unable to submit application right now.";
         setErrorMessage(serverError);
         if (serverError.toLowerCase().includes("mobile")) setErrorField("phone");
@@ -218,7 +218,6 @@ export default function PartnerWithUsScreen() {
         return;
       }
 
-      // Success Scenario - Record Created Successfully
       setConfirmation({ duplicate: Boolean(json.duplicate), ...(json.application || {}) });
       setErrorMessage("");
       setErrorField("");
@@ -229,7 +228,6 @@ export default function PartnerWithUsScreen() {
         setKycAccepted(false);
       }
 
-      // Smooth Scroll to Top Success Header
       setTimeout(() => scrollRef.current?.scrollTo({ y: 0, animated: true }), 100);
     } catch (error: any) {
       console.error("Partner Application Error:", error);
@@ -295,7 +293,7 @@ export default function PartnerWithUsScreen() {
       if (!response.ok || !json.success) throw new Error(json.error || "Upload failed. Please try again.");
       
       setUploadedDocs((current) => ({ ...current, [section.id]: json.document }));
-      Alert.alert("Uploaded successfully", `${option[1]} uploaded successfully.`);
+      setKycSuccessMessage(`${option[1]} uploaded successfully!`);
     } catch (error: any) {
       Alert.alert("Upload failed", error?.message || "Unable to upload Partner KYC document.");
     } finally {
@@ -307,18 +305,41 @@ export default function PartnerWithUsScreen() {
     if (!confirmation?.id || !confirmation?.phone) return;
     const needed = requiredKycSectionsFor(confirmation, form.partner_type);
     const missing = needed.filter((section) => !uploadedDocs[section.id]);
-    if (missing.length) return Alert.alert("KYC documents missing", missing.map((section) => `${section.title} missing`).join("\n"));
+    if (missing.length) {
+      Alert.alert("KYC documents missing", missing.map((section) => `${section.title} missing`).join("\n"));
+      return;
+    }
 
-    const response = await fetch(apiUrl(`/api/partner/applications/${confirmation.id}/submit-kyc`), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ phone: confirmation.phone }),
-    });
-    const json = await response.json();
-    if (!response.ok || !json.success) return Alert.alert("KYC submission failed", json.error || "Unable to submit KYC.");
-    setConfirmation({ ...confirmation, ...(json.application || {}) });
-    Alert.alert("Partner KYC submitted", "Your Partner KYC is now under review by SabSewa Local.");
+    setSubmittingKyc(true);
+    setKycSuccessMessage("");
+
+    try {
+      const response = await fetch(apiUrl(`/api/partner/applications/${confirmation.id}/submit-kyc`), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: confirmation.phone }),
+      });
+
+      const json = await response.json();
+      if (!response.ok || !json.success) {
+        Alert.alert("KYC submission failed", json.error || "Unable to submit KYC.");
+        return;
+      }
+
+      // Update State Immediately
+      setConfirmation({ ...confirmation, ...(json.application || {}), kyc_status: "under_review" });
+      setKycSuccessMessage("🎉 Partner KYC Package Submitted Successfully! Status updated to Under Review.");
+
+      // Smooth Scroll to Banner
+      setTimeout(() => scrollRef.current?.scrollTo({ y: 0, animated: true }), 100);
+    } catch (err: any) {
+      Alert.alert("Submission Error", err?.message || "Network error submitting KYC.");
+    } finally {
+      setSubmittingKyc(false);
+    }
   }
+
+  const isKycSubmitted = confirmation?.kyc_status === "under_review" || confirmation?.kyc_status === "verified";
 
   return (
     <ScrollView ref={scrollRef} style={styles.screen} contentContainerStyle={styles.content}>
@@ -326,20 +347,35 @@ export default function PartnerWithUsScreen() {
 
       {/* PROMINENT SUCCESS CONFIRMATION BANNER */}
       {confirmation && (
-        <View style={styles.successBanner}>
-          <Text style={styles.successBannerTitle}>Application Submitted Successfully!</Text>
-          <Text style={styles.successBannerSub}>
-            Thank you for applying to become a SabSewa Local Partner. Your application details have been saved successfully.
+        <View style={isKycSubmitted ? styles.kycSubmittedBanner : styles.successBanner}>
+          <Text style={isKycSubmitted ? styles.kycSubmittedTitle : styles.successBannerTitle}>
+            {isKycSubmitted ? "Partner KYC Under Review!" : "Application Submitted Successfully!"}
           </Text>
-          <Text style={styles.successBannerInstruction}>
-            Now proceed to Partner KYC to upload your required identity document and photograph for verification.
+          <Text style={isKycSubmitted ? styles.kycSubmittedSub : styles.successBannerSub}>
+            {isKycSubmitted
+              ? "Your Partner KYC package and identity documents have been submitted to SabSewa Local. Verification will be completed within 48 hours."
+              : "Thank you for applying to become a SabSewa Local Partner. Your application details have been saved successfully."}
           </Text>
 
-          <TouchableOpacity style={styles.proceedKycBtn} onPress={handleProceedToKyc}>
-            <Text style={styles.proceedKycText}>Proceed to KYC Document Upload →</Text>
-          </TouchableOpacity>
+          {!isKycSubmitted && (
+            <>
+              <Text style={styles.successBannerInstruction}>
+                Now proceed to Partner KYC to upload your required identity document and photograph for verification.
+              </Text>
+              <TouchableOpacity style={styles.proceedKycBtn} onPress={handleProceedToKyc}>
+                <Text style={styles.proceedKycText}>Proceed to KYC Document Upload →</Text>
+              </TouchableOpacity>
+            </>
+          )}
         </View>
       )}
+
+      {/* KYC SUCCESS NOTIFICATION */}
+      {kycSuccessMessage ? (
+        <View style={styles.kycSuccessBox}>
+          <Text style={styles.kycSuccessText}>{kycSuccessMessage}</Text>
+        </View>
+      ) : null}
 
       {/* ERROR FEEDBACK CARD */}
       {errorMessage ? (
@@ -403,6 +439,7 @@ export default function PartnerWithUsScreen() {
                     key={option[0]}
                     style={[styles.chip, selectedDocs[section.id] === option[0] && styles.chipSelected]}
                     onPress={() => setSelectedDocs((current) => ({ ...current, [section.id]: option[0] }))}
+                    disabled={isKycSubmitted}
                   >
                     <Text style={[styles.chipText, selectedDocs[section.id] === option[0] && styles.chipTextSelected]}>{option[1]}</Text>
                   </TouchableOpacity>
@@ -413,20 +450,33 @@ export default function PartnerWithUsScreen() {
                 {uploading === section.id ? "Uploading file..." : uploadedDocs[section.id] ? `✓ Uploaded: ${uploadedDocs[section.id].file_name || "Document"}` : "Document missing"}
               </Text>
 
-              <View style={styles.actions}>
-                <TouchableOpacity style={styles.secondaryBtn} onPress={() => uploadKyc(section, "camera")}><Text style={styles.secondaryText}>Take Photo</Text></TouchableOpacity>
-                <TouchableOpacity style={styles.secondaryBtn} onPress={() => uploadKyc(section, "gallery")}><Text style={styles.secondaryText}>Gallery</Text></TouchableOpacity>
-                <TouchableOpacity style={styles.secondaryBtn} onPress={() => uploadKyc(section, "files")}><Text style={styles.secondaryText}>Files</Text></TouchableOpacity>
-              </View>
+              {!isKycSubmitted && (
+                <View style={styles.actions}>
+                  <TouchableOpacity style={styles.secondaryBtn} onPress={() => uploadKyc(section, "camera")}><Text style={styles.secondaryText}>Take Photo</Text></TouchableOpacity>
+                  <TouchableOpacity style={styles.secondaryBtn} onPress={() => uploadKyc(section, "gallery")}><Text style={styles.secondaryText}>Gallery</Text></TouchableOpacity>
+                  <TouchableOpacity style={styles.secondaryBtn} onPress={() => uploadKyc(section, "files")}><Text style={styles.secondaryText}>Files</Text></TouchableOpacity>
+                </View>
+              )}
             </View>
           ))}
 
           <TouchableOpacity
-            style={[styles.primaryButton, (uploading || requiredKycSectionsFor(confirmation, form.partner_type).some((section: any) => !uploadedDocs[section.id])) && styles.disabled]}
-            disabled={Boolean(uploading) || requiredKycSectionsFor(confirmation, form.partner_type).some((section: any) => !uploadedDocs[section.id])}
+            style={[
+              styles.primaryButton,
+              (isKycSubmitted || submittingKyc || uploading || requiredKycSectionsFor(confirmation, form.partner_type).some((section: any) => !uploadedDocs[section.id])) && styles.disabled
+            ]}
+            disabled={isKycSubmitted || submittingKyc || Boolean(uploading) || requiredKycSectionsFor(confirmation, form.partner_type).some((section: any) => !uploadedDocs[section.id])}
             onPress={submitKycForReview}
           >
-            <Text style={styles.primaryText}>{uploading ? "Upload in progress..." : "Submit Partner KYC for Review"}</Text>
+            <Text style={styles.primaryText}>
+              {submittingKyc
+                ? "Submitting KYC..."
+                : isKycSubmitted
+                  ? "✓ Partner KYC Submitted for Review"
+                  : uploading
+                    ? "Upload in progress..."
+                    : "Submit Partner KYC for Review"}
+            </Text>
           </TouchableOpacity>
         </View>
       )}
@@ -584,7 +634,7 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#ffffff" },
   content: { padding: 20, paddingTop: 40, paddingBottom: 50 },
 
-  // PROMINENT SUCCESS BANNER
+  // SUCCESS BANNERS
   successBanner: {
     backgroundColor: "#f0fdf4",
     borderWidth: 2,
@@ -599,6 +649,20 @@ const styles = StyleSheet.create({
   successBannerInstruction: { fontSize: 13, fontWeight: "700", color: "#0f766e", marginBottom: 14 },
   proceedKycBtn: { backgroundColor: "#15803d", paddingVertical: 14, paddingHorizontal: 18, borderRadius: 8, alignItems: "center" },
   proceedKycText: { color: "#ffffff", fontWeight: "900", fontSize: 15 },
+
+  kycSubmittedBanner: {
+    backgroundColor: "#ecfeff",
+    borderWidth: 2,
+    borderColor: "#0891b2",
+    borderRadius: 12,
+    padding: 18,
+    marginBottom: 20,
+  },
+  kycSubmittedTitle: { fontSize: 22, fontWeight: "900", color: "#0e7490", marginBottom: 6 },
+  kycSubmittedSub: { fontSize: 14, color: "#155e75", lineHeight: 20 },
+
+  kycSuccessBox: { backgroundColor: "#dcfce7", borderWidth: 1, borderColor: "#22c55e", borderRadius: 8, padding: 12, marginBottom: 16 },
+  kycSuccessText: { color: "#15803d", fontWeight: "800", fontSize: 13, textAlign: "center" },
 
   // ERROR CARD
   errorBox: { backgroundColor: "#fef2f2", borderWidth: 2, borderColor: "#dc2626", borderRadius: 10, padding: 14, marginBottom: 16 },

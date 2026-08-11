@@ -12,6 +12,18 @@ const DEFAULT_BENEFIT_PERCENT = 10;
 const partnerTypes = ["Existing Customer", "Non-Customer", "Existing Vendor", "Non-Vendor", "Individual", "Local Business Promoter", "Marketing or Business Development Professional", "Consultant", "Organization", "NGO", "Educational Institution", "Other Stakeholder"];
 const taxTypes = ["individual", "proprietorship", "partnership", "llp", "company", "other"];
 
+const discoverySources = [
+  "Social Media",
+  "Existing Partner",
+  "Existing Vendor",
+  "Existing Customer",
+  "Friend / Relative",
+  "SabSewa Website",
+  "Local Promotion",
+  "Company Representative",
+  "Other"
+];
+
 const emptyForm = {
   applicant_name: "",
   partner_type: "Individual",
@@ -26,6 +38,8 @@ const emptyForm = {
   experience_summary: "",
   vendor_onboarding_plan: "",
   customer_awareness_plan: "",
+  discovery_source: "Social Media",
+  discovery_source_other_description: "",
   referral_source: "",
   pan_number: "",
   pan_name: "",
@@ -118,6 +132,7 @@ export default function PartnerWithUsScreen() {
   function validateForm() {
     const required = [form.applicant_name, form.partner_type, form.phone, form.city, form.district, form.state, form.proposed_area_of_operation, form.experience_summary, form.vendor_onboarding_plan, form.customer_awareness_plan, form.pan_number, form.pan_name, form.tax_profile_type];
     if (required.some((value) => !String(value || "").trim())) return "Please fill all mandatory Partner Application, PAN/Tax and location fields.";
+    if (form.discovery_source === "Other" && !form.discovery_source_other_description.trim()) return "Please describe how you heard about the SabSewa Local Partner Program.";
     if (!accepted || !kycAccepted) return "Please accept the Partner Program Terms and KYC/confidentiality declaration.";
     if (form.payment_method === "bank_account") {
       if (![form.account_holder_name, form.bank_name, form.account_number, form.account_number_confirm, form.ifsc_code, form.account_type].every((v) => String(v || "").trim())) return "Please fill all mandatory bank payment fields.";
@@ -337,7 +352,23 @@ export default function PartnerWithUsScreen() {
         <Field label="Experience / Background *" value={form.experience_summary} onChangeText={(v) => setValue("experience_summary", v)} multiline />
         <Field label="How will you onboard local vendors? *" value={form.vendor_onboarding_plan} onChangeText={(v) => setValue("vendor_onboarding_plan", v)} multiline />
         <Field label="How will you create local customer awareness? *" value={form.customer_awareness_plan} onChangeText={(v) => setValue("customer_awareness_plan", v)} multiline />
-        <Field label="Referral Source" value={form.referral_source} onChangeText={(v) => setValue("referral_source", v)} />
+        
+        {/* NEW ACQUISITION SURVEY DISCOVERY FIELD */}
+        <Text style={styles.label}>How did you hear about the SabSewa Local Partner Program? *</Text>
+        <View style={styles.chips}>
+          {discoverySources.map((source) => (
+            <Chip key={source} label={source} active={form.discovery_source === source} onPress={() => setValue("discovery_source", source)} />
+          ))}
+        </View>
+
+        {form.discovery_source === "Other" ? (
+          <Field 
+            label="Please describe how you heard about us *" 
+            value={form.discovery_source_other_description} 
+            onChangeText={(v) => setValue("discovery_source_other_description", v)} 
+            multiline 
+          />
+        ) : null}
 
         <View style={styles.formSection}><Text style={styles.sectionTitle}>PAN / Tax Details</Text>
           <Field label="PAN Number *" value={form.pan_number} onChangeText={(v) => setValue("pan_number", v.toUpperCase())} />

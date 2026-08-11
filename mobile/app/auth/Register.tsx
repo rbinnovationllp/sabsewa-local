@@ -1,19 +1,20 @@
-﻿// app/auth/register.tsx
+﻿// app/auth/Register.tsx
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import LanguageSelector from "@/components/LanguageSelector";
 import { useLanguage } from "@/providers/LanguageProvider";
 import { useAuth } from "@/providers/AuthProvider";
 import { getDeviceMetadata } from "@/lib/deviceIdentity";
 import * as Location from "expo-location";
+import { apiUrl } from "@/lib/backend";
 import {
   SABSEWA_ACCEPTANCE_STATEMENT,
   SABSEWA_ACCEPTED_DOCUMENT_VERSIONS,
@@ -66,12 +67,52 @@ export default function RegisterScreen() {
   const [submitting, setSubmitting] = useState(false);
   const { language, t } = useLanguage();
 
+  // Vendor Partner Referral State
+  const [referredByPartner, setReferredByPartner] = useState<boolean>(false);
+  const [partnerSearch, setPartnerSearch] = useState({ name: "", phone: "", partnerId: "" });
+  const [verifiedPartner, setVerifiedPartner] = useState<any>(null);
+  const [verifying, setVerifying] = useState<boolean>(false);
+  const [verificationError, setVerificationError] = useState<string>("");
+
   const roleTitle =
     role === "customer"
       ? t("common.customer")
       : role === "vendor"
       ? t("common.vendor")
       : t("common.rider");
+
+  async function handleVerifyPartner() {
+    if (!partnerSearch.phone.trim() && !partnerSearch.partnerId.trim()) {
+      return setVerificationError("Please enter Partner Registered Mobile Number or Partner ID.");
+    }
+    setVerifying(true);
+    setVerificationError("");
+    setVerifiedPartner(null);
+
+    try {
+      const res = await fetch(apiUrl("/api/partner/verify-referral"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          partner_id: partnerSearch.partnerId,
+          phone: partnerSearch.phone,
+          partner_name: partnerSearch.name,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.success && data.verified) {
+        setVerifiedPartner(data.partner);
+        setVerificationError("");
+      } else {
+        setVerificationError(data.error || "Partner details could not be verified.");
+      }
+    } catch (err: any) {
+      setVerificationError("Error verifying Partner details. Please check network.");
+    } finally {
+      setVerifying(false);
+    }
+  }
 
   const handleRegister = async () => {
     if (submitting) return;
@@ -102,6 +143,9 @@ export default function RegisterScreen() {
     if (role === "customer" && !address.trim()) return setError(t("auth.errorCustomerAddress"));
     if (role === "vendor" && !shopName.trim()) return setError(t("auth.errorVendorShop"));
     if (role === "vendor" && !address.trim()) return setError(t("auth.errorVendorAddress"));
+    if (role === "vendor" && referredByPartner && !verifiedPartner) {
+      return setError("Please verify Partner details before proceeding or select 'No' for Partner referral.");
+    }
     if (!acceptedPolicies) return setError(t("auth.errorPolicies"));
 
     if ((role === "vendor" || role === "rider") && !extra)
@@ -147,6 +191,9 @@ export default function RegisterScreen() {
         policy_acceptance_device: deviceMetadata,
         marketing_consent: marketingConsent,
         registration_method: method,
+        referred_by_partner_flag: Boolean(referredByPartner && verifiedPartner),
+        attributed_partner_id: verifiedPartner ? verifiedPartner.id : null,
+        partner_referral_code_used: verifiedPartner ? verifiedPartner.partner_id : null,
         customer_data_disclosure_consent:
           "Selected vendor receives customer name, selected delivery address and contact number only after accepting the order for fulfilment.",
       };
@@ -417,6 +464,74 @@ export default function RegisterScreen() {
               setError("");
             }}
           />
+
+          {/* PARTNER REFERRAL VERIFICATION BOX FOR VENDORS */}
+          <View style={styles.partnerReferralCard}>
+            <Text style={styles.partnerSectionTitle}>Partner Referral Details</Text>
+            <Text style={styles.label}>Were you referred or onboarded by a SabSewa Local Partner?</Text>
+
+            <View style={styles.radioRow}>
+              <TouchableOpacity
+                style={[styles.radioBtn, referredByPartner && styles.radioActive]}
+                onPress={() => setReferredByPartner(true)}
+              >
+                <Text style={referredByPartner ? styles.radioTextActive : styles.radioText}>Yes</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.radioBtn, !referredByPartner && styles.radioActive]}
+                onPress={() => {
+                  setReferredByPartner(false);
+                  setVerifiedPartner(null);
+                  setVerificationError("");
+                }}
+              >
+                <Text style={!referredByPartner ? styles.radioTextActive : styles.radioText}>No</Text>
+              </TouchableOpacity>
+            </View>
+
+            {referredByPartner && (
+              <View style={styles.verifyBox}>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Partner / Referral Person Name"
+                  value={partnerSearch.name}
+                  onChangeText={(v) => setPartnerSearch({ ...partnerSearch, name: v })}
+                />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Partner Registered Mobile Number *"
+                  keyboardType="phone-pad"
+                  value={partnerSearch.phone}
+                  onChangeText={(v) => setPartnerSearch({ ...partnerSearch, phone: v })}
+                />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Partner ID (Optional)"
+                  value={partnerSearch.partnerId}
+                  onChangeText={(v) => setPartnerSearch({ ...partnerSearch, partnerId: v })}
+                />
+
+                <TouchableOpacity
+                  style={styles.verifyBtn}
+                  onPress={handleVerifyPartner}
+                  disabled={verifying}
+                >
+                  <Text style={styles.verifyBtnText}>{verifying ? "Verifying..." : "Verify Partner Details"}</Text>
+                </TouchableOpacity>
+
+                {verifiedPartner && (
+                  <View style={styles.verifiedCard}>
+                    <Text style={styles.verifiedTitle}>✓ Verified Partner Linked</Text>
+                    <Text style={styles.verifiedText}>Name: {verifiedPartner.verified_name}</Text>
+                    <Text style={styles.verifiedText}>Partner ID: {verifiedPartner.partner_id}</Text>
+                    <Text style={styles.verifiedText}>Location: {verifiedPartner.city}, {verifiedPartner.state}</Text>
+                  </View>
+                )}
+
+                {verificationError ? <Text style={styles.partnerErrorText}>{verificationError}</Text> : null}
+              </View>
+            )}
+          </View>
         </View>
       )}
 
@@ -487,14 +602,14 @@ export default function RegisterScreen() {
 
       <TouchableOpacity style={styles.consentRow} onPress={() => setAcceptedPolicies((value) => !value)}>
         <View style={[styles.checkbox, acceptedPolicies && styles.checked]}>
-          {acceptedPolicies ? <Text style={styles.checkText}>Γ£ô</Text> : null}
+          {acceptedPolicies ? <Text style={styles.checkText}>✓</Text> : null}
         </View>
         <Text style={styles.consentText}>{SABSEWA_ACCEPTANCE_STATEMENT}</Text>
       </TouchableOpacity>
 
       <TouchableOpacity style={styles.consentRow} onPress={() => setMarketingConsent((value) => !value)}>
         <View style={[styles.checkbox, marketingConsent && styles.checked]}>
-          {marketingConsent ? <Text style={styles.checkText}>Γ£ô</Text> : null}
+          {marketingConsent ? <Text style={styles.checkText}>✓</Text> : null}
         </View>
         <Text style={styles.consentText}>{t("auth.marketingConsent")}</Text>
       </TouchableOpacity>
@@ -506,7 +621,7 @@ export default function RegisterScreen() {
 
       {/* BACK */}
       <TouchableOpacity onPress={() => router.push("/auth")}>
-        <Text style={styles.backText}>ΓåÉ {t("auth.back")}</Text>
+        <Text style={styles.backText}>← {t("auth.back")}</Text>
       </TouchableOpacity>
     </ScrollView>
   );
@@ -592,6 +707,29 @@ const styles = StyleSheet.create({
   checkText: { color: "#fff", fontWeight: "900" },
   consentText: { flex: 1, color: "#444", lineHeight: 19 },
 
+  partnerReferralCard: {
+    borderWidth: 1,
+    borderColor: "#fdba74",
+    backgroundColor: "#fff7ed",
+    borderRadius: 10,
+    padding: 14,
+    marginTop: 10,
+    marginBottom: 10,
+  },
+  partnerSectionTitle: { fontSize: 16, fontWeight: "900", color: "#9a3412", marginBottom: 8 },
+  radioRow: { flexDirection: "row", gap: 12, marginVertical: 8 },
+  radioBtn: { flex: 1, borderWidth: 1, borderColor: "#cbd5e1", borderRadius: 8, padding: 10, alignItems: "center", backgroundColor: "#fff" },
+  radioActive: { backgroundColor: "#ea580c", borderColor: "#ea580c" },
+  radioText: { color: "#334155", fontWeight: "800" },
+  radioTextActive: { color: "#fff", fontWeight: "900" },
+  verifyBox: { marginTop: 10 },
+  verifyBtn: { backgroundColor: "#0f766e", borderRadius: 8, padding: 12, alignItems: "center", marginVertical: 6 },
+  verifyBtnText: { color: "#fff", fontWeight: "900" },
+  verifiedCard: { borderWidth: 1, borderColor: "#86efac", backgroundColor: "#f0fdf4", borderRadius: 8, padding: 10, marginTop: 8 },
+  verifiedTitle: { color: "#166534", fontWeight: "900", marginBottom: 4 },
+  verifiedText: { color: "#14532d", fontSize: 12 },
+  partnerErrorText: { color: "#b91c1c", fontSize: 12, marginTop: 6, fontWeight: "700" },
+
   error: {
     color: "red",
     marginBottom: 16,
@@ -626,5 +764,3 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
 });
-
-

@@ -114,6 +114,8 @@ function publicApplication(application, paymentDetail = null) {
     kyc_status: application.kyc_status || "not_submitted",
     payment_details_status: application.payment_details_status || "pending_verification",
     payment_detail: publicPaymentDetail(paymentDetail),
+    discovery_source: application.discovery_source || application.referral_source || null,
+    discovery_source_other_description: application.discovery_source_other_description || null,
     pan_number_masked: application.pan_number_masked || null,
     gstin_masked: application.gstin_masked || null,
     submitted_at: application.submitted_at || application.created_at,
@@ -192,22 +194,78 @@ async function insertPaymentDetail(applicationId, payment) {
 }
 
 /**
+ * @route POST /api/partner/verify-referral
+ * @desc Live verification endpoint for Vendor Registration form to validate Partner details
+ */
+router.post("/verify-referral", async (req, res) => {
+  try {
+    const { partner_id, phone, partner_name } = req.body || {};
+    const cleanPhone = normalizePhone(phone);
+    const cleanId = clean(partner_id).toUpperCase();
+    const cleanName = clean(partner_name).toLowerCase();
+
+    if (!cleanPhone && !cleanId) {
+      return res.status(400).json({ success: false, verified: false, error: "Provide a Partner ID or Registered Mobile Number to verify." });
+    }
+
+    let query = supabase
+      .from("partner_applications")
+      .select("id, partner_id, referral_code, applicant_name, phone, city, state, status")
+      .eq("status", "active");
+
+    if (cleanId) {
+      query = query.or(`partner_id.eq.${cleanId},referral_code.eq.${cleanId},application_id.eq.${cleanId}`);
+    } else if (cleanPhone) {
+      query = query.or(`phone.eq.${phone},phone.eq.${cleanPhone}`);
+    }
+
+    const { data: matches, error } = await query;
+    if (error) throw error;
+
+    if (!matches || matches.length === 0) {
+      return res.status(404).json({
+        success: false,
+        verified: false,
+        error: "No active Partner found matching the provided details. Please verify the mobile number or Partner ID."
+      });
+    }
+
+    const matchedPartner = matches.find(p => cleanName ? p.applicant_name.toLowerCase().includes(cleanName) : true) || matches[0];
+
+    return res.json({
+      success: true,
+      verified: true,
+      partner: {
+        id: matchedPartner.id,
+        partner_id: matchedPartner.partner_id || matchedPartner.referral_code,
+        verified_name: matchedPartner.applicant_name,
+        city: matchedPartner.city,
+        state: matchedPartner.state,
+        referral_code: matchedPartner.referral_code
+      }
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, verified: false, error: error.message });
+  }
+});
+
+/**
  * @route POST /api/partner/referrals/attribute
- * @desc Attributes a newly registered vendor to an active partner via referral code
+ * @desc Attributes a newly registered vendor to an active partner via referral code or partner ID
  */
 router.post("/referrals/attribute", async (req, res) => {
   try {
-    const { vendor_id, referral_code } = req.body || {};
-    const cleanCode = clean(referral_code).toUpperCase();
+    const { vendor_id, partner_id, referral_code } = req.body || {};
+    const cleanCode = clean(referral_code || partner_id).toUpperCase();
 
     if (!vendor_id || !cleanCode) {
-      return res.status(400).json({ success: false, error: "Vendor ID and referral code are required." });
+      return res.status(400).json({ success: false, error: "Vendor ID and partner referral code/ID are required." });
     }
 
     const { data: partner, error: partnerError } = await supabase
       .from("partner_applications")
       .select("id, partner_id, status")
-      .eq("referral_code", cleanCode)
+      .or(`referral_code.eq.${cleanCode},partner_id.eq.${cleanCode},id.eq.${partner_id || '00000000-0000-0000-0000-000000000000'}`)
       .maybeSingle();
 
     if (partnerError || !partner) {
@@ -231,6 +289,17 @@ router.post("/referrals/attribute", async (req, res) => {
       .single();
 
     if (referralError) throw referralError;
+
+    await supabase
+      .from("vendors")
+      .update({
+        attributed_partner_id: partner.id,
+        referred_by_partner_flag: true,
+        partner_referral_code_used: cleanCode,
+        partner_attribution_verified_at: new Date().toISOString(),
+        partner_attribution_locked: true,
+      })
+      .eq("id", vendor_id);
 
     return res.status(201).json({ success: true, referral });
   } catch (error) {
@@ -293,7 +362,9 @@ router.post("/applications", async (req, res) => {
       experience_summary: clean(body.experience_summary),
       vendor_onboarding_plan: clean(body.vendor_onboarding_plan),
       customer_awareness_plan: clean(body.customer_awareness_plan),
-      referral_source: clean(body.referral_source) || null,
+      discovery_source: clean(body.discovery_source) || clean(body.referral_source) || "Other",
+      discovery_source_other_description: clean(body.discovery_source) === "Other" ? clean(body.discovery_source_other_description) : null,
+      referral_source: clean(body.discovery_source) || clean(body.referral_source) || null,
       referral_code: generateReferralCode(body.applicant_name),
       revenue_share_percent: DEFAULT_BENEFIT_PERCENT,
       net_revenue_definition:
@@ -448,7 +519,7 @@ router.get("/admin/applications", ...requireAdmin, async (req, res) => {
   try {
     const { data, error } = await supabase
       .from("partner_applications")
-      .select("*, partner_payment_details(id, payment_method, account_number_last4, bank_name, account_holder_name, ifsc_code, account_type, upi_id_masked, upi_name, status, is_current), partner_kyc_documents(id, document_section, document_type, document_label, status, file_name, created_at), partner_referred_vendors(id, referral_status, vendor_id, eligible_revenue_amount, benefit_earned_amount), partner_commission_events(id, status, gross_revenue, net_revenue, commission_amount)")
+      .select("*, partner_payment_details(id, payment_method, account_number_last4, bank_name, account_holder_name, ifsc_code, account_type, upi_id_masked, upi_name, status, is_current), partner_kyc_documents(id, document_section, document_type, document_label, status, file_name, created_at), partner_referred_vendors(id, referral_status, vendor_id, eligible_revenue_amount, benefit_earned_amount, vendors(id, shop_name, status, created_at)), partner_commission_events(id, status, gross_revenue, net_revenue, commission_amount)")
       .order("created_at", { ascending: false })
       .limit(300);
     if (error) throw error;
@@ -513,12 +584,68 @@ router.post("/admin/applications/:application_id/review", ...requireAdmin, async
 });
 
 /**
+ * @route POST /api/partner/admin/reattribute-vendor
+ * @desc Master Admin restricted endpoint to reattribute a vendor to a different Partner with an audit log
+ */
+router.post("/admin/reattribute-vendor", ...requireAdmin, async (req, res) => {
+  try {
+    const { vendor_id, new_partner_application_id, reason } = req.body || {};
+
+    if (!vendor_id || !new_partner_application_id || !reason) {
+      return res.status(400).json({ success: false, error: "Vendor ID, new Partner ID, and an explicit reason are required." });
+    }
+
+    const { data: newPartner, error: partnerErr } = await supabase
+      .from("partner_applications")
+      .select("id, partner_id, referral_code, applicant_name, status")
+      .eq("id", new_partner_application_id)
+      .single();
+
+    if (partnerErr || newPartner.status !== "active") {
+      return res.status(400).json({ success: false, error: "Target partner account is not active." });
+    }
+
+    await supabase
+      .from("vendors")
+      .update({
+        attributed_partner_id: newPartner.id,
+        referred_by_partner_flag: true,
+        partner_referral_code_used: newPartner.referral_code || newPartner.partner_id,
+        partner_attribution_verified_at: new Date().toISOString(),
+        partner_attribution_locked: true,
+      })
+      .eq("id", vendor_id);
+
+    await supabase.from("partner_referred_vendors").upsert({
+      vendor_id,
+      partner_application_id: newPartner.id,
+      referral_code: newPartner.referral_code || newPartner.partner_id,
+      referral_status: "verified",
+      notes: `Reattributed by Master Admin. Reason: ${reason}`,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "vendor_id" });
+
+    await writeAdminAudit({
+      req,
+      action: "partner.reattribute_vendor",
+      entityType: "vendor",
+      entityId: vendor_id,
+      metadata: { new_partner_id: newPartner.id, reason }
+    });
+
+    return res.json({ success: true, message: `Vendor successfully reattributed to Partner ${newPartner.applicant_name}.` });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
  * @route POST /api/partner/admin/generate-monthly-ledger
- * @desc Admin endpoint to calculate and generate monthly benefit ledger statements (10% rate)
+ * @desc Admin endpoint to calculate and generate monthly benefit ledger statements (10% rate on eligible revenue)
  */
 router.post("/admin/generate-monthly-ledger", ...requireAdmin, async (req, res) => {
   try {
-    const { period_month } = req.body || {}; // e.g. "2026-07"
+    const { period_month } = req.body || {};
     if (!period_month || !/^\d{4}-\d{2}$/.test(period_month)) {
       return res.status(400).json({ success: false, error: "Valid period_month format (YYYY-MM) is required." });
     }
@@ -542,7 +669,7 @@ router.post("/admin/generate-monthly-ledger", ...requireAdmin, async (req, res) 
       const totalEligibleRevenue = (referrals || []).reduce((acc, curr) => acc + Number(curr.eligible_revenue_amount || 0), 0);
       const commissionRate = partner.revenue_share_percent || DEFAULT_BENEFIT_PERCENT;
       const grossCommission = Math.round((totalEligibleRevenue * commissionRate) / 100);
-      const tdsTax = Math.round((grossCommission * 5) / 100); // 5% TDS deduction
+      const tdsTax = Math.round((grossCommission * 5) / 100);
       const netPayable = grossCommission - tdsTax;
 
       const { data: statement, error: stmtError } = await supabase

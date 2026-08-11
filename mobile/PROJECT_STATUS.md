@@ -205,3 +205,11 @@ Not ready--complete the listed technical work first.
 - Added rate limiting / temporary lockout for repeated incorrect secret attempts and audit logging for successful/failed Master Admin access attempts.
 - Added `mobile/server/scripts/generate-master-admin-secret.mjs` so the secret can be entered privately in PowerShell/terminal and converted into backend-only `.env` values.
 - Manual Supabase action: run `supabase/RUN_ONLY_MASTER_ADMIN_ACCESS_SECURITY_2026_08_09.sql` if audit/user-profile support is not already present.
+## Completed Feature Modules
+
+### Partner Acquisition & Vendor Financial Attribution System (Updated 2026-08-11)
+- [x] **Acquisition Discovery Analysis:** Replaced generic "Referral Source" with structured survey options ("How did you hear about SabSewa Local Partner Program?") including "Other" text details.
+- [x] **Live Vendor Registration Partner Verification:** Interactive verification API (`POST /api/partner/verify-referral`) allowing vendors to validate and link their referring Partner in real time before store creation.
+- [x] **Permanent Attribution Safeguards:** Database relationships (`partner_applications` -> `partner_referred_vendors` -> `vendors`) enforce strict 1:1 attribution. Changing a vendor's linked partner requires Master Admin credentials with audit logging.
+- [x] **Eligible Revenue Commission Ledger:** Revenue sharing (default 10%) is calculated strictly on eligible company revenues (vendor platform commissions and transaction charges) generated from attributed vendor orders, excluding customer order values and statutory taxes.
+- [x] **Admin CRM Reporting:** Integrated dashboard displaying partner referrals, vendor activation status, generated eligible revenue, earned commissions, tax deductions (TDS 5%), and payout transaction histories.

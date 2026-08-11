@@ -3,6 +3,7 @@ import { supabase } from "../connection.js";
 import { getPaymentReadiness } from "../payments/paymentEnvironment.js";
 import { getRazorpayPayment, verifyRazorpaySignature } from "../securityWallet/securityWalletService.js";
 import { getVendorOnboardingSummary } from "../vendor/onboardingPolicyService.js";
+import { eligibleRevenueFromBillingAttempt, recordPartnerCommissionForVendorRevenue } from "../partner/partnerCommissionService.js";
 
 const SUPPORTED_CHARGE_TYPES = new Set([
   "onboarding",
@@ -223,8 +224,8 @@ export async function resolveBillingItem({ vendorId, chargeType, referenceId, bi
 
 export async function createPlatformBillingOrder({ vendorId, auth, chargeType, referenceId, billingCycle, couponCode }) {
   const vendor = await assertVendorBillingAccess({ vendorId, auth });
-  if (chargeType === "onboarding" && vendor.kyc_status !== "kyc_verified") {
-    const error = new Error("Complete and verify KYC before paying onboarding charges.");
+  if (chargeType === "onboarding" && !["kyc_verified", "kyc_provisionally_cleared", "provisional_approved"].includes(String(vendor.kyc_status || "").toLowerCase())) {
+    const error = new Error("Complete KYC approval or provisional KYC clearance before paying onboarding charges.");
     error.statusCode = 409;
     throw error;
   }
@@ -360,6 +361,34 @@ export async function createPlatformBillingOrder({ vendorId, auth, chargeType, r
     payment_environment: readiness,
     summary: item,
   };
+}
+
+async function recordPartnerCommissionFromBillingAttempt({ attempt, payment, source }) {
+  try {
+    const eligibleRevenue = eligibleRevenueFromBillingAttempt(attempt);
+    return await recordPartnerCommissionForVendorRevenue({
+      vendorId: attempt.vendor_id,
+      sourceType: source || "platform_billing",
+      sourceId: attempt.id,
+      paymentReference: payment?.id || attempt.razorpay_payment_id || attempt.razorpay_order_id || attempt.id,
+      grossRevenue: eligibleRevenue,
+      gstAmount: 0,
+      metadata: {
+        charge_type: attempt.charge_type,
+        reference_type: attempt.reference_type || null,
+        reference_id: attempt.reference_id || null,
+        razorpay_order_id: payment?.order_id || attempt.razorpay_order_id || null,
+        razorpay_payment_id: payment?.id || attempt.razorpay_payment_id || null,
+      },
+    });
+  } catch (error) {
+    console.error("Partner commission creation failed for platform billing", {
+      vendor_id: attempt?.vendor_id,
+      attempt_id: attempt?.id,
+      message: error?.message || String(error),
+    });
+    return { error: error?.message || String(error) };
+  }
 }
 
 async function auditBilling({ vendorId, actorUserId, actorRole, entityType, entityId, action, beforeData = null, afterData = null, metadata = {} }) {
@@ -659,6 +688,8 @@ export async function verifyPlatformBillingPayment({ vendorId, auth, razorpayOrd
     metadata: { billing_attempt_id: attempt.id, customer_order_payment: false },
   }, { onConflict: "idempotency_key" });
 
+  const partnerCommission = await recordPartnerCommissionFromBillingAttempt({ attempt: updatedAttempt, payment, source: "platform_billing_payment" });
+
   await auditBilling({
     vendorId,
     actorUserId: auth.user_id,
@@ -667,7 +698,7 @@ export async function verifyPlatformBillingPayment({ vendorId, auth, razorpayOrd
     entityId: attempt.id,
     action: "platform_payment_verified_and_activated",
     afterData: updatedAttempt,
-    metadata: { invoice_id: invoice.id, activation },
+    metadata: { invoice_id: invoice.id, activation, partner_commission: partnerCommission },
   });
 
   return { attempt: updatedAttempt, invoice, activation, payment_environment: readiness };
@@ -766,13 +797,15 @@ export async function processCapturedPlatformBillingWebhookPayment({ payment }) 
     metadata: { billing_attempt_id: attempt.id, customer_order_payment: false, processed_by: "razorpay_webhook" },
   }, { onConflict: "idempotency_key" });
 
+  const partnerCommission = await recordPartnerCommissionFromBillingAttempt({ attempt: updatedAttempt, payment, source: "platform_billing_webhook" });
+
   await auditBilling({
     vendorId: attempt.vendor_id,
     entityType: "vendor_payment_attempts",
     entityId: attempt.id,
     action: "platform_payment_webhook_activated",
     afterData: updatedAttempt,
-    metadata: { invoice_id: invoice.id, activation },
+    metadata: { invoice_id: invoice.id, activation, partner_commission: partnerCommission },
   });
 
   return { matched: true, attempt: updatedAttempt, invoice, activation };

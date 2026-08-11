@@ -9,6 +9,12 @@ const CANONICAL_FALLBACKS = {
   OTHER: { onboarding_fee: 2000, security_deposit: 5000, tax_rate_percent: 18, slugs: ["other"] },
 };
 
+const PAYMENT_UNLOCK_KYC_STATUSES = new Set(["kyc_verified", "kyc_provisionally_cleared", "provisional_approved", "verified", "approved"]);
+
+function isKycPaymentEligible(status) {
+  return PAYMENT_UNLOCK_KYC_STATUSES.has(String(status || "").toLowerCase());
+}
+
 function resolveCanonicalCategoryId(rawCategory) {
   if (!rawCategory) return "OTHER";
   const clean = String(rawCategory).trim();
@@ -71,7 +77,7 @@ export async function getVendorOnboardingSummary(vendorId) {
   const kycStatus = vendor.kyc_status || "kyc_not_started";
   const paymentStatus = vendor.onboarding_payment_status || "payment_pending";
   const lifecycleStatus = vendor.lifecycle_status || vendor.status || "registered";
-  const canPublishProducts = lifecycleStatus === "active" && kycStatus === "kyc_verified" && paymentStatus === "payment_completed";
+  const canPublishProducts = lifecycleStatus === "active" && isKycPaymentEligible(kycStatus) && paymentStatus === "payment_completed";
   const pricingSource = feeRule ? "vendor_fee_rules" : "canonical_fallback";
 
   return {
@@ -86,7 +92,7 @@ export async function getVendorOnboardingSummary(vendorId) {
     payment_status: paymentStatus,
     vendor_status: lifecycleStatus,
     lifecycle_status: lifecycleStatus,
-    is_payment_unlocked: kycStatus === "kyc_verified",
+    is_payment_unlocked: isKycPaymentEligible(kycStatus),
     can_publish_products: canPublishProducts,
     onboarding_fee: onboardingFee,
     security_deposit: securityDeposit,
@@ -114,7 +120,7 @@ export async function assertVendorCanReceiveOrdersByStatus(vendorId) {
   const paymentStatus = String(summary.payment_status || "").toLowerCase();
 
   const activeLifecycle = ["active", "approved", "verified"].includes(lifecycleStatus);
-  const kycApproved = ["kyc_verified", "verified", "approved"].includes(kycStatus);
+  const kycApproved = isKycPaymentEligible(kycStatus);
   const paymentComplete = ["payment_completed", "paid", "completed"].includes(paymentStatus);
 
   if (!activeLifecycle || !kycApproved || !paymentComplete) {

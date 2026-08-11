@@ -177,3 +177,10 @@ Partner activation flow: Application Submitted -> Partner KYC Uploaded/Submitted
 - Customer order and Partner payment screens have core labels connected to localization keys; long legal/user-entered content remains unchanged unless separately translated.
 
 - Partner applicants receive a database-confirmed success/status panel after submission; Partner privileges remain locked until KYC, payment-details verification and Master Admin activation are complete.
+
+
+### 2026-08-11 partner commission automation
+- Added backend commission automation service to create partner commission events when referred vendors generate eligible SabSewa platform revenue.
+- Eligible revenue excludes GST and refundable/pass-through amounts; onboarding commission is calculated on the onboarding fee portion only.
+- Added Supabase SQL support file: supabase/RUN_FIX_PARTNER_COMMISSION_AUTOMATION_2026_08_11.sql.
+- Remaining manual step: run the SQL in Supabase before relying on idempotent commission event creation in production.

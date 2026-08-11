@@ -2,6 +2,7 @@ import express from "express";
 import { supabase } from "../connection.js";
 import { writeOrderAuditLog } from "../audit/orderAudit.js";
 import { notifyCustomerOrderDispatched } from "../notifications/dispatchNotificationService.js";
+import { recordPartnerCommissionForVendorRevenue } from "../partner/partnerCommissionService.js";
 
 const router = express.Router();
 
@@ -86,6 +87,16 @@ function fullOrderDetails(order) {
     ...order,
     details_unlocked: true,
   };
+}
+
+function firstPlatformCharge(value) {
+  if (Array.isArray(value)) return value[0] || null;
+  if (Array.isArray(value?.data)) return value.data[0] || null;
+  return value || null;
+}
+
+function rupeesFromPaise(value) {
+  return Number(value || 0) / 100;
 }
 
 function vendorOrderView(order) {
@@ -694,6 +705,23 @@ router.post("/status", verifyVendor, async (req, res) => {
       p_actor_user_id: actor_user_id || null,
     });
     platformCharge = chargeError ? { error: chargeError.message } : chargeData;
+    if (!chargeError && chargeData) {
+      try {
+        const fee = firstPlatformCharge(chargeData);
+        const partnerCommission = await recordPartnerCommissionForVendorRevenue({
+          vendorId: req.order.vendor_id,
+          sourceType: "customer_order_platform_fee",
+          sourceId: fee?.id || order_id,
+          paymentReference: fee?.id ? `platform_fee:${fee.id}` : `order:${order_id}:completed`,
+          grossRevenue: rupeesFromPaise(fee?.base_fee_paise || 0),
+          gstAmount: 0,
+          metadata: { order_id, platform_fee: fee || chargeData },
+        });
+        platformCharge = { platform_fee: chargeData, partner_commission: partnerCommission };
+      } catch (commissionError) {
+        platformCharge = { platform_fee: chargeData, partner_commission_error: commissionError?.message || String(commissionError) };
+      }
+    }
   }
 
   await writeOrderAuditLog({

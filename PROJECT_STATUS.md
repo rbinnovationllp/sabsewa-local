@@ -1185,3 +1185,16 @@ Manual Supabase action required:
 - Customer order and Partner payment screens have core labels connected to localization keys; long legal/user-entered content remains unchanged unless separately translated.
 
 - Partner application post-submission message now clearly shows database-confirmed submission, Application ID, KYC review status, View Application/KYC Status action, and states that onboarding/referral privileges start only after Partner approval and activation.
+
+
+### 2026-08-11 onboarding-readiness patch
+- Prepared focused onboarding-readiness fixes for stale Admin entry, provisional KYC payment unlock consistency, and secure Partner referral attribution.
+- Added Supabase repair SQL: supabase/RUN_FIX_ONBOARDING_PARTNER_REFERRAL_READINESS_2026_08_11.sql.
+- Remaining verification: run SQL, rebuild web dist, deploy backend, and test vendor registration -> KYC -> payment -> activation -> customer discovery.
+
+
+### 2026-08-11 partner commission automation
+- Added backend commission automation service to create partner commission events when referred vendors generate eligible SabSewa platform revenue.
+- Eligible revenue excludes GST and refundable/pass-through amounts; onboarding commission is calculated on the onboarding fee portion only.
+- Added Supabase SQL support file: supabase/RUN_FIX_PARTNER_COMMISSION_AUTOMATION_2026_08_11.sql.
+- Remaining manual step: run the SQL in Supabase before relying on idempotent commission event creation in production.

@@ -438,12 +438,12 @@ export default function PartnerWithUsScreen() {
       {confirmation && (
         <View style={isKycSubmitted ? styles.kycSubmittedBanner : styles.successBanner}>
           <Text style={isKycSubmitted ? styles.kycSubmittedTitle : styles.successBannerTitle}>
-            {isKycSubmitted ? "Partner KYC Under Review!" : "Application Submitted Successfully!"}
+            {isKycSubmitted ? "Partner KYC Under Review!" : "Congratulations! Your SabSewa Local Partner Application has been submitted successfully."}
           </Text>
           <Text style={isKycSubmitted ? styles.kycSubmittedSub : styles.successBannerSub}>
             {isKycSubmitted
-              ? "Your Partner KYC package and identity documents have been submitted to SabSewa Local. Verification will be completed within 48 hours."
-              : "Your Partner Application record is active. Complete your KYC document upload below."}
+              ? "Your application and KYC documents have been received and are now under verification. You will be notified once your Partner account is approved."
+              : "Your application has been saved successfully. Complete the KYC uploads below. Vendor onboarding/referral privileges start only after Partner KYC verification and Master Admin activation."}
           </Text>
 
           <TouchableOpacity style={styles.clearSessionBtn} onPress={handleLogoutSession}>
@@ -462,7 +462,7 @@ export default function PartnerWithUsScreen() {
       {/* ERROR FEEDBACK CARD */}
       {errorMessage ? (
         <View style={styles.errorBox}>
-          <Text style={styles.errorBoxTitle}>⚠️ Notice</Text>
+          <Text style={styles.errorBoxTitle}>Notice</Text>
           <Text style={styles.errorBoxText}>{errorMessage}</Text>
         </View>
       ) : null}

@@ -1,4 +1,4 @@
-import crypto from "crypto";
+﻿import crypto from "crypto";
 import express from "express";
 import multer from "multer";
 import { supabase } from "../connection.js";
@@ -261,7 +261,7 @@ router.post("/verify-referral", async (req, res) => {
  * @route POST /api/partner/referrals/attribute
  * @desc Attributes a newly registered vendor to an active partner via referral code or partner ID
  */
-router.post("/referrals/attribute", async (req, res) => {
+router.post("/referrals/attribute", requireAuth, async (req, res) => {
   try {
     const { vendor_id, partner_id, referral_code } = req.body || {};
     const cleanCode = clean(referral_code || partner_id).toUpperCase();
@@ -270,9 +270,28 @@ router.post("/referrals/attribute", async (req, res) => {
       return res.status(400).json({ success: false, error: "Vendor ID and partner referral code/ID are required." });
     }
 
+    const referralActorIsAdmin = ["admin", "company_admin", "super_admin", "master_admin", "national_admin", "state_admin", "district_admin", "city_admin"].includes(String(req.auth?.role || "").toLowerCase());
+    const { data: vendor, error: vendorError } = await supabase
+      .from("vendors")
+      .select("id, owner_user_id, attributed_partner_id, partner_attribution_locked")
+      .eq("id", vendor_id)
+      .maybeSingle();
+
+    if (vendorError || !vendor) {
+      return res.status(404).json({ success: false, error: "Vendor profile was not found for referral attribution." });
+    }
+
+    if (!referralActorIsAdmin && vendor.owner_user_id !== req.auth?.user_id) {
+      return res.status(403).json({ success: false, error: "You can attribute only your own vendor profile." });
+    }
+
+    if (vendor.partner_attribution_locked && vendor.attributed_partner_id && !referralActorIsAdmin) {
+      return res.status(409).json({ success: false, error: "This vendor already has a locked Partner referral attribution. Contact SabSewa support for correction." });
+    }
+
     const { data: partner, error: partnerError } = await supabase
       .from("partner_applications")
-      .select("id, partner_id, status")
+      .select("id, partner_id, referral_code, status, revenue_share_percent")
       .or(`referral_code.eq.${cleanCode},partner_id.eq.${cleanCode},id.eq.${partner_id || '00000000-0000-0000-0000-000000000000'}`)
       .maybeSingle();
 
@@ -286,13 +305,17 @@ router.post("/referrals/attribute", async (req, res) => {
 
     const { data: referral, error: referralError } = await supabase
       .from("partner_referred_vendors")
-      .insert({
+      .upsert({
         partner_application_id: partner.id,
         vendor_id,
-        referral_code: cleanCode,
+        partner_id: partner.partner_id || null,
+        referral_code: partner.referral_code || cleanCode,
         referral_status: "attributed",
+        vendor_onboarding_date: new Date().toISOString(),
+        benefit_percent: Number(partner.revenue_share_percent || DEFAULT_BENEFIT_PERCENT),
         attributed_at: new Date().toISOString(),
-      })
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "vendor_id" })
       .select()
       .single();
 
@@ -303,7 +326,7 @@ router.post("/referrals/attribute", async (req, res) => {
       .update({
         attributed_partner_id: partner.id,
         referred_by_partner_flag: true,
-        partner_referral_code_used: cleanCode,
+        partner_referral_code_used: partner.referral_code || cleanCode,
         partner_attribution_verified_at: new Date().toISOString(),
         partner_attribution_locked: true,
       })

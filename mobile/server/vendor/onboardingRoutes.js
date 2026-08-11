@@ -149,7 +149,7 @@ router.post("/:vendor_id/create-razorpay-order", requireAuth, async (req, res) =
     const { vendor_id } = req.params;
     const vendor = await assertVendorOwnerOrAdmin(req, vendor_id);
 
-    if (!["kyc_verified", "provisional_approved"].includes(vendor.kyc_status)) {
+    if (!["kyc_verified", "kyc_provisionally_cleared", "provisional_approved"].includes(vendor.kyc_status)) {
       return res.status(409).json({ success: false, error: "Complete KYC verification before creating an onboarding payment order." });
     }
 
@@ -582,7 +582,7 @@ router.post("/:vendor_id/payment-record", requireAuth, async (req, res) => {
 
     const vendorForPayment = await assertVendorOwnerOrAdmin(req, req.params.vendor_id);
 
-    if (!["kyc_verified", "provisional_approved"].includes(vendorForPayment.kyc_status)) {
+    if (!["kyc_verified", "kyc_provisionally_cleared", "provisional_approved"].includes(vendorForPayment.kyc_status)) {
       return res.status(409).json({ success: false, error: "Complete KYC verification before recording onboarding payment." });
     }
 
@@ -635,7 +635,7 @@ router.get("/admin/config", ...requireAdmin, async (_req, res) => {
 router.post("/:vendor_id/kyc-status", ...requireAdmin, async (req, res) => {
   try {
     const { status, reason } = req.body || {};
-    const allowed = new Set(["kyc_not_started", "kyc_submitted", "kyc_under_review", "additional_information_required", "kyc_verified", "kyc_rejected", "provisional_approved"]);
+    const allowed = new Set(["kyc_not_started", "kyc_submitted", "kyc_under_review", "additional_information_required", "kyc_verified", "kyc_rejected", "kyc_provisionally_cleared", "provisional_approved"]);
     if (!allowed.has(status)) return res.status(400).json({ success: false, error: "Invalid KYC status." });
 
     const { data: current, error: currentError } = await supabase
@@ -673,7 +673,7 @@ router.post("/:vendor_id/kyc-status", ...requireAdmin, async (req, res) => {
       ? "kyc_rejected"
       : status === "kyc_verified" && current.onboarding_payment_status === "payment_completed"
         ? "approval_pending"
-        : status === "kyc_verified" || status === "provisional_approved"
+        : status === "kyc_verified" || status === "kyc_provisionally_cleared" || status === "provisional_approved"
           ? "payment_pending"
           : "kyc_pending";
 
@@ -713,7 +713,7 @@ router.post("/:vendor_id/activate", ...requireAdmin, async (req, res) => {
       .single();
     if (vendorError || !vendor) return res.status(404).json({ success: false, error: "Vendor not found." });
 
-    if (!["kyc_verified", "provisional_approved"].includes(vendor.kyc_status) || vendor.onboarding_payment_status !== "payment_completed") {
+    if (!["kyc_verified", "kyc_provisionally_cleared", "provisional_approved"].includes(vendor.kyc_status) || vendor.onboarding_payment_status !== "payment_completed") {
       return res.status(409).json({ success: false, error: "Vendor can be activated only after verified/provisional KYC and completed onboarding payment." });
     }
 

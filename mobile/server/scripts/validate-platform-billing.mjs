@@ -1,4 +1,4 @@
-import assert from "node:assert/strict";
+﻿import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
@@ -17,7 +17,7 @@ assert.match(service, /subscription_plans/, "subscription pricing comes from dat
 assert.match(service, /vendor_storage_plans/, "storage pricing comes from database");
 assert.match(service, /billing_products/, "promotion and premium pricing comes from database");
 assert.match(service, /verifyRazorpaySignature/, "Razorpay payment signatures are verified server-side");
-assert.match(service, /Complete and verify KYC before paying onboarding charges/, "platform billing blocks onboarding order creation before KYC approval");
+assert.match(service, /Complete KYC approval or provisional KYC clearance before paying onboarding charges/, "platform billing blocks onboarding order creation until KYC approval or SLA-provisional clearance");
 assert.match(service, /getRazorpayPayment/, "Razorpay payment status and amount are verified server-side");
 assert.match(service, /customer_order_payment: false/, "platform payments are explicitly separated from customer order payments");
 assert.match(service, /vendor_security_deposits/, "security deposits are recorded separately");
@@ -63,3 +63,4 @@ assert.match(migration, /base_amount_paise bigint/, "monetary values are stored 
 assert.match(migration, /next_vendor_invoice_number/, "sequential invoice number helper exists");
 
 console.log("Platform billing validation passed.");
+

@@ -1,4 +1,4 @@
--- SabSewa Local - onboarding readiness / partner referral repair
+﻿-- SabSewa Local - onboarding readiness / partner referral repair
 -- Safe to run more than once. It preserves existing data.
 
 alter table public.vendors
@@ -16,7 +16,9 @@ alter table public.partner_referred_vendors
   add column if not exists referred_shop_terminal_id uuid,
   add column if not exists referral_source text,
   add column if not exists eligible_revenue_amount numeric(12,2) not null default 0,
-  add column if not exists benefit_percent numeric(5,2) not null default 10.00;
+  add column if not exists benefit_percent numeric(5,2) not null default 10.00,
+  add column if not exists attributed_at timestamptz,
+  add column if not exists updated_at timestamptz;
 
 do $$
 declare
@@ -37,9 +39,23 @@ alter table public.partner_referred_vendors
   add constraint partner_referred_vendors_referral_status_check
   check (referral_status in ('submitted', 'attributed', 'verified', 'approved', 'rejected', 'commission_eligible', 'commission_paused'));
 
+-- Ensure ON CONFLICT (vendor_id) has a matching full unique index.
+-- PostgreSQL cannot infer a partial unique index for plain ON CONFLICT (vendor_id).
+with duplicate_vendor_referrals as (
+  select ctid,
+         row_number() over (partition by vendor_id order by ctid desc) as rn
+  from public.partner_referred_vendors
+  where vendor_id is not null
+)
+delete from public.partner_referred_vendors prv
+using duplicate_vendor_referrals d
+where prv.ctid = d.ctid
+  and d.rn > 1;
+
+drop index if exists public.uq_partner_referred_vendors_vendor_id;
+
 create unique index if not exists uq_partner_referred_vendors_vendor_id
-  on public.partner_referred_vendors(vendor_id)
-  where vendor_id is not null;
+  on public.partner_referred_vendors(vendor_id);
 
 create index if not exists idx_partner_referred_vendors_partner_referral
   on public.partner_referred_vendors(partner_application_id, referral_code, referral_status);
@@ -226,4 +242,6 @@ set
   referral_source = coalesce(public.partner_referred_vendors.referral_source, excluded.referral_source),
   benefit_percent = excluded.benefit_percent,
   updated_at = now();
+
+
 

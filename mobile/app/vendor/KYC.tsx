@@ -450,6 +450,12 @@ export default function VendorKycScreen() {
         <Text style={styles.section}>Current Status</Text>
         <Text style={styles.status}>{statusLabel(vendor?.kyc_status)}</Text>
         <Text style={styles.muted}>Payment unlocks only after KYC is approved by SabSewa. Uploaded documents must be submitted and reviewed before approval.</Text>
+        {vendor?.kyc_review_notes ? (
+          <View style={styles.reviewNoteBox}>
+            <Text style={styles.reviewNoteTitle}>Admin Review Notes</Text>
+            <Text style={styles.reviewNoteText}>{vendor.kyc_review_notes}</Text>
+          </View>
+        ) : null}
       </View>
 
       <View style={styles.panel}>
@@ -554,6 +560,9 @@ const styles = StyleSheet.create({
   section: { fontSize: 18, fontWeight: "900", color: "#111827", marginBottom: 10 },
   status: { fontSize: 18, fontWeight: "900", color: "#1166ff", marginBottom: 6 },
   muted: { color: "#6b7280", fontSize: 12, lineHeight: 18 },
+  reviewNoteBox: { borderWidth: 1, borderColor: "#fdba74", backgroundColor: "#fff7ed", borderRadius: 8, padding: 10, marginTop: 10 },
+  reviewNoteTitle: { color: "#9a3412", fontWeight: "900", marginBottom: 4 },
+  reviewNoteText: { color: "#7c2d12", fontWeight: "700", lineHeight: 18 },
   docSection: { borderWidth: 1, borderColor: "#e5e7eb", borderRadius: 8, padding: 12, marginBottom: 12, backgroundColor: "#f9fafb" },
   docSectionUploaded: { borderColor: "#86efac", backgroundColor: "#f0fdf4" },
   docSectionHeader: { flexDirection: "row", alignItems: "center", gap: 10 },

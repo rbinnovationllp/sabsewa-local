@@ -79,6 +79,7 @@ function labelStatus(status: string) {
   const normalized = String(status || "pending").replace(/_/g, " ");
   if (status === "active") return "Approved - Active Marketing Partner";
   if (status === "approved") return "Approved - Activation Pending";
+  if (status === "additional_information_required") return "Additional Verification Required";
   if (status === "under_review" || status === "documents_submitted") return "Under Review (In Verification)";
   return normalized.charAt(0).toUpperCase() + normalized.slice(1);
 }
@@ -404,6 +405,7 @@ export default function PartnerWithUsScreen() {
   }
 
   const isKycSubmitted = confirmation?.kyc_status === "under_review" || confirmation?.kyc_status === "verified";
+  const isAdditionalInfoRequired = confirmation?.kyc_status === "additional_information_required";
 
   return (
     <ScrollView ref={scrollRef} style={styles.screen} contentContainerStyle={styles.content}>
@@ -438,12 +440,14 @@ export default function PartnerWithUsScreen() {
       {confirmation && (
         <View style={isKycSubmitted ? styles.kycSubmittedBanner : styles.successBanner}>
           <Text style={isKycSubmitted ? styles.kycSubmittedTitle : styles.successBannerTitle}>
-            {isKycSubmitted ? "Partner KYC Under Review!" : "Congratulations! Your SabSewa Local Partner Application has been submitted successfully."}
+            {isAdditionalInfoRequired ? "Additional verification is required by SabSewa Local." : isKycSubmitted ? "Partner KYC Under Review!" : "Congratulations! Your SabSewa Local Partner Application has been submitted successfully."}
           </Text>
           <Text style={isKycSubmitted ? styles.kycSubmittedSub : styles.successBannerSub}>
-            {isKycSubmitted
-              ? "Your application and KYC documents have been received and are now under verification. You will be notified once your Partner account is approved."
-              : "Your application has been saved successfully. Complete the KYC uploads below. Vendor onboarding/referral privileges start only after Partner KYC verification and Master Admin activation."}
+            {isAdditionalInfoRequired
+              ? "Please review the admin notes below, correct or re-upload the requested documents, and submit your KYC again for review."
+              : isKycSubmitted
+                ? "Your application and KYC documents have been received and are now under verification. You will be notified once your Partner account is approved."
+                : "Your application has been saved successfully. Complete the KYC uploads below. Vendor onboarding/referral privileges start only after Partner KYC verification and Master Admin activation."}
           </Text>
 
           <TouchableOpacity style={styles.clearSessionBtn} onPress={handleLogoutSession}>
@@ -485,6 +489,12 @@ export default function PartnerWithUsScreen() {
           <ConfirmLine label="Proposed Area" value={confirmation.proposed_area_of_operation} />
           <ConfirmLine label="Application Status" value={labelStatus(confirmation.status)} />
           <ConfirmLine label="KYC Review Status" value={labelStatus(confirmation.kyc_status)} />
+          {confirmation.kyc_review_notes ? (
+            <View style={styles.reviewNoteBox}>
+              <Text style={styles.reviewNoteTitle}>Admin Notes / Required Information</Text>
+              <Text style={styles.reviewNoteText}>{confirmation.kyc_review_notes}</Text>
+            </View>
+          ) : null}
 
           <View style={{ height: 20 }} />
 
@@ -764,6 +774,9 @@ const styles = StyleSheet.create({
   confirmLabel: { color: "#64748b", fontWeight: "800", marginBottom: 2 },
   confirmValue: { color: "#111827", fontWeight: "900" },
   notice: { color: "#7c2d12", backgroundColor: "#fff7ed", borderWidth: 1, borderColor: "#fed7aa", borderRadius: 8, padding: 10, lineHeight: 18, marginBottom: 10 },
+  reviewNoteBox: { borderWidth: 1, borderColor: "#fdba74", backgroundColor: "#fff7ed", borderRadius: 8, padding: 10, marginVertical: 10 },
+  reviewNoteTitle: { color: "#9a3412", fontWeight: "900", marginBottom: 4 },
+  reviewNoteText: { color: "#7c2d12", fontWeight: "700", lineHeight: 18 },
 
   field: { marginBottom: 12 },
   label: { color: "#334155", fontWeight: "800", marginBottom: 6 },

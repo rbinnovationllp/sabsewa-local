@@ -121,6 +121,10 @@ function publicApplication(application, paymentDetail = null) {
     status: application.status || "pending",
     kyc_status: application.kyc_status || "not_submitted",
     payment_details_status: application.payment_details_status || "pending_verification",
+    kyc_review_notes: application.kyc_review_notes || null,
+    kyc_reviewed_at: application.kyc_reviewed_at || null,
+    kyc_reviewed_by: application.kyc_reviewed_by || null,
+    payment_details_review_notes: application.payment_details_review_notes || null,
     payment_detail: publicPaymentDetail(paymentDetail),
     discovery_source: application.discovery_source || application.referral_source || null,
     discovery_source_other_description: application.discovery_source_other_description || null,
@@ -582,7 +586,7 @@ router.get("/admin/applications", ...requireAdmin, async (req, res) => {
       return res.json({ success: true, applications: [] });
     }
 
-    const [paymentResult, kycResult, referralResult, commissionResult] = await Promise.all([
+    const [paymentResult, kycResult, referralResult, commissionResult, auditResult] = await Promise.all([
       supabaseAdmin
         .from("partner_payment_details")
         .select("id, partner_application_id, payment_method, account_number_last4, bank_name, account_holder_name, ifsc_code, account_type, upi_id_masked, upi_name, status, is_current")
@@ -600,9 +604,14 @@ router.get("/admin/applications", ...requireAdmin, async (req, res) => {
         .from("partner_commission_events")
         .select("id, partner_application_id, status, gross_revenue, net_revenue, commission_amount, created_at")
         .in("partner_application_id", applicationIds),
+      supabaseAdmin
+        .from("partner_admin_audit_logs")
+        .select("id, partner_application_id, action, previous_status, new_status, reason, actor_admin_id, actor_admin_name, metadata, created_at")
+        .in("partner_application_id", applicationIds)
+        .order("created_at", { ascending: false }),
     ]);
 
-    const firstError = paymentResult.error || kycResult.error || referralResult.error || commissionResult.error;
+    const firstError = paymentResult.error || kycResult.error || referralResult.error || commissionResult.error || auditResult.error;
     if (firstError) throw firstError;
 
     function groupByApplication(rows) {
@@ -618,6 +627,7 @@ router.get("/admin/applications", ...requireAdmin, async (req, res) => {
     const kycByApplication = groupByApplication(kycResult.data);
     const referralsByApplication = groupByApplication(referralResult.data);
     const commissionsByApplication = groupByApplication(commissionResult.data);
+    const auditByApplication = groupByApplication(auditResult.data);
 
     const rows = (applications || []).map((row) => {
       const payments = paymentsByApplication[row.id] || [];
@@ -625,6 +635,7 @@ router.get("/admin/applications", ...requireAdmin, async (req, res) => {
       const kycDocuments = kycByApplication[row.id] || [];
       const referrals = referralsByApplication[row.id] || [];
       const commissionEvents = commissionsByApplication[row.id] || [];
+      const reviewHistory = auditByApplication[row.id] || [];
       return {
         ...publicApplication(row, current),
         raw: {
@@ -637,6 +648,7 @@ router.get("/admin/applications", ...requireAdmin, async (req, res) => {
         kyc_documents: kycDocuments,
         referrals,
         commission_events: commissionEvents,
+        review_history: reviewHistory,
       };
     });
 
@@ -655,48 +667,191 @@ router.post("/admin/applications/:application_id/review", ...requireAdmin, async
   try {
     const applicationId = req.params.application_id;
     const action = clean(req.body.action);
-    const reason = clean(req.body.reason);
-    const patch = { reviewed_by: req.auth.user_id, reviewed_at: new Date().toISOString() };
+    const reason = clean(req.body.reason || req.body.rejection_reason);
+    const adminRemarks = clean(req.body.admin_remarks || req.body.remarks);
+    const requiredInformation = clean(req.body.required_information);
+    const followUpDate = clean(req.body.follow_up_date);
+    const documentsReviewed = Array.isArray(req.body.documents_reviewed) ? req.body.documents_reviewed.map(clean).filter(Boolean) : [];
+    const now = new Date().toISOString();
 
-    if (action === "approve_kyc") Object.assign(patch, { kyc_status: "verified", kyc_reviewed_by: req.auth.user_id, kyc_reviewed_at: new Date().toISOString(), kyc_review_notes: reason || null });
-    else if (action === "request_kyc_correction") Object.assign(patch, { kyc_status: "additional_information_required", kyc_reviewed_by: req.auth.user_id, kyc_reviewed_at: new Date().toISOString(), kyc_review_notes: reason || null });
-    else if (action === "reject_kyc") Object.assign(patch, { kyc_status: "rejected", kyc_reviewed_by: req.auth.user_id, kyc_reviewed_at: new Date().toISOString(), kyc_review_notes: reason || null });
-    else if (action === "verify_payment_details") Object.assign(patch, { payment_details_status: "verified", payment_details_reviewed_by: req.auth.user_id, payment_details_reviewed_at: new Date().toISOString(), payment_details_review_notes: reason || null });
-    else if (action === "reject_payment_details") Object.assign(patch, { payment_details_status: "rejected_correction_required", payment_details_reviewed_by: req.auth.user_id, payment_details_reviewed_at: new Date().toISOString(), payment_details_review_notes: reason || null });
-    else if (action === "activate_partner") {
-      const { data: current, error: currentError } = await supabaseAdmin.from("partner_applications").select("applicant_name, kyc_status, payment_details_status, referral_code").eq("id", applicationId).single();
-      if (currentError) throw currentError;
+    const { data: current, error: currentError } = await supabaseAdmin
+      .from("partner_applications")
+      .select("*")
+      .eq("id", applicationId)
+      .maybeSingle();
+    if (currentError) throw currentError;
+    if (!current) return res.status(404).json({ success: false, error: "Partner Application was not found." });
+
+    const reasonRequired = new Set([
+      "request_kyc_correction",
+      "request_further_information",
+      "reject_kyc",
+      "reject_payment_details",
+      "suspend_partner",
+      "terminate_partner",
+      "revoke_partner",
+    ]);
+    if (reasonRequired.has(action) && !reason && !adminRemarks && !requiredInformation) {
+      return res.status(400).json({ success: false, error: "Reason or admin remarks are required for this Partner action." });
+    }
+    if (reason.toLowerCase() === "other" && !adminRemarks) {
+      return res.status(400).json({ success: false, error: "Admin remarks are required when reason is Other." });
+    }
+
+    const previousStatus = current.status || "pending";
+    const previousKycStatus = current.kyc_status || "not_submitted";
+    const previousPaymentStatus = current.payment_details_status || "pending_verification";
+    const reviewNoteParts = [
+      reason ? `Reason: ${reason}` : "",
+      adminRemarks ? `Remarks: ${adminRemarks}` : "",
+      requiredInformation ? `Required information: ${requiredInformation}` : "",
+      followUpDate ? `Follow-up date: ${followUpDate}` : "",
+    ].filter(Boolean);
+    const reviewNotes = reviewNoteParts.join("\n") || null;
+    const patch = { reviewed_by: req.auth.user_id, reviewed_at: now };
+
+    if (action === "approve_kyc" || action === "verify_kyc") {
+      Object.assign(patch, {
+        kyc_status: "verified",
+        kyc_reviewed_by: req.auth.user_id,
+        kyc_reviewed_at: now,
+        kyc_review_notes: reviewNotes,
+      });
+    } else if (action === "request_kyc_correction" || action === "request_further_information") {
+      Object.assign(patch, {
+        kyc_status: "additional_information_required",
+        kyc_reviewed_by: req.auth.user_id,
+        kyc_reviewed_at: now,
+        kyc_review_notes: reviewNotes,
+      });
+    } else if (action === "reject_kyc") {
+      Object.assign(patch, {
+        kyc_status: "rejected",
+        kyc_reviewed_by: req.auth.user_id,
+        kyc_reviewed_at: now,
+        kyc_review_notes: reviewNotes,
+      });
+    } else if (action === "verify_payment_details") {
+      Object.assign(patch, {
+        payment_details_status: "verified",
+        payment_details_reviewed_by: req.auth.user_id,
+        payment_details_reviewed_at: now,
+        payment_details_review_notes: reviewNotes,
+      });
+    } else if (action === "reject_payment_details") {
+      Object.assign(patch, {
+        payment_details_status: "rejected_correction_required",
+        payment_details_reviewed_by: req.auth.user_id,
+        payment_details_reviewed_at: now,
+        payment_details_review_notes: reviewNotes,
+      });
+    } else if (action === "activate_partner") {
       if (current.kyc_status !== "verified" || current.payment_details_status !== "verified") {
         return res.status(400).json({ success: false, error: "Partner can be activated only after KYC and payment details are verified." });
       }
       Object.assign(patch, {
         status: "active",
-        active_at: new Date().toISOString(),
-        approved_at: new Date().toISOString(),
+        active_at: now,
+        approved_at: now,
         referral_code: current.referral_code || generateReferralCode(current.applicant_name),
       });
+    } else if (action === "suspend_partner") {
+      if (!["active", "approved"].includes(String(current.status || ""))) {
+        return res.status(400).json({ success: false, error: "Suspension is allowed only for an approved or active Partner. Use KYC rejection or further enquiry for applicants." });
+      }
+      Object.assign(patch, {
+        status: "suspended",
+        compliance_status: "suspended_investigation_pending",
+        suspension_reason: reviewNotes || "Suspended pending investigation",
+        suspended_by: req.auth.user_id,
+        suspended_at: now,
+      });
+    } else if (action === "reinstate_partner" || action === "reactivate_partner") {
+      Object.assign(patch, {
+        status: "active",
+        compliance_status: "clear",
+        suspension_reason: null,
+      });
+    } else if (action === "terminate_partner" || action === "revoke_partner") {
+      Object.assign(patch, {
+        status: "revoked",
+        compliance_status: "terminated",
+        terminated_by: req.auth.user_id,
+        terminated_at: now,
+      });
+    } else {
+      return res.status(400).json({ success: false, error: "Unsupported Partner review action." });
     }
-    else if (action === "suspend_partner") Object.assign(patch, { status: "suspended", compliance_status: "suspended_investigation_pending", suspension_reason: reason || "Suspended pending investigation", suspended_by: req.auth.user_id, suspended_at: new Date().toISOString() });
-    else if (action === "reinstate_partner") Object.assign(patch, { status: "active", compliance_status: "clear", suspension_reason: null });
-    else if (action === "terminate_partner") Object.assign(patch, { status: "revoked", compliance_status: "terminated", terminated_by: req.auth.user_id, terminated_at: new Date().toISOString() });
-    else return res.status(400).json({ success: false, error: "Unsupported Partner review action." });
 
-    const { data, error } = await supabase.from("partner_applications").update(patch).eq("id", applicationId).select("*").single();
+    const { data, error } = await supabaseAdmin
+      .from("partner_applications")
+      .update(patch)
+      .eq("id", applicationId)
+      .select("*")
+      .single();
     if (error) throw error;
 
-    await writeAdminAudit({ req, action: `partner.${action}`, entityType: "partner_application", entityId: applicationId, metadata: { reason } });
-    await supabase.from("partner_admin_audit_logs").insert({
+    if (["approve_kyc", "verify_kyc", "request_kyc_correction", "request_further_information", "reject_kyc"].includes(action)) {
+      const docStatus = (action === "approve_kyc" || action === "verify_kyc")
+        ? "verified"
+        : action === "reject_kyc"
+          ? "rejected"
+          : "additional_information_required";
+      await supabaseAdmin
+        .from("partner_kyc_documents")
+        .update({
+          status: docStatus,
+          rejection_reason: docStatus === "verified" ? null : (reviewNotes || reason || null),
+          reviewed_by: req.auth.user_id,
+          reviewed_at: now,
+        })
+        .eq("partner_application_id", applicationId)
+        .neq("status", "deleted");
+    }
+
+    const auditMetadata = {
+      previous_kyc_status: previousKycStatus,
+      new_kyc_status: data.kyc_status || null,
+      previous_payment_details_status: previousPaymentStatus,
+      new_payment_details_status: data.payment_details_status || null,
+      admin_remarks: adminRemarks || null,
+      required_information: requiredInformation || null,
+      follow_up_date: followUpDate || null,
+      documents_reviewed: documentsReviewed,
+    };
+
+    await writeAdminAudit({
+      req,
+      action: `partner.${action}`,
+      entityType: "partner_application",
+      entityId: applicationId,
+      metadata: { reason: reason || null, ...auditMetadata },
+    });
+    await supabaseAdmin.from("partner_admin_audit_logs").insert({
       actor_user_id: req.auth.user_id,
       actor_admin_id: req.adminProfile?.admin_id || null,
       actor_admin_name: req.adminProfile?.admin_name || null,
       partner_application_id: applicationId,
       action,
-      new_status: data.status,
-      reason: reason || null,
+      previous_status: `${previousStatus} / KYC: ${previousKycStatus} / Payment: ${previousPaymentStatus}`,
+      new_status: `${data.status || "pending"} / KYC: ${data.kyc_status || "not_submitted"} / Payment: ${data.payment_details_status || "pending_verification"}`,
+      reason: reason || adminRemarks || requiredInformation || null,
+      metadata: auditMetadata,
     });
 
-    return res.json({ success: true, application: publicApplication(data, await currentPaymentDetail(data.id)) });
+    return res.json({
+      success: true,
+      application: {
+        ...publicApplication(data, await currentPaymentDetail(data.id)),
+        raw: data,
+      },
+    });
   } catch (error) {
+    console.error("Partner review action failed", {
+      message: error?.message,
+      code: error?.code || null,
+      details: error?.details || null,
+    });
     return res.status(500).json({ success: false, error: error.message || "Unable to update Partner record." });
   }
 });

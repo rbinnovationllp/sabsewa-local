@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { Alert, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import BrandHeader from "@/components/BrandHeader";
 import { authenticatedFetch } from "@/lib/backend";
 
@@ -31,6 +31,28 @@ function timePendingText(value: any) {
   const days = Math.floor(hours / 24);
   return `${days} day${days === 1 ? "" : "s"} ${hours % 24}h`;
 }
+
+function askAdminText(message: string, required = false) {
+  const promptFn = Platform.OS === "web" && typeof window !== "undefined" ? window.prompt : undefined;
+  const answer = promptFn ? promptFn(message) : "";
+  const clean = String(answer || "").trim();
+  if (required && !clean) {
+    Alert.alert("Reason required", "Please enter a clear reason before completing this review action.");
+    return null;
+  }
+  return clean;
+}
+
+function confirmAdminAction(message: string) {
+  const confirmFn = Platform.OS === "web" && typeof window !== "undefined" ? window.confirm : undefined;
+  return confirmFn ? confirmFn(message) : true;
+}
+
+function latestReviewHistory(application: any) {
+  const history = application.review_history || application.raw?.partner_admin_audit_logs || [];
+  return Array.isArray(history) ? history.slice(0, 3) : [];
+}
+
 
 export default function PartnerApplicationsScreen() {
     const [applications, setApplications] = useState<any[]>([]);
@@ -78,12 +100,28 @@ export default function PartnerApplicationsScreen() {
     loadApplications();
   }
 
-  async function reviewPartner(id: string, action: string) {
-    const reason = action.includes("reject") || action.includes("correction") ? prompt("Reason/comments") || "" : "";
+  async function reviewPartner(id: string, action: string, options: any = {}) {
+    let reason = "";
+    let admin_remarks = "";
+    let required_information = "";
+    let follow_up_date = "";
+
+    if (options.reasonRequired) {
+      reason = askAdminText(options.reasonPrompt || "Enter reason for this Partner decision", true) || "";
+      if (!reason) return;
+    }
+    if (options.requestInfo) {
+      required_information = askAdminText("What additional information or document correction should the Partner provide?", true) || "";
+      if (!required_information) return;
+    }
+    if (options.remarks) admin_remarks = askAdminText("Admin remarks, if any") || "";
+    if (options.followUp) follow_up_date = askAdminText("Optional follow-up date (YYYY-MM-DD)") || "";
+    if (!confirmAdminAction(options.confirm || "Are you sure you want to complete this Partner review action?")) return;
+
     const response = await authenticatedFetch(`/api/partner/admin/applications/${id}/review`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action, reason }),
+      body: JSON.stringify({ action, reason, admin_remarks, required_information, follow_up_date }),
     });
     const json = await response.json();
     if (!response.ok || !json.success) return Alert.alert("Partner review", json.error || "Unable to update Partner.");
@@ -208,6 +246,13 @@ export default function PartnerApplicationsScreen() {
               <Text style={styles.identityText}>Time Pending: {timePendingText(application.raw?.kyc_submitted_at)}</Text>
               <Text style={styles.identityText}>Payment Details: {String(application.payment_details_status || "pending_verification").replace(/_/g, " ")}</Text>
               <Text style={styles.identityText}>Payment Method: {application.payment_detail?.payment_method || "-"}</Text>
+              {application.kyc_review_notes ? <Text style={styles.reviewNoteText}>KYC Review Notes: {application.kyc_review_notes}</Text> : null}
+              {application.payment_details_review_notes ? <Text style={styles.reviewNoteText}>Payment Review Notes: {application.payment_details_review_notes}</Text> : null}
+              {latestReviewHistory(application).map((item: any) => (
+                <Text key={item.id || item.created_at} style={styles.reviewHistoryText}>
+                  {String(item.action || "review").replace(/_/g, " ")} - {item.actor_admin_name || item.actor_admin_id || "Admin"} - {item.reason || item.created_at || ""}
+                </Text>
+              ))}
             </View>
 
             <Text style={styles.body}>Area: {application.proposed_area_of_operation || application.coverage_area}</Text>
@@ -223,23 +268,34 @@ export default function PartnerApplicationsScreen() {
               <Metric label="Pending" value={fmtMoney(Math.max(0, earned - paid))} />
             </View>
 
-            <View style={styles.actions}>
-              {(identityDoc?.id || photoDoc?.id) ? (
-                <TouchableOpacity style={styles.actionButton} onPress={() => previewKycDocument(identityDoc?.id || photoDoc?.id)}>
-                  <Text style={styles.actionText}>Review KYC</Text>
-                </TouchableOpacity>
-              ) : null}
-              {identityDoc?.id ? <TouchableOpacity style={styles.actionButton} onPress={() => previewKycDocument(identityDoc.id)}><Text style={styles.actionText}>Review Identity Proof</Text></TouchableOpacity> : null}
-              {photoDoc?.id ? <TouchableOpacity style={styles.actionButton} onPress={() => previewKycDocument(photoDoc.id)}><Text style={styles.actionText}>Review Photograph</Text></TouchableOpacity> : null}
-              <TouchableOpacity style={styles.actionButton} onPress={() => reviewPartner(application.id, "approve_kyc")}><Text style={styles.actionText}>Approve KYC</Text></TouchableOpacity>
-              <TouchableOpacity style={styles.actionButton} onPress={() => reviewPartner(application.id, "request_kyc_correction")}><Text style={styles.actionText}>Request KYC Correction</Text></TouchableOpacity>
-              <TouchableOpacity style={styles.actionButton} onPress={() => reviewPartner(application.id, "verify_payment_details")}><Text style={styles.actionText}>Verify Payment Details</Text></TouchableOpacity>
-              <TouchableOpacity style={styles.actionButton} onPress={() => reviewPartner(application.id, "reject_payment_details")}><Text style={styles.actionText}>Reject Payment Details</Text></TouchableOpacity>
-              {statuses.map((status) => (
-                <TouchableOpacity key={status} style={styles.actionButton} onPress={() => updateStatus(application.id, status)}>
-                  <Text style={styles.actionText}>{status.replace(/_/g, " ")}</Text>
-                </TouchableOpacity>
-              ))}
+            <View style={styles.reviewPanel}>
+              <Text style={styles.reviewPanelTitle}>KYC Review Decisions</Text>
+              <View style={styles.actions}>
+                {(identityDoc?.id || photoDoc?.id) ? (
+                  <TouchableOpacity style={styles.actionButton} onPress={() => previewKycDocument(identityDoc?.id || photoDoc?.id)}>
+                    <Text style={styles.actionText}>Open Latest KYC Document</Text>
+                  </TouchableOpacity>
+                ) : null}
+                {identityDoc?.id ? <TouchableOpacity style={styles.actionButton} onPress={() => previewKycDocument(identityDoc.id)}><Text style={styles.actionText}>Review Identity Proof</Text></TouchableOpacity> : null}
+                {photoDoc?.id ? <TouchableOpacity style={styles.actionButton} onPress={() => previewKycDocument(photoDoc.id)}><Text style={styles.actionText}>Review Photograph</Text></TouchableOpacity> : null}
+                <TouchableOpacity style={[styles.actionButton, styles.approveButton]} onPress={() => reviewPartner(application.id, "approve_kyc", { remarks: true, confirm: "Approve this Partner KYC?" })}><Text style={styles.approveText}>Verify / Approve KYC</Text></TouchableOpacity>
+                <TouchableOpacity style={[styles.actionButton, styles.holdButton]} onPress={() => reviewPartner(application.id, "request_further_information", { reasonRequired: true, requestInfo: true, followUp: true, confirm: "Request additional KYC information from this Partner?" })}><Text style={styles.holdText}>Further Enquiry Required</Text></TouchableOpacity>
+                <TouchableOpacity style={[styles.actionButton, styles.rejectButton]} onPress={() => reviewPartner(application.id, "reject_kyc", { reasonRequired: true, remarks: true, confirm: "Reject this Partner KYC?" })}><Text style={styles.rejectText}>Reject KYC</Text></TouchableOpacity>
+              </View>
+
+              <Text style={styles.reviewPanelTitle}>Payment Detail Review</Text>
+              <View style={styles.actions}>
+                <TouchableOpacity style={[styles.actionButton, styles.approveButton]} onPress={() => reviewPartner(application.id, "verify_payment_details", { remarks: true, confirm: "Verify this Partner payment detail?" })}><Text style={styles.approveText}>Verify Payment Details</Text></TouchableOpacity>
+                <TouchableOpacity style={[styles.actionButton, styles.rejectButton]} onPress={() => reviewPartner(application.id, "reject_payment_details", { reasonRequired: true, remarks: true, confirm: "Reject Partner payment details and request correction?" })}><Text style={styles.rejectText}>Reject Payment Details</Text></TouchableOpacity>
+              </View>
+
+              <Text style={styles.reviewPanelTitle}>Partner Lifecycle Controls</Text>
+              <View style={styles.actions}>
+                <TouchableOpacity style={[styles.actionButton, styles.approveButton]} onPress={() => reviewPartner(application.id, "activate_partner", { confirm: "Activate this Partner only if KYC and payment details are verified?" })}><Text style={styles.approveText}>Activate Partner</Text></TouchableOpacity>
+                <TouchableOpacity style={[styles.actionButton, styles.holdButton]} onPress={() => reviewPartner(application.id, "suspend_partner", { reasonRequired: true, remarks: true, confirm: "Suspend this active Partner pending investigation?" })}><Text style={styles.holdText}>Suspend Active Partner</Text></TouchableOpacity>
+                <TouchableOpacity style={[styles.actionButton, styles.approveButton]} onPress={() => reviewPartner(application.id, "reactivate_partner", { remarks: true, confirm: "Reactivate this Partner?" })}><Text style={styles.approveText}>Reactivate Partner</Text></TouchableOpacity>
+                <TouchableOpacity style={[styles.actionButton, styles.rejectButton]} onPress={() => reviewPartner(application.id, "revoke_partner", { reasonRequired: true, remarks: true, confirm: "Revoke or terminate this Partner account?" })}><Text style={styles.rejectText}>Revoke / Terminate</Text></TouchableOpacity>
+              </View>
             </View>
           </View>
         );
@@ -285,6 +341,16 @@ const styles = StyleSheet.create({
   metricValue: { color: "#111827", fontWeight: "900", fontSize: 16 },
   metricLabel: { color: "#64748b", marginTop: 4 },
   actions: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 12 },
+  reviewPanel: { borderWidth: 1, borderColor: "#dbeafe", backgroundColor: "#f8fbff", borderRadius: 8, padding: 10, marginTop: 12 },
+  reviewPanelTitle: { color: "#0f172a", fontWeight: "900", marginTop: 6 },
+  approveButton: { borderColor: "#16a34a", backgroundColor: "#f0fdf4" },
+  approveText: { color: "#166534", fontWeight: "900" },
+  holdButton: { borderColor: "#f59e0b", backgroundColor: "#fffbeb" },
+  holdText: { color: "#92400e", fontWeight: "900" },
+  rejectButton: { borderColor: "#dc2626", backgroundColor: "#fef2f2" },
+  rejectText: { color: "#991b1b", fontWeight: "900" },
+  reviewNoteText: { color: "#7c2d12", fontWeight: "900", marginTop: 4 },
+  reviewHistoryText: { color: "#475569", fontWeight: "700", marginTop: 3 },
   actionButton: { borderWidth: 1, borderColor: "#1166ff", borderRadius: 8, paddingVertical: 8, paddingHorizontal: 10 },
   actionText: { color: "#1166ff", fontWeight: "800", textTransform: "capitalize" },
   empty: { color: "#64748b", marginTop: 20 },

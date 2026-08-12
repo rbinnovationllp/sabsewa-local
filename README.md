@@ -184,3 +184,14 @@ Partner activation flow: Application Submitted -> Partner KYC Uploaded/Submitted
 - Eligible revenue excludes GST and refundable/pass-through amounts; onboarding commission is calculated on the onboarding fee portion only.
 - Added Supabase SQL support file: supabase/RUN_FIX_PARTNER_COMMISSION_AUTOMATION_2026_08_11.sql.
 - Remaining manual step: run the SQL in Supabase before relying on idempotent commission event creation in production.
+
+### Vendor KYC Review Policy Controls
+Vendor KYC review uses a separate applicant workflow: Approve / Verify KYC, Request Further Information, or Reject KYC. Suspension/reactivation/revocation remain lifecycle actions for already approved or active vendors. Review decisions are written to vendor_status_history and vendor_notifications.
+
+### Partner and Vendor KYC Review Controls
+
+Company CRM review screens support explicit approval, rejection, and additional-information decisions for Partner and Vendor KYC. Partner lifecycle suspension/revocation is separate from applicant KYC review. Review actions require admin authentication and record audit metadata where the backend tables are available.
+
+### Partner and Vendor KYC Review Controls
+
+Company CRM review screens support explicit approval, rejection, and additional-information decisions for Partner and Vendor KYC. Partner lifecycle suspension/revocation is separate from applicant KYC review. Review actions require admin authentication and record audit metadata where the backend tables are available.

@@ -1198,3 +1198,10 @@ Manual Supabase action required:
 - Eligible revenue excludes GST and refundable/pass-through amounts; onboarding commission is calculated on the onboarding fee portion only.
 - Added Supabase SQL support file: supabase/RUN_FIX_PARTNER_COMMISSION_AUTOMATION_2026_08_11.sql.
 - Remaining manual step: run the SQL in Supabase before relying on idempotent commission event creation in production.
+
+### Vendor KYC Review Policy Controls
+- Company CRM vendor KYC queue now separates applicant KYC outcomes from vendor lifecycle suspension.
+- Admins can Approve / Verify KYC, Request Further Information, or Reject KYC with mandatory reasons where applicable.
+- Vendor-facing KYC page displays Admin review notes for additional-information and rejection decisions.
+
+- 2026-08-12: Partner and Vendor KYC review controls repaired: Company CRM now exposes explicit Partner KYC approval, further-enquiry, rejection, payment verification, lifecycle suspension/reactivation/revocation controls; Partner-facing page shows admin notes for additional verification; Vendor KYC review controls remain aligned with approve/further-information/reject policy.

@@ -105,3 +105,10 @@ Run `RUN_ONLY_PARTNER_COMMISSION_PAYMENT_KYC_AND_COMPLIANCE_2026_08_10.sql` afte
 - Language selector note now uses the persisted selector message key.
 - Language restore now reads both the current `sabsewa_local_language` key and the older `user_language` key for compatibility.
 - Customer order and Partner payment screens have core labels connected to localization keys; long legal/user-entered content remains unchanged unless separately translated.
+
+### Vendor KYC Review Policy Controls
+Vendor KYC decisions use existing vendors, vendor_kyc_documents, vendor_status_history, and vendor_notifications tables. No additional public storage access is required.
+
+### Partner/Vendor KYC review controls
+
+The Partner and Vendor KYC review UI depends on the existing partner_applications, partner_kyc_documents, partner_admin_audit_logs, vendors, vendor_kyc_documents, vendor_status_history and vendor_notifications structures. Apply the latest dated RUN_ONLY/RUN_FIX SQL files before production use.

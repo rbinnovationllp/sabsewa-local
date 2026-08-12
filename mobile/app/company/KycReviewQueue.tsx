@@ -30,17 +30,50 @@ export default function KycReviewQueueScreen() {
     setVendors(json.vendors || []);
   }
 
-  async function updateKyc(vendorId: string, status: string) {
+  function askReviewText(label: string, required = false) {
+    const promptFn = (globalThis as any).prompt;
+    const value = promptFn ? String(promptFn(label) || "").trim() : "";
+    if (required && !value) {
+      Alert.alert("KYC review", label);
+      return null;
+    }
+    return value;
+  }
+
+  function confirmReview(message: string) {
+    const confirmFn = (globalThis as any).confirm;
+    return confirmFn ? Boolean(confirmFn(message)) : true;
+  }
+
+  async function updateKyc(vendorId: string, status: string, options: any = {}) {
+    let reason = "";
+    let admin_remarks = "";
+    let required_information = "";
+    let follow_up_date = "";
+
+    if (options.reasonRequired) {
+      reason = askReviewText(options.reasonPrompt || "Enter reason for this KYC decision", true) || "";
+      if (!reason) return;
+    }
+    if (options.requestInfo) {
+      required_information = askReviewText("What information/documents should the vendor submit?", true) || "";
+      if (!required_information) return;
+    }
+    if (options.remarks) admin_remarks = askReviewText("Admin remarks, if any") || "";
+    if (options.followUp) follow_up_date = askReviewText("Optional follow-up date (YYYY-MM-DD)") || "";
+    if (!confirmReview(options.confirm || "Are you sure you want to update this KYC case?")) return;
+
     const response = await authenticatedFetch(`/api/vendor/onboarding/${vendorId}/kyc-status`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status, actor_user_id: user?.id || null, reason: "Company CRM KYC queue review" }),
+      body: JSON.stringify({ status, actor_user_id: user?.id || null, reason, admin_remarks, required_information, follow_up_date }),
     });
     const json = await response.json();
     if (!response.ok || !json.success) {
       Alert.alert("KYC update failed", json.error || "Unable to update KYC.");
       return;
     }
+    Alert.alert("KYC review", "Vendor KYC record updated.");
     await loadQueue();
   }
 
@@ -65,14 +98,14 @@ export default function KycReviewQueueScreen() {
             <TouchableOpacity style={styles.btn} onPress={() => router.push(`/vendor/KYC?vendor=${vendor.id}` as any)}>
               <Text style={styles.btnText}>Review KYC</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.approveBtn} onPress={() => updateKyc(vendor.id, "kyc_verified")}>
-              <Text style={styles.btnText}>Approve</Text>
+            <TouchableOpacity style={styles.approveBtn} onPress={() => updateKyc(vendor.id, "kyc_verified", { remarks: true, confirm: "Are you sure you want to verify this vendor KYC?" })}>
+              <Text style={styles.btnText}>Approve / Verify KYC</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.rejectBtn} onPress={() => updateKyc(vendor.id, "additional_information_required")}>
-              <Text style={styles.btnText}>Resubmission</Text>
+            <TouchableOpacity style={styles.holdBtn} onPress={() => updateKyc(vendor.id, "additional_information_required", { reasonRequired: true, requestInfo: true, followUp: true, confirm: "Request additional information from this vendor?" })}>
+              <Text style={styles.btnText}>Request Further Information</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.rejectBtn} onPress={() => updateKyc(vendor.id, "kyc_rejected")}>
-              <Text style={styles.btnText}>Reject</Text>
+            <TouchableOpacity style={styles.rejectBtn} onPress={() => updateKyc(vendor.id, "kyc_rejected", { reasonRequired: true, remarks: true, confirm: "Are you sure you want to reject this vendor KYC?" })}>
+              <Text style={styles.btnText}>Reject KYC</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -97,6 +130,7 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 12 },
   btn: { backgroundColor: "#475569", borderRadius: 8, paddingVertical: 9, paddingHorizontal: 10 },
   approveBtn: { backgroundColor: "#16a34a", borderRadius: 8, paddingVertical: 9, paddingHorizontal: 10 },
+  holdBtn: { backgroundColor: "#f59e0b", borderRadius: 8, paddingVertical: 9, paddingHorizontal: 10 },
   rejectBtn: { backgroundColor: "#dc2626", borderRadius: 8, paddingVertical: 9, paddingHorizontal: 10 },
   btnText: { color: "#fff", fontWeight: "900", fontSize: 12 },
 });

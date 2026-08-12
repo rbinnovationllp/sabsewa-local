@@ -369,7 +369,7 @@ async function assertVendorOwnerOrAdmin(req, vendorId) {
     throw err;
   }
   const role = String(req.auth?.role || "");
-  const admin = ["admin", "company_admin", "super_admin"].includes(role);
+  const admin = ["admin", "company_admin", "super_admin", "master_admin", "national_admin", "state_admin", "district_admin", "city_admin", "kyc_reviewer"].includes(role);
   if (!admin && vendor.owner_user_id !== req.auth?.user_id) {
     const err = new Error("You can access only your own vendor KYC.");
     err.statusCode = 403;
@@ -387,6 +387,14 @@ router.get("/:vendor_id/kyc-requirements", requireAuth, async (req, res) => {
       .eq("vendor_id", req.params.vendor_id)
       .order("created_at", { ascending: false });
     if (error) throw error;
+    const { data: latestReviewHistory } = await supabase
+      .from("vendor_status_history")
+      .select("previous_status, next_status, change_reason, changed_by, created_at")
+      .eq("vendor_id", req.params.vendor_id)
+      .in("next_status", ["kyc_verified", "additional_information_required", "kyc_rejected"])
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
     return res.json({
       success: true,
       vendor: {
@@ -394,6 +402,8 @@ router.get("/:vendor_id/kyc-requirements", requireAuth, async (req, res) => {
         category: vendor.category,
         kyc_status: vendor.kyc_status || "kyc_not_started",
         payment_status: vendor.onboarding_payment_status || "payment_pending",
+        kyc_review_notes: latestReviewHistory?.change_reason || null,
+        kyc_reviewed_at: latestReviewHistory?.created_at || null,
       },
       required_documents: requiredKycDocumentsForCategory(vendor.category),
       documents: documents || [],
@@ -634,18 +644,39 @@ router.get("/admin/config", ...requireAdmin, async (_req, res) => {
 
 router.post("/:vendor_id/kyc-status", ...requireAdmin, async (req, res) => {
   try {
-    const { status, reason } = req.body || {};
+    const { status, reason, admin_remarks, required_information, follow_up_date } = req.body || {};
+    const nextStatus = clean(status);
+    const reviewReason = clean(reason);
+    const reviewRemarks = clean(admin_remarks || req.body?.remarks);
+    const requiredInfo = clean(required_information);
+    const followUpDate = clean(follow_up_date);
     const allowed = new Set(["kyc_not_started", "kyc_submitted", "kyc_under_review", "additional_information_required", "kyc_verified", "kyc_rejected", "kyc_provisionally_cleared", "provisional_approved"]);
-    if (!allowed.has(status)) return res.status(400).json({ success: false, error: "Invalid KYC status." });
+    if (!allowed.has(nextStatus)) return res.status(400).json({ success: false, error: "Invalid KYC status." });
+
+    if (["additional_information_required", "kyc_rejected"].includes(nextStatus) && !reviewReason && !reviewRemarks && !requiredInfo) {
+      return res.status(400).json({ success: false, error: "Reason, remarks, or required information must be provided for this KYC decision." });
+    }
+    if (String(reviewReason).toLowerCase() === "other" && !reviewRemarks) {
+      return res.status(400).json({ success: false, error: "Admin remarks are required when reason is Other." });
+    }
 
     const { data: current, error: currentError } = await supabase
       .from("vendors")
-      .select("id, status, kyc_status, onboarding_payment_status")
+      .select("id, status, lifecycle_status, kyc_status, onboarding_payment_status, owner_user_id")
       .eq("id", req.params.vendor_id)
       .single();
     if (currentError || !current) return res.status(404).json({ success: false, error: "Vendor not found." });
 
-    if (status === "kyc_verified") {
+    const now = new Date().toISOString();
+    const noteParts = [
+      reviewReason ? `Reason: ${reviewReason}` : "",
+      reviewRemarks ? `Remarks: ${reviewRemarks}` : "",
+      requiredInfo ? `Required information: ${requiredInfo}` : "",
+      followUpDate ? `Follow-up date: ${followUpDate}` : "",
+    ].filter(Boolean);
+    const decisionNote = noteParts.join("\n") || "KYC status updated";
+
+    if (nextStatus === "kyc_verified") {
       const { data: vendorForApproval, error: vendorForApprovalError } = await supabase
         .from("vendors")
         .select("id, category")
@@ -655,13 +686,13 @@ router.post("/:vendor_id/kyc-status", ...requireAdmin, async (req, res) => {
       await assertRequiredKycDocumentsSubmitted(req.params.vendor_id, vendorForApproval.category);
     }
 
-    if (status === "kyc_verified") {
+    if (nextStatus === "kyc_verified") {
       const { error: documentVerifyError } = await supabase
         .from("vendor_kyc_documents")
         .update({
           status: "verified",
           reviewer_user_id: req.auth?.user_id || null,
-          reviewed_at: new Date().toISOString(),
+          reviewed_at: now,
           rejection_reason: null,
         })
         .eq("vendor_id", req.params.vendor_id)
@@ -669,20 +700,40 @@ router.post("/:vendor_id/kyc-status", ...requireAdmin, async (req, res) => {
       if (documentVerifyError) throw documentVerifyError;
     }
 
-    const nextLifecycle = status === "kyc_rejected"
+    if (nextStatus === "additional_information_required" || nextStatus === "kyc_rejected") {
+      const docStatus = nextStatus === "kyc_rejected" ? "rejected" : "additional_information_required";
+      const { error: documentReviewError } = await supabase
+        .from("vendor_kyc_documents")
+        .update({
+          status: docStatus,
+          reviewer_user_id: req.auth?.user_id || null,
+          reviewed_at: now,
+          rejection_reason: decisionNote,
+        })
+        .eq("vendor_id", req.params.vendor_id)
+        .neq("status", "deleted");
+      if (documentReviewError) throw documentReviewError;
+    }
+
+    const nextLifecycle = nextStatus === "kyc_rejected"
       ? "kyc_rejected"
-      : status === "kyc_verified" && current.onboarding_payment_status === "payment_completed"
+      : nextStatus === "kyc_verified" && current.onboarding_payment_status === "payment_completed"
         ? "approval_pending"
-        : status === "kyc_verified" || status === "kyc_provisionally_cleared" || status === "provisional_approved"
+        : nextStatus === "kyc_verified" || nextStatus === "kyc_provisionally_cleared" || nextStatus === "provisional_approved"
           ? "payment_pending"
           : "kyc_pending";
 
     const { data, error } = await supabase
       .from("vendors")
       .update({
-        kyc_status: status,
+        kyc_status: nextStatus,
         status: current.status === "active" ? "active" : nextLifecycle,
         lifecycle_status: current.status === "active" ? "active" : nextLifecycle,
+        kyc_last_reviewed_by: req.auth?.user_id || null,
+        kyc_last_reviewed_by_admin_id: req.adminProfile?.admin_id || null,
+        kyc_last_reviewed_by_admin_name: req.adminProfile?.admin_name || null,
+        kyc_final_decision_at: ["kyc_verified", "kyc_rejected"].includes(nextStatus) ? now : null,
+        updated_at: now,
       })
       .eq("id", req.params.vendor_id)
       .select()
@@ -692,13 +743,41 @@ router.post("/:vendor_id/kyc-status", ...requireAdmin, async (req, res) => {
     await supabase.from("vendor_status_history").insert({
       vendor_id: req.params.vendor_id,
       previous_status: current.kyc_status,
-      next_status: status,
+      next_status: nextStatus,
       changed_by: req.auth?.user_id || null,
-      change_reason: reason || "KYC status updated",
+      change_reason: decisionNote,
+    });
+
+    const notificationText = nextStatus === "kyc_verified"
+      ? "Your vendor KYC has been verified. Payment can now unlock according to the onboarding flow."
+      : nextStatus === "additional_information_required"
+        ? `Additional verification is required. ${decisionNote}`
+        : nextStatus === "kyc_rejected"
+          ? `Your vendor KYC was rejected. ${decisionNote}`
+          : `Your vendor KYC status changed to ${nextStatus.replace(/_/g, " ")}.`;
+    await supabase.from("vendor_notifications").insert({
+      vendor_id: req.params.vendor_id,
+      owner_user_id: current.owner_user_id || null,
+      notification_type: "vendor_kyc_review",
+      title: "Vendor KYC Update",
+      body: notificationText,
+      payload: {
+        previous_status: current.kyc_status,
+        next_status: nextStatus,
+        reason: reviewReason || null,
+        admin_remarks: reviewRemarks || null,
+        required_information: requiredInfo || null,
+        follow_up_date: followUpDate || null,
+      },
     });
 
     return res.json({ success: true, vendor: data });
   } catch (error) {
+    console.error("Vendor KYC status update failed", {
+      message: error?.message,
+      code: error?.code || null,
+      details: error?.details || null,
+    });
     return res.status(error.statusCode || 500).json({ success: false, error: error.message });
   }
 });

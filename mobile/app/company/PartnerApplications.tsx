@@ -3,7 +3,7 @@ import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View 
 import BrandHeader from "@/components/BrandHeader";
 import { authenticatedFetch } from "@/lib/backend";
 
-const statuses = ["pending", "under_review", "approved", "rejected", "active", "suspended", "revoked"] as const;
+const statuses = ["pending", "kyc_pending", "under_review", "approved", "rejected", "active", "suspended", "revoked"] as const;
 
 function fmtMoney(value: any) {
   const n = Number(value || 0);
@@ -129,7 +129,13 @@ export default function PartnerApplicationsScreen() {
 
   const counts = useMemo(() => {
     return statuses.reduce((acc: Record<string, number>, status) => {
-      acc[status] = applications.filter((item) => item.status === status).length;
+      acc[status] = applications.filter((item) => {
+        const appStatus = String(item.status || "pending");
+        const kycStatus = String(item.kyc_status || "not_submitted");
+        if (status === "kyc_pending") return ["documents_submitted", "under_review"].includes(kycStatus);
+        if (status === "under_review") return appStatus === "under_review" || ["documents_submitted", "under_review"].includes(kycStatus);
+        return appStatus === status;
+      }).length;
       return acc;
     }, {});
   }, [applications]);
@@ -138,7 +144,7 @@ export default function PartnerApplicationsScreen() {
     <ScrollView contentContainerStyle={styles.container}>
       <BrandHeader compact subtitle="Partner Management" />
       <Text style={styles.heading}>Partner Management</Text>
-      <Text style={styles.alertTitle}>Pending Partner Applications: {counts.pending || 0}</Text>
+      <Text style={styles.alertTitle}>Pending Partner Applications: {(counts.pending || 0) + (counts.kyc_pending || 0)}</Text>
       <Text style={styles.subheading}>
         Review partner applications, activate approved partners, track referral codes, referred vendors, eligible revenue, payable benefits and partner status.
       </Text>

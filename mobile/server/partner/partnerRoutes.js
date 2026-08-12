@@ -1,4 +1,4 @@
-﻿import crypto from "crypto";
+import crypto from "crypto";
 import express from "express";
 import multer from "multer";
 import { supabase } from "../connection.js";
@@ -570,18 +570,83 @@ router.post("/applications/:application_id/submit-kyc", async (req, res) => {
 
 router.get("/admin/applications", ...requireAdmin, async (req, res) => {
   try {
-    const { data, error } = await supabase
+    const { data: applications, error } = await supabaseAdmin
       .from("partner_applications")
-      .select("*, partner_payment_details(id, payment_method, account_number_last4, bank_name, account_holder_name, ifsc_code, account_type, upi_id_masked, upi_name, status, is_current), partner_kyc_documents(id, document_section, document_type, document_label, status, file_name, created_at), partner_referred_vendors(id, referral_status, vendor_id, eligible_revenue_amount, benefit_earned_amount, vendors(id, shop_name, status, created_at)), partner_commission_events(id, status, gross_revenue, net_revenue, commission_amount)")
+      .select("*")
       .order("created_at", { ascending: false })
       .limit(300);
     if (error) throw error;
-    const rows = (data || []).map((row) => {
-      const current = (row.partner_payment_details || []).find((item) => item.is_current) || (row.partner_payment_details || [])[0] || null;
-      return { ...publicApplication(row, current), raw: row, kyc_documents: row.partner_kyc_documents || [], referrals: row.partner_referred_vendors || [], commission_events: row.partner_commission_events || [] };
+
+    const applicationIds = (applications || []).map((row) => row.id).filter(Boolean);
+    if (!applicationIds.length) {
+      return res.json({ success: true, applications: [] });
+    }
+
+    const [paymentResult, kycResult, referralResult, commissionResult] = await Promise.all([
+      supabaseAdmin
+        .from("partner_payment_details")
+        .select("id, partner_application_id, payment_method, account_number_last4, bank_name, account_holder_name, ifsc_code, account_type, upi_id_masked, upi_name, status, is_current")
+        .in("partner_application_id", applicationIds),
+      supabaseAdmin
+        .from("partner_kyc_documents")
+        .select("id, partner_application_id, document_section, document_type, document_label, status, file_name, created_at")
+        .in("partner_application_id", applicationIds)
+        .neq("status", "deleted"),
+      supabaseAdmin
+        .from("partner_referred_vendors")
+        .select("id, partner_application_id, referral_status, vendor_id, eligible_revenue_amount, benefit_earned_amount, vendor_onboarding_date, vendor_activation_date")
+        .in("partner_application_id", applicationIds),
+      supabaseAdmin
+        .from("partner_commission_events")
+        .select("id, partner_application_id, status, gross_revenue, net_revenue, commission_amount, created_at")
+        .in("partner_application_id", applicationIds),
+    ]);
+
+    const firstError = paymentResult.error || kycResult.error || referralResult.error || commissionResult.error;
+    if (firstError) throw firstError;
+
+    function groupByApplication(rows) {
+      return (rows || []).reduce((acc, row) => {
+        const key = row.partner_application_id;
+        if (!acc[key]) acc[key] = [];
+        acc[key].push(row);
+        return acc;
+      }, {});
+    }
+
+    const paymentsByApplication = groupByApplication(paymentResult.data);
+    const kycByApplication = groupByApplication(kycResult.data);
+    const referralsByApplication = groupByApplication(referralResult.data);
+    const commissionsByApplication = groupByApplication(commissionResult.data);
+
+    const rows = (applications || []).map((row) => {
+      const payments = paymentsByApplication[row.id] || [];
+      const current = payments.find((item) => item.is_current) || payments[0] || null;
+      const kycDocuments = kycByApplication[row.id] || [];
+      const referrals = referralsByApplication[row.id] || [];
+      const commissionEvents = commissionsByApplication[row.id] || [];
+      return {
+        ...publicApplication(row, current),
+        raw: {
+          ...row,
+          partner_payment_details: payments,
+          partner_kyc_documents: kycDocuments,
+          partner_referred_vendors: referrals,
+          partner_commission_events: commissionEvents,
+        },
+        kyc_documents: kycDocuments,
+        referrals,
+        commission_events: commissionEvents,
+      };
     });
+
     return res.json({ success: true, applications: rows });
   } catch (error) {
+    console.error("Partner admin applications load failed", {
+      message: error?.message,
+      code: error?.code || null,
+      details: error?.details || null,
+    });
     return res.status(500).json({ success: false, error: error.message || "Unable to load Partner Applications." });
   }
 });

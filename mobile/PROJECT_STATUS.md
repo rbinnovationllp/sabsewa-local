@@ -213,3 +213,25 @@ Not ready--complete the listed technical work first.
 - [x] **Permanent Attribution Safeguards:** Database relationships (`partner_applications` -> `partner_referred_vendors` -> `vendors`) enforce strict 1:1 attribution. Changing a vendor's linked partner requires Master Admin credentials with audit logging.
 - [x] **Eligible Revenue Commission Ledger:** Revenue sharing (default 10%) is calculated strictly on eligible company revenues (vendor platform commissions and transaction charges) generated from attributed vendor orders, excluding customer order values and statutory taxes.
 - [x] **Admin CRM Reporting:** Integrated dashboard displaying partner referrals, vendor activation status, generated eligible revenue, earned commissions, tax deductions (TDS 5%), and payout transaction histories.
+### Web/Mobile Application - Common Core
+
+#### Voice Input & Accessibility (In Integration)
+- [x] **Database Audit Table (`voice_transcriptions`):** Deployed for GDPR and audit trail.
+- [x] **Reusable Frontend Component (`VoiceInputButton`):** Abstracts Web Speech API vs. NativeVoice on mobile.
+- [x] **Core Language Support (en-IN, hi-IN, kn-IN):** Integrated into Speech Recognition matrix. Devanagari and Kannada scripts displayed correctly.
+- [ ] **Native Mobile Permissions (Android/iOS):** Setup native listeners for `@react-native-voice/voice`.
+- [x] **In-Page Transcription Matrix:** Modal flow added for [Edit] [Speak Again] [Confirm] loop before submission.
+- [x] **Backend Gemini Flash Service:** Secure route deployed on EC2 for structured cart additions.
+- [ ] **Accessibility (ARIA/Screen Reader):** Verify microphne state announcements and transcription focus.
+- [ ] **Privacy Consent & Policy Update:** drafting localized privacy notice.
+### Ongoing Development & Core Application
+
+#### Accessibility & Voice Input (Multilingual)
+- [x] **Native Library Installation (`@react-native-voice/voice`):** Completed for Android native & PWA context. (Requires native listeners configuration for mobile).
+- [x] **Shared Component Abstraction Layer (`VoiceInputButton`):** Deployed. Abstracts complexity between NativeVoice vs Web Speech API. Includes permission checks, multiline handling, and feedback states.
+- [x] **Multilingual Support (en-IN, hi-IN, kn-IN):** integrated into Speech Locale matrix. Native scripts (Devanagari, Kannada) displayed correctly.
+- [x] **Integration Example (Partner Page):** Voice Input now active on the "Full Name" field on the Partner Application screen.
+- [x] **Confirmation Matrix Flow:** integrated into the component before data insertion. Allows [Speak Again], [Edit Text], and [Confirm].
+- [ ] **AI (Gemini Flash) Cart Structuring Service:** (Depends on backend secure service deployment).
+- [ ] **Accessibility (ARIA/Screen Reader):** accessibilityLabel announcements setup; require manual testing.
+- [ ] **Localized Voice Privacy Notice:** drafting before deployment.

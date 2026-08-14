@@ -1,0 +1,3 @@
+Accepted Constraints: The implementation adheres to the required behaviour: voice must be confirmed by the customer before form submission or cart addition. Natural language is supported for English, Hindi, and Kannada, using Devanagari and Kannada scripts respectively. The application provides fallbacks for unsupported browsers.
+
+Technical Note on PWA/Web: Voice input requires an environment supporting the SpeechRecognition interface (e.g., modern Chrome, Edge). Safari on iOS is supported but requires explicit user interaction to trigger the session. PWAs on Android work seamlessly if the OS language matches.

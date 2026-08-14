@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -229,7 +229,7 @@ export default function VendorSecurityWalletScreen() {
       "Transaction Evidence",
       [
         `Transaction: ${summary.transaction_id}`,
-        `Vendor ID: ${summary.public_vendor_id || "Not assigned"}`,
+        `Shop reference: ${summary.public_vendor_id || "Recorded internally"}`,
         `Terminal ID: ${summary.public_terminal_id || "Not assigned"}`,
         `Order: ${summary.related_order_id || "Not linked"}`,
         `Deduction: Rs ${Number(summary.amount_deducted || 0).toFixed(2)}`,

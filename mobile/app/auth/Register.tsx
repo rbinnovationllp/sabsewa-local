@@ -1,4 +1,4 @@
-﻿// app/auth/Register.tsx
+// app/auth/Register.tsx
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
@@ -83,7 +83,7 @@ export default function RegisterScreen() {
 
   async function handleVerifyPartner() {
     if (!partnerSearch.phone.trim() && !partnerSearch.partnerId.trim()) {
-      return setVerificationError("Please enter Partner Registered Mobile Number or Partner ID.");
+      return setVerificationError("Please enter Partner registered mobile number or referral code.");
     }
     setVerifying(true);
     setVerificationError("");
@@ -193,7 +193,7 @@ export default function RegisterScreen() {
         registration_method: method,
         referred_by_partner_flag: Boolean(referredByPartner && verifiedPartner),
         attributed_partner_id: verifiedPartner ? verifiedPartner.id : null,
-        partner_referral_code_used: verifiedPartner ? verifiedPartner.partner_id : null,
+        partner_referral_code_used: verifiedPartner ? (verifiedPartner.referral_code || verifiedPartner.partner_id) : null,
         customer_data_disclosure_consent:
           "Selected vendor receives customer name, selected delivery address and contact number only after accepting the order for fulfilment.",
       };
@@ -506,7 +506,7 @@ export default function RegisterScreen() {
                 />
                 <TextInput
                   style={styles.input}
-                  placeholder="Partner ID (Optional)"
+                  placeholder="Referral Code (Optional)"
                   value={partnerSearch.partnerId}
                   onChangeText={(v) => setPartnerSearch({ ...partnerSearch, partnerId: v })}
                 />
@@ -523,7 +523,7 @@ export default function RegisterScreen() {
                   <View style={styles.verifiedCard}>
                     <Text style={styles.verifiedTitle}>✓ Verified Partner Linked</Text>
                     <Text style={styles.verifiedText}>Name: {verifiedPartner.verified_name}</Text>
-                    <Text style={styles.verifiedText}>Partner ID: {verifiedPartner.partner_id}</Text>
+                    <Text style={styles.verifiedText}>Verified Partner: {verifiedPartner.verified_name || verifiedPartner.partner_id}</Text>
                     <Text style={styles.verifiedText}>Location: {verifiedPartner.city}, {verifiedPartner.state}</Text>
                   </View>
                 )}

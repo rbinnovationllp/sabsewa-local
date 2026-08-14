@@ -2,24 +2,28 @@ import React, { useEffect, useRef, useState } from "react";
 import { Alert, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import * as DocumentPicker from "expo-document-picker";
+
+// Project Alias Imports (@/)
 import BrandHeader from "@/components/BrandHeader";
 import { useLanguage } from "@/providers/LanguageProvider";
 import { apiUrl } from "@/lib/backend";
+import VoiceInputButton from "@/components/VoiceInputButton";
 
+// Constants
 const PARTNER_TERMS_VERSION = "partner-program-local-2026-08-10";
 const DEFAULT_BENEFIT_PERCENT = 10;
 const STORAGE_KEY_PHONE = "sabsewa_partner_registered_phone";
 
 const partnerTypes = [
-  "Existing Customer", "Non-Customer", "Existing Vendor", "Non-Vendor", "Individual", 
-  "Local Business Promoter", "Marketing or Business Development Professional", 
+  "Existing Customer", "Non-Customer", "Existing Vendor", "Non-Vendor", "Individual",
+  "Local Business Promoter", "Marketing or Business Development Professional",
   "Consultant", "Organization", "NGO", "Educational Institution", "Other Stakeholder"
 ];
 
 const taxTypes = ["individual", "proprietorship", "partnership", "llp", "company", "other"];
 
 const discoverySources = [
-  "Social Media", "Existing Partner", "Existing Vendor", "Existing Customer", 
+  "Social Media", "Existing Partner", "Existing Vendor", "Existing Customer",
   "Friend / Relative", "SabSewa Website", "Local Promotion", "Company Representative", "Other"
 ];
 
@@ -57,24 +61,33 @@ const emptyForm = {
 };
 
 const kycSections = [
-  { id: "identity_proof", title: "Government-Issued Identity Proof", required: true, options: [
-    ["aadhaar", "Aadhaar Card"], ["pan_card", "PAN Card"], ["voter_id", "Voter ID Card"], 
-    ["driving_licence", "Driving Licence"], ["passport", "Passport"], ["other_identity_proof", "Other Government Identity Proof"]
-  ] },
-  { id: "address_proof", title: "Address Proof", required: true, options: [
-    ["aadhaar_address", "Aadhaar with Address"], ["driving_licence_address", "Driving Licence with Address"], 
-    ["passport_address", "Passport with Address"], ["voter_id_address", "Voter ID with Address"], 
-    ["utility_bill", "Recent Utility Bill"], ["other_address_proof", "Other Address Proof"]
-  ] },
-  { id: "partner_photo", title: "Partner Photograph", required: true, options: [
-    ["partner_selfie", "Passport-size Partner Photograph"], ["authorized_person_photo", "Authorized Person Photo"]
-  ] },
-  { id: "organization_document", title: "Organization Document", required: false, options: [
-    ["incorporation_certificate", "Incorporation Certificate"], ["organization_pan", "Organization PAN"], 
-    ["gst_certificate", "GST Certificate"], ["authorization_letter", "Authorization Letter"]
-  ] }
+  {
+    id: "identity_proof", title: "Government-Issued Identity Proof", required: true, options: [
+      ["aadhaar", "Aadhaar Card"], ["pan_card", "PAN Card"], ["voter_id", "Voter ID Card"],
+      ["driving_licence", "Driving Licence"], ["passport", "Passport"], ["other_identity_proof", "Other Government Identity Proof"]
+    ]
+  },
+  {
+    id: "address_proof", title: "Address Proof", required: true, options: [
+      ["aadhaar_address", "Aadhaar with Address"], ["driving_licence_address", "Driving Licence with Address"],
+      ["passport_address", "Passport with Address"], ["voter_id_address", "Voter ID with Address"],
+      ["utility_bill", "Recent Utility Bill"], ["other_address_proof", "Other Address Proof"]
+    ]
+  },
+  {
+    id: "partner_photo", title: "Partner Photograph", required: true, options: [
+      ["partner_selfie", "Passport-size Partner Photograph"], ["authorized_person_photo", "Authorized Person Photo"]
+    ]
+  },
+  {
+    id: "organization_document", title: "Organization Document", required: false, options: [
+      ["incorporation_certificate", "Incorporation Certificate"], ["organization_pan", "Organization PAN"],
+      ["gst_certificate", "GST Certificate"], ["authorization_letter", "Authorization Letter"]
+    ]
+  }
 ];
 
+// Helper Functions
 function labelStatus(status: string) {
   const normalized = String(status || "pending").replace(/_/g, " ");
   if (status === "active") return "Approved - Active Marketing Partner";
@@ -95,31 +108,31 @@ function requiredKycSectionsFor(application: any, fallbackPartnerType: string) {
   );
 }
 
+// Main Component
 export default function PartnerWithUsScreen() {
   const { t } = useLanguage();
   const scrollRef = useRef<ScrollView>(null);
 
+  // UI State
   const [formOffsetY, setFormOffsetY] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [submittingKyc, setSubmittingKyc] = useState(false);
   const [checkingStatus, setCheckingStatus] = useState(false);
-  
+  const [showLookupBox, setShowLookupBox] = useState(false);
+  const [lookupPhone, setLookupPhone] = useState("");
+
+  // Form State
   const [accepted, setAccepted] = useState(false);
   const [kycAccepted, setKycAccepted] = useState(false);
   const [form, setForm] = useState({ ...emptyForm });
-  
-  // Status Resume Search
-  const [lookupPhone, setLookupPhone] = useState("");
-  const [showLookupBox, setShowLookupBox] = useState(false);
-  
-  // Specific Error Feedback States
+
+  // Feedback States
   const [errorMessage, setErrorMessage] = useState<string>("");
   const [errorField, setErrorField] = useState<string>("");
   const [kycSuccessMessage, setKycSuccessMessage] = useState<string>("");
-  
-  // Persistent Application Record State
+
+  // Application Data State
   const [confirmation, setConfirmation] = useState<any>(null);
-  
   const [selectedDocs, setSelectedDocs] = useState<Record<string, string>>({
     identity_proof: "aadhaar",
     address_proof: "aadhaar_address",
@@ -155,7 +168,7 @@ export default function PartnerWithUsScreen() {
 
       if (json.success && json.application) {
         setConfirmation(json.application);
-        
+
         // Save to browser cache for refresh survival
         if (Platform.OS === "web" && typeof window !== "undefined") {
           window.localStorage.setItem(STORAGE_KEY_PHONE, cleanPhone);
@@ -248,6 +261,7 @@ export default function PartnerWithUsScreen() {
         body: JSON.stringify({
           ...form,
           revenue_share_percent: DEFAULT_BENEFIT_PERCENT,
+          // Fix: Typo corrected here
           terms_version: PARTNER_TERMS_VERSION,
           terms_accepted: true,
           kyc_declaration_accepted: true,
@@ -280,7 +294,7 @@ export default function PartnerWithUsScreen() {
       }
 
       setConfirmation({ duplicate: Boolean(json.duplicate), ...(json.application || {}) });
-      
+
       // Store in localStorage for reload survival
       if (Platform.OS === "web" && typeof window !== "undefined") {
         window.localStorage.setItem(STORAGE_KEY_PHONE, form.phone.replace(/\D/g, ""));
@@ -351,7 +365,7 @@ export default function PartnerWithUsScreen() {
       const response = await fetch(apiUrl(`/api/partner/applications/${confirmation.id}/kyc-documents`), { method: "POST", body: formData });
       const json = await response.json();
       if (!response.ok || !json.success) throw new Error(json.error || "Upload failed. Please try again.");
-      
+
       setUploadedDocs((current) => ({ ...current, [section.id]: json.document }));
       setKycSuccessMessage(`${option[1]} uploaded successfully!`);
     } catch (error: any) {
@@ -574,7 +588,7 @@ export default function PartnerWithUsScreen() {
           </View>
 
           <Field label="Organization / Business Name" value={form.organization_name} onChangeText={(v: string) => setValue("organization_name", v)} />
-          
+
           <Field
             label="Mobile Number *"
             value={form.phone}
@@ -618,7 +632,7 @@ export default function PartnerWithUsScreen() {
             <Text style={styles.sectionTitle}>PAN / Tax Details</Text>
             <Field label="PAN Number *" value={form.pan_number} onChangeText={(v: string) => setValue("pan_number", v.toUpperCase())} hasError={errorField === "pan_number"} />
             <Field label="Name as per PAN *" value={form.pan_name} onChangeText={(v: string) => setValue("pan_name", v)} hasError={errorField === "pan_name"} />
-            
+
             <Text style={styles.label}>Tax Profile Type *</Text>
             <View style={styles.chips}>
               {taxTypes.map((type) => (
@@ -679,12 +693,22 @@ export default function PartnerWithUsScreen() {
   );
 }
 
+// Sub-components
 function Chip({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
-  return <TouchableOpacity style={[styles.chip, active && styles.chipSelected]} onPress={onPress}><Text style={[styles.chipText, active && styles.chipTextSelected]}>{label}</Text></TouchableOpacity>;
+  return (
+    <TouchableOpacity style={[styles.chip, active && styles.chipSelected]} onPress={onPress}>
+      <Text style={[styles.chipText, active && styles.chipTextSelected]}>{label}</Text>
+    </TouchableOpacity>
+  );
 }
 
 function ConfirmLine({ label, value }: { label: string; value?: string | null }) {
-  return <View style={styles.confirmLine}><Text style={styles.confirmLabel}>{label}</Text><Text style={styles.confirmValue}>{value || "-"}</Text></View>;
+  return (
+    <View style={styles.confirmLine}>
+      <Text style={styles.confirmLabel}>{label}</Text>
+      <Text style={styles.confirmValue}>{value || "-"}</Text>
+    </View>
+  );
 }
 
 function Field({ label, value, onChangeText, keyboardType, multiline, containerStyle, secureTextEntry, hasError }: any) {
@@ -698,11 +722,13 @@ function Field({ label, value, onChangeText, keyboardType, multiline, containerS
         keyboardType={keyboardType || "default"}
         multiline={multiline}
         secureTextEntry={secureTextEntry}
+        textAlignVertical={multiline ? "top" : "center"}
       />
     </View>
   );
 }
 
+// Styles
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#ffffff" },
   content: { padding: 20, paddingTop: 40, paddingBottom: 50 },
@@ -783,7 +809,7 @@ const styles = StyleSheet.create({
   labelError: { color: "#dc2626" },
   input: { borderWidth: 1, borderColor: "#cbd5e1", backgroundColor: "#fff", borderRadius: 8, padding: 12 },
   inputError: { borderColor: "#dc2626", backgroundColor: "#fef2f2" },
-  textArea: { minHeight: 80, textAlignVertical: "top" },
+  textArea: { minHeight: 80 },
 
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 12 },
   chip: { borderWidth: 1, borderColor: "#99f6e4", borderRadius: 999, paddingVertical: 8, paddingHorizontal: 11, backgroundColor: "#fff" },

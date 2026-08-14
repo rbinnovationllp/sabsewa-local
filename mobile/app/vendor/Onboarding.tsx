@@ -246,7 +246,7 @@ export default function VendorOnboardingScreen() {
       {vendor ? (
         <View style={styles.panel}>
           <Text style={styles.shopName}>{vendor.shop_name || vendor.vendor_name || "Vendor"}</Text>
-          <Text style={styles.muted}>{vendor.public_vendor_id || "Vendor ID pending"}</Text>
+          <Text style={styles.muted}>{[vendor.owner_name || vendor.vendor_name || "Registered owner", vendor.phone_number || vendor.phone, vendor.locality || vendor.locality_code, vendor.city || vendor.city_code].filter(Boolean).join(" | ")}</Text>
           <View style={styles.statusGrid}>
             <TouchableOpacity
               style={styles.statusBox}

@@ -271,7 +271,7 @@ router.post("/referrals/attribute", requireAuth, async (req, res) => {
     const cleanCode = clean(referral_code || partner_id).toUpperCase();
 
     if (!vendor_id || !cleanCode) {
-      return res.status(400).json({ success: false, error: "Vendor ID and partner referral code/ID are required." });
+      return res.status(400).json({ success: false, error: "Vendor profile and partner referral code are required." });
     }
 
     const referralActorIsAdmin = ["admin", "company_admin", "super_admin", "master_admin", "national_admin", "state_admin", "district_admin", "city_admin"].includes(String(req.auth?.role || "").toLowerCase());
@@ -865,7 +865,7 @@ router.post("/admin/reattribute-vendor", ...requireAdmin, async (req, res) => {
     const { vendor_id, new_partner_application_id, reason } = req.body || {};
 
     if (!vendor_id || !new_partner_application_id || !reason) {
-      return res.status(400).json({ success: false, error: "Vendor ID, new Partner ID, and an explicit reason are required." });
+      return res.status(400).json({ success: false, error: "Internal vendor reference, new Partner record, and an explicit reason are required." });
     }
 
     const { data: newPartner, error: partnerErr } = await supabase

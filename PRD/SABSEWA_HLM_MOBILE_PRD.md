@@ -363,3 +363,5 @@ The HLM MVP is acceptable for hackathon demo when:
 - Master Admin/authorized staff can verify Partner KYC, verify payment details, activate, suspend, reinstate or terminate Partners with audit trails and reasons.
 - Monthly Partner commission statements track eligible revenue, configurable percentage, deductions/TDS, net payable, payout status, date and reference number without automatic fund transfer.
 - Partner conduct/confidentiality and protective suspension rules are part of Partner workflow and documentation.
+### Vendor Identity Display Rule
+Vendor ID is an internal administrative and backend reference. Customer, vendor and partner-facing identification should prioritize owner/vendor name, registered mobile number, shop name and locality/area. Partner attribution must continue to link to the internal Vendor ID in the backend for commission and audit integrity.

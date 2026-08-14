@@ -195,3 +195,5 @@ Company CRM review screens support explicit approval, rejection, and additional-
 ### Partner and Vendor KYC Review Controls
 
 Company CRM review screens support explicit approval, rejection, and additional-information decisions for Partner and Vendor KYC. Partner lifecycle suspension/revocation is separate from applicant KYC review. Review actions require admin authentication and record audit metadata where the backend tables are available.
+### Vendor Identity and Referral Attribution
+SabSewa Local continues to generate an internal Vendor ID for relational integrity, audit logs, KYC records, orders, Partner attribution and commission calculation. Public/vendor-facing workflows should not treat the Vendor ID as the primary visible identity. Vendors should normally be identified by vendor/owner name, registered mobile number, shop name and locality/area. Company Admin screens may still expose internal references where required for secure operations.

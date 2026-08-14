@@ -1205,3 +1205,29 @@ Manual Supabase action required:
 - Vendor-facing KYC page displays Admin review notes for additional-information and rejection decisions.
 
 - 2026-08-12: Partner and Vendor KYC review controls repaired: Company CRM now exposes explicit Partner KYC approval, further-enquiry, rejection, payment verification, lifecycle suspension/reactivation/revocation controls; Partner-facing page shows admin notes for additional verification; Vendor KYC review controls remain aligned with approve/further-information/reject policy.
+### Vendor Identity Display Policy - 2026-08-12
+- Vendor IDs remain internal references for Admin/Master Admin, backend records, KYC, orders, Partner attribution, commissions and audit logs.
+- Vendor/customer/partner-facing screens should identify vendors primarily by owner/vendor name, registered mobile number, shop name and locality/area.
+- Partner referral/onboarding flows should use partner referral code/mobile and vendor name/mobile/locality where practical; internal vendor references remain admin-only.
+### Web/Mobile Application - Common Core
+
+#### Voice Input & Accessibility (In Integration)
+- [x] **Database Audit Table (`voice_transcriptions`):** Deployed for GDPR and audit trail.
+- [x] **Reusable Frontend Component (`VoiceInputButton`):** Abstracts Web Speech API vs. NativeVoice on mobile.
+- [x] **Core Language Support (en-IN, hi-IN, kn-IN):** Integrated into Speech Recognition matrix. Devanagari and Kannada scripts displayed correctly.
+- [ ] **Native Mobile Permissions (Android/iOS):** Setup native listeners for `@react-native-voice/voice`.
+- [x] **In-Page Transcription Matrix:** Modal flow added for [Edit] [Speak Again] [Confirm] loop before submission.
+- [x] **Backend Gemini Flash Service:** Secure route deployed on EC2 for structured cart additions.
+- [ ] **Accessibility (ARIA/Screen Reader):** Verify microphne state announcements and transcription focus.
+- [ ] **Privacy Consent & Policy Update:** drafting localized privacy notice.
+### Ongoing Development & Core Application
+
+#### Accessibility & Voice Input (Multilingual)
+- [x] **Native Library Installation (`@react-native-voice/voice`):** Completed for Android native & PWA context. (Requires native listeners configuration for mobile).
+- [x] **Shared Component Abstraction Layer (`VoiceInputButton`):** Deployed. Abstracts complexity between NativeVoice vs Web Speech API. Includes permission checks, multiline handling, and feedback states.
+- [x] **Multilingual Support (en-IN, hi-IN, kn-IN):** integrated into Speech Locale matrix. Native scripts (Devanagari, Kannada) displayed correctly.
+- [x] **Integration Example (Partner Page):** Voice Input now active on the "Full Name" field on the Partner Application screen.
+- [x] **Confirmation Matrix Flow:** integrated into the component before data insertion. Allows [Speak Again], [Edit Text], and [Confirm].
+- [ ] **AI (Gemini Flash) Cart Structuring Service:** (Depends on backend secure service deployment).
+- [ ] **Accessibility (ARIA/Screen Reader):** accessibilityLabel announcements setup; require manual testing.
+- [ ] **Localized Voice Privacy Notice:** drafting before deployment.

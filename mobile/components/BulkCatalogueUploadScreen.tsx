@@ -121,7 +121,7 @@ export default function BulkCatalogueUploadScreen({ assisted = false }: { assist
 
   async function pickAndPreviewExcel() {
     if (!vendorId) {
-      Alert.alert("Vendor required", assisted ? "Enter the correct vendor ID before uploading on behalf of a vendor." : "Please login as vendor or open this page with a vendor ID.");
+      Alert.alert("Vendor profile required", assisted ? "Search the vendor by mobile number, owner/shop name or locality in Company CRM, then open this tool with the correct internal vendor reference." : "Please login with the registered vendor account. Your vendor profile will be linked automatically.");
       return;
     }
     const result = await DocumentPicker.getDocumentAsync({
@@ -188,7 +188,7 @@ export default function BulkCatalogueUploadScreen({ assisted = false }: { assist
 
   function baseScanFormData() {
     if (!vendorId) {
-      throw new Error(assisted ? "Enter the correct vendor ID before scanning on behalf of a vendor." : "Vendor profile is required.");
+      throw new Error(assisted ? "Search the vendor by mobile number, owner/shop name or locality in Company CRM, then open this tool with the correct internal vendor reference." : "Vendor profile is required. Please login with the registered vendor account.");
     }
     const formData = new FormData();
     formData.append("vendor_id", vendorId);
@@ -301,7 +301,11 @@ export default function BulkCatalogueUploadScreen({ assisted = false }: { assist
 
       <View style={styles.panel}>
         <Text style={styles.section}>Vendor and branch</Text>
-        <TextInput style={styles.input} placeholder="Vendor ID" value={vendorId} onChangeText={setVendorId} onBlur={resolveVendor} />
+        {assisted ? (
+          <TextInput style={styles.input} placeholder="Internal vendor reference (Admin only)" value={vendorId} onChangeText={setVendorId} onBlur={resolveVendor} />
+        ) : (
+          <Text style={styles.note}>Vendor profile is linked automatically from your logged-in account. SabSewa uses the internal vendor reference only for secure backend records.</Text>
+        )}
         {terminals.length > 0 ? (
           <View style={styles.wrap}>
             {terminals.map((terminal) => (

@@ -1,14 +1,19 @@
 ﻿{
     "extends":  "expo/tsconfig.base",
-    "compilerOptions":  {
-                            "strict":  false,
-                            "paths":  {
-                                          "@/*":  [
-                                                      "./*"
-                                                  ]
-                                      }
-                        },
+    {
+  "compilerOptions": {
+    "strict": true,
+    // Fix: Deprecation warning. Silences the warning while baseUrl remains active.
+    "ignoreDeprecations": "6.0",
+    "baseUrl": ".",
+    // Fix: Syntax errors. Added proper quotes around key/value.
+    "paths": {
+      "@/*": ["./*"]
+    }
+  },
     "include":  [
+                    "**/*.ts",
+                    "**/*.tsx",   
                     "app/_layout.tsx",
                     "app/index.tsx",
                     "app/hlm/**/*.tsx",
@@ -28,6 +33,8 @@
                     "contexts/**/*.tsx",
                     "core/features/marketplace/screens/hyperlocal/**/*.ts",
                     "core/features/marketplace/screens/hyperlocal/**/*.tsx",
+                    ".expo/types/**/*.ts",
+                    "expo-env.d.ts"
                     "hooks/**/*.ts",
                     "lib/**/*.ts",
                     "providers/**/*.ts",

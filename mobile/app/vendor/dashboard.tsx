@@ -1,4 +1,4 @@
-﻿import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from "react-native";
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from "react-native";
 import { useUser } from "@/contexts/UserContext";
 import { useAuth } from "@/providers/AuthProvider";
 import { useRouter } from "expo-router";
@@ -144,9 +144,9 @@ export default function VendorDashboard() {
       {vendor ? (
         <View style={styles.vendorPanel}>
           <Text style={styles.vendorName}>{vendor.shop_name || vendor.vendor_name || "Vendor"}</Text>
-          <Text style={styles.vendorCode}>{vendor.public_vendor_id || "Vendor ID pending"}</Text>
+          <Text style={styles.vendorCode}>{vendor.owner_name || vendor.vendor_name || "Registered owner"}{vendor.phone_number || vendor.phone ? ` | ${vendor.phone_number || vendor.phone}` : ""}</Text>
           <Text style={styles.terminalDetails}>
-            {vendor.city_code || "UNK"}-{vendor.locality_code || "GEN"}
+            {[vendor.locality_code || vendor.locality || "Locality", vendor.city_code || vendor.city || "City"].filter(Boolean).join(" | ")}
           </Text>
         </View>
       ) : (

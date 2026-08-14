@@ -50,7 +50,8 @@
         {
           "locationWhenInUsePermission": "SabSewa Local uses your location only with permission to find nearby vendors, verify shop locations and support delivery tracking."
         }
-      ]
+      ],
+      "@react-native-voice/voice"
     ],
     "web": {
       "bundler": "metro",

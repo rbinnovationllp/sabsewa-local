@@ -8,13 +8,13 @@ const supabaseUrl: string = process.env.SUPABASE_URL || "https://placeholder.sup
 const supabaseServiceKey: string = process.env.SUPABASE_SERVICE_ROLE_KEY || "placeholder-key";
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-// Initialize Razorpay Instance
+// Initialize Razorpay Instance (Single instance)
 const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY_ID || "rzp_test_placeholder",
   key_secret: process.env.RAZORPAY_KEY_SECRET || "placeholder_secret"
 });
 
-// Category Pricing Map with 18% GST breakdown and refundable deposit
+// Pricing Map: Taxable base fee + 18% GST + Refundable deposit
 const CATEGORY_PRICING: Record<
   string,
   {
@@ -26,30 +26,30 @@ const CATEGORY_PRICING: Record<
   }
 > = {
   vegetables_fruits: {
-    totalPaise: 559000,   // ₹5,590 total charged via Razorpay
-    baseFee: 500,         // ₹500 Taxable Platform Fee
+    totalPaise: 559000,   // ₹5,590 total
+    baseFee: 500,         // ₹500 Taxable Fee
     gstAmount: 90,        // ₹90 GST (18%)
     grossFee: 590,        // ₹590 Total Fee
-    depositAmount: 5000   // ₹5,000 Refundable Wallet Deposit
+    depositAmount: 5000   // ₹5,000 Refundable Deposit
   },
   kirana_general: {
-    totalPaise: 618000,   // ₹6,180 total charged via Razorpay
-    baseFee: 1000,        // ₹1,000 Taxable Platform Fee
+    totalPaise: 618000,   // ₹6,180 total
+    baseFee: 1000,        // ₹1,000 Taxable Fee
     gstAmount: 180,       // ₹180 GST (18%)
     grossFee: 1180,       // ₹1,180 Total Fee
-    depositAmount: 5000   // ₹5,000 Refundable Wallet Deposit
+    depositAmount: 5000   // ₹5,000 Refundable Deposit
   },
   restaurant_pharmacy: {
-    totalPaise: 836000,   // ₹8,360 total charged via Razorpay
-    baseFee: 2000,        // ₹2,000 Taxable Platform Fee
+    totalPaise: 836000,   // ₹8,360 total
+    baseFee: 2000,        // ₹2,000 Taxable Fee
     gstAmount: 360,       // ₹360 GST (18%)
     grossFee: 2360,       // ₹2,360 Total Fee
-    depositAmount: 5000   // ₹5,000 Refundable Wallet Deposit
+    depositAmount: 5000   // ₹5,000 Refundable Deposit
   }
 };
 
 /**
- * 1. Create Razorpay Order for Vendor Onboarding or Wallet Top-up
+ * 1. Create Razorpay Order
  * POST /api/payments/create-order
  */
 export async function createPaymentOrder(req: Request, res: Response): Promise<Response> {
@@ -132,7 +132,7 @@ export async function createPaymentOrder(req: Request, res: Response): Promise<R
 }
 
 /**
- * 2. Verify Frontend Signature Post-Payment
+ * 2. Verify Frontend Signature
  * POST /api/payments/verify
  */
 export async function verifyPaymentSignature(req: Request, res: Response): Promise<Response> {
@@ -162,7 +162,7 @@ export async function verifyPaymentSignature(req: Request, res: Response): Promi
 }
 
 /**
- * 3. Handle Razorpay Webhook (payment.captured / order.paid)
+ * 3. Handle Webhook
  * POST /api/payments/razorpay/webhook
  */
 export async function handleRazorpayWebhook(req: Request, res: Response): Promise<Response> {
@@ -200,7 +200,7 @@ export async function handleRazorpayWebhook(req: Request, res: Response): Promis
         return res.status(200).json({ status: "skipped", reason: "No vendorId in notes" });
       }
 
-      // Check idempotency: avoid duplicate processing
+      // Idempotency check
       const { data: existingPayment } = await supabase
         .from("payments")
         .select("status")
@@ -211,14 +211,13 @@ export async function handleRazorpayWebhook(req: Request, res: Response): Promis
         return res.status(200).json({ status: "already_processed" });
       }
 
-      // Process accounting split
       if (paymentType === "ONBOARDING") {
         const baseFee = Number(notes.baseFee || 500);
         const gstAmount = Number(notes.gstAmount || 90);
         const grossFee = Number(notes.grossFee || 590);
         const depositAmount = Number(notes.depositAmount || 5000);
 
-        // 1. Record GST-compliant invoice record in company ledger
+        // Record non-refundable onboarding fee with GST
         await supabase.from("company_earnings_ledger").insert({
           vendor_id: vendorId,
           payment_id: paymentId,
@@ -229,7 +228,7 @@ export async function handleRazorpayWebhook(req: Request, res: Response): Promis
           created_at: new Date().toISOString()
         });
 
-        // 2. Credit refundable ₹5,000 deposit to vendor wallet balance
+        // Credit refundable deposit to vendor wallet
         await supabase.rpc("credit_vendor_wallet", {
           p_vendor_id: vendorId,
           p_amount: depositAmount,
@@ -239,7 +238,7 @@ export async function handleRazorpayWebhook(req: Request, res: Response): Promis
       } else if (paymentType === "WALLET_TOPUP") {
         const topUpAmount = Number(notes.topUpAmount);
 
-        // 100% of top-up credited to vendor wallet
+        // 100% credited to wallet
         await supabase.rpc("credit_vendor_wallet", {
           p_vendor_id: vendorId,
           p_amount: topUpAmount,
@@ -248,7 +247,6 @@ export async function handleRazorpayWebhook(req: Request, res: Response): Promis
         });
       }
 
-      // Mark payment as COMPLETED
       await supabase
         .from("payments")
         .update({

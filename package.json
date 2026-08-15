@@ -1,0 +1,21 @@
+{
+  "name": "sabsewa-local",
+  "version": "1.0.0",
+  "private": true,
+  "description": "SabSewa Local Hyperlocal Marketplace monorepo workspace",
+  "scripts": {
+    "dev:backend": "npm --prefix backend run dev",
+    "dev:mobile": "npm --prefix mobile start",
+    "build:backend": "npm --prefix backend run build",
+    "build:mobile:web": "npm --prefix mobile run build",
+    "build:hostinger": "npm --prefix mobile run export:web:hostinger"
+  },
+  "keywords": [
+    "hyperlocal",
+    "sabsewa",
+    "gemini",
+    "razorpay"
+  ],
+  "author": "SabSewa",
+  "license": "ISC"
+}

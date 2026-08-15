@@ -1,12 +1,10 @@
+import "dotenv/config";
 import cors from "cors";
-import dotenv from "dotenv";
 import express from "express";
 import { inventoryRouter } from "./routes/geminiInventory.js";
 import { orderRouter } from "./routes/geminiOrder.js";
 import { rejectionRouter } from "./routes/geminiRejection.js";
 import { paymentRouter } from "./routes/paymentRoutes.js";
-
-dotenv.config();
 
 const app = express();
 const port = Number(process.env.PORT || 5001);
@@ -27,12 +25,12 @@ function rateLimiter(req: express.Request, res: express.Response, next: express.
   const ip = String(req.headers["x-forwarded-for"] || req.socket.remoteAddress || "unknown").split(",")[0].trim();
   const key = `${ip}:${req.method}:${req.path}`;
   const bucket = rateLimitBuckets.get(key);
-  
+
   if (!bucket || bucket.resetAt <= now) {
     rateLimitBuckets.set(key, { count: 1, resetAt: now + rateLimitWindowMs });
     return next();
   }
-  
+
   bucket.count += 1;
   if (bucket.count > rateLimitMax) {
     return res.status(429).json({ ok: false, error: "Too many requests. Please try again shortly." });
@@ -42,25 +40,25 @@ function rateLimiter(req: express.Request, res: express.Response, next: express.
 
 app.use(securityHeaders);
 
-// CORS configuration for SabSewa production and local development
-const allowedOrigins = process.env.CORS_ORIGIN 
-  ? process.env.CORS_ORIGIN.split(",").map(o => o.trim())
+const allowedOrigins = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN.split(",").map((o) => o.trim())
   : ["https://sabsewa.in", "https://www.sabsewa.in", "http://localhost:5173"];
 
-app.use(cors({
-  origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error("Not allowed by CORS"));
-    }
-  },
-  credentials: true
-}));
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
+    credentials: true
+  })
+);
 
 app.use(rateLimiter);
 
-// Parse JSON while preserving raw body for Razorpay Webhook signature verification
 app.use(
   express.json({
     limit: "10mb",
@@ -71,12 +69,10 @@ app.use(
 );
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
-// Health check endpoint
 app.get("/health", (_req, res) => {
   res.json({ ok: true, service: "sabsewa-local-backend" });
 });
 
-// Route registration
 app.use("/api/gemini/inventory", inventoryRouter);
 app.use("/api/gemini/order", orderRouter);
 app.use("/api/gemini/rejection", rejectionRouter);

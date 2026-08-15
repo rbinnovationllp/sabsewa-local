@@ -4,40 +4,52 @@ import Razorpay from "razorpay";
 import { createClient } from "@supabase/supabase-js";
 
 // Initialize Supabase Admin Client
-const supabaseUrl: string = process.env.SUPABASE_URL || "";
-const supabaseServiceKey: string = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+const supabaseUrl: string = process.env.SUPABASE_URL || "https://placeholder.supabase.co";
+const supabaseServiceKey: string = process.env.SUPABASE_SERVICE_ROLE_KEY || "placeholder-key";
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 // Initialize Razorpay Instance
 const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID || "",
-  key_secret: process.env.RAZORPAY_KEY_SECRET || ""
+  key_id: process.env.RAZORPAY_KEY_ID || "rzp_test_placeholder",
+  key_secret: process.env.RAZORPAY_KEY_SECRET || "placeholder_secret"
 });
 
-// Pricing Map with 18% GST calculation on base onboarding charges
+// Category Pricing Map with 18% GST breakdown and refundable deposit
 const CATEGORY_PRICING: Record<
   string,
-  { totalPaise: number; feeInRupees: number; depositInRupees: number }
+  {
+    totalPaise: number;
+    baseFee: number;
+    gstAmount: number;
+    grossFee: number;
+    depositAmount: number;
+  }
 > = {
   vegetables_fruits: {
-    totalPaise: 559000,
-    feeInRupees: 590,
-    depositInRupees: 5000
+    totalPaise: 559000,   // ₹5,590 total charged via Razorpay
+    baseFee: 500,         // ₹500 Taxable Platform Fee
+    gstAmount: 90,        // ₹90 GST (18%)
+    grossFee: 590,        // ₹590 Total Fee
+    depositAmount: 5000   // ₹5,000 Refundable Wallet Deposit
   },
   kirana_general: {
-    totalPaise: 618000,
-    feeInRupees: 1180,
-    depositInRupees: 5000
+    totalPaise: 618000,   // ₹6,180 total charged via Razorpay
+    baseFee: 1000,        // ₹1,000 Taxable Platform Fee
+    gstAmount: 180,       // ₹180 GST (18%)
+    grossFee: 1180,       // ₹1,180 Total Fee
+    depositAmount: 5000   // ₹5,000 Refundable Wallet Deposit
   },
   restaurant_pharmacy: {
-    totalPaise: 836000,
-    feeInRupees: 2360,
-    depositInRupees: 5000
+    totalPaise: 836000,   // ₹8,360 total charged via Razorpay
+    baseFee: 2000,        // ₹2,000 Taxable Platform Fee
+    gstAmount: 360,       // ₹360 GST (18%)
+    grossFee: 2360,       // ₹2,360 Total Fee
+    depositAmount: 5000   // ₹5,000 Refundable Wallet Deposit
   }
 };
 
 /**
- * Endpoint 1: Create Razorpay Order for Vendor Onboarding or Top-up
+ * 1. Create Razorpay Order for Vendor Onboarding or Wallet Top-up
  * POST /api/payments/create-order
  */
 export async function createPaymentOrder(req: Request, res: Response): Promise<Response> {
@@ -64,8 +76,10 @@ export async function createPaymentOrder(req: Request, res: Response): Promise<R
       }
       amountInPaise = config.totalPaise;
       notes["category"] = String(category);
-      notes["feeAmount"] = String(config.feeInRupees);
-      notes["depositAmount"] = String(config.depositInRupees);
+      notes["baseFee"] = String(config.baseFee);
+      notes["gstAmount"] = String(config.gstAmount);
+      notes["grossFee"] = String(config.grossFee);
+      notes["depositAmount"] = String(config.depositAmount);
     } else if (paymentType === "WALLET_TOPUP") {
       const amount = Number(topUpAmount);
       if (!amount || amount < 5000) {
@@ -118,7 +132,7 @@ export async function createPaymentOrder(req: Request, res: Response): Promise<R
 }
 
 /**
- * Endpoint 2: Verify Frontend Payment Signature
+ * 2. Verify Frontend Signature Post-Payment
  * POST /api/payments/verify
  */
 export async function verifyPaymentSignature(req: Request, res: Response): Promise<Response> {
@@ -148,7 +162,7 @@ export async function verifyPaymentSignature(req: Request, res: Response): Promi
 }
 
 /**
- * Endpoint 3: Razorpay Webhook Handler
+ * 3. Handle Razorpay Webhook (payment.captured / order.paid)
  * POST /api/payments/razorpay/webhook
  */
 export async function handleRazorpayWebhook(req: Request, res: Response): Promise<Response> {
@@ -186,6 +200,7 @@ export async function handleRazorpayWebhook(req: Request, res: Response): Promis
         return res.status(200).json({ status: "skipped", reason: "No vendorId in notes" });
       }
 
+      // Check idempotency: avoid duplicate processing
       const { data: existingPayment } = await supabase
         .from("payments")
         .select("status")
@@ -196,19 +211,25 @@ export async function handleRazorpayWebhook(req: Request, res: Response): Promis
         return res.status(200).json({ status: "already_processed" });
       }
 
+      // Process accounting split
       if (paymentType === "ONBOARDING") {
-        const feeAmount = Number(notes.feeAmount || 0);
+        const baseFee = Number(notes.baseFee || 500);
+        const gstAmount = Number(notes.gstAmount || 90);
+        const grossFee = Number(notes.grossFee || 590);
         const depositAmount = Number(notes.depositAmount || 5000);
 
+        // 1. Record GST-compliant invoice record in company ledger
         await supabase.from("company_earnings_ledger").insert({
           vendor_id: vendorId,
           payment_id: paymentId,
-          amount: feeAmount,
+          base_amount: baseFee,
+          gst_amount: gstAmount,
+          total_fee_collected: grossFee,
           fee_type: "ONBOARDING_REGISTRATION_FEE",
-          gst_rate: 0.18,
           created_at: new Date().toISOString()
         });
 
+        // 2. Credit refundable ₹5,000 deposit to vendor wallet balance
         await supabase.rpc("credit_vendor_wallet", {
           p_vendor_id: vendorId,
           p_amount: depositAmount,
@@ -218,6 +239,7 @@ export async function handleRazorpayWebhook(req: Request, res: Response): Promis
       } else if (paymentType === "WALLET_TOPUP") {
         const topUpAmount = Number(notes.topUpAmount);
 
+        // 100% of top-up credited to vendor wallet
         await supabase.rpc("credit_vendor_wallet", {
           p_vendor_id: vendorId,
           p_amount: topUpAmount,
@@ -226,6 +248,7 @@ export async function handleRazorpayWebhook(req: Request, res: Response): Promis
         });
       }
 
+      // Mark payment as COMPLETED
       await supabase
         .from("payments")
         .update({

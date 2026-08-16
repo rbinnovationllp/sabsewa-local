@@ -1,10 +1,12 @@
 import express from "express";
 import { supabase } from "../connection.js";
 import { requireUserJwt } from "../security/apiSecurity.js";
-import { requireCompanyAdmin, writeAdminAudit } from "./adminProfileService.js";
+import { ADMIN_MANAGEMENT_PERMISSION, requireCompanyAdmin, writeAdminAudit } from "./adminProfileService.js";
 
 const router = express.Router();
 const requireAnyCompanyAdmin = [requireUserJwt(supabase), requireCompanyAdmin("vendors.manage")];
+const requireAdminViewer = [requireUserJwt(supabase), requireCompanyAdmin("admins.view")];
+const requireAdminManager = [requireUserJwt(supabase), requireCompanyAdmin(ADMIN_MANAGEMENT_PERMISSION)];
 const requireKycReviewer = [requireUserJwt(supabase), requireCompanyAdmin("kyc.review")];
 const SLA_MS = 48 * 60 * 60 * 1000;
 const APPROACHING_MS = 6 * 60 * 60 * 1000;
@@ -191,7 +193,39 @@ router.get("/kyc/queue", ...requireKycReviewer, async (req, res) => {
   }
 });
 
-router.get("/admins", ...requireAnyCompanyAdmin, async (req, res) => {
+router.get("/admins/auth-user-lookup", ...requireAdminManager, async (req, res) => {
+  try {
+    const search = String(req.query.search || "").trim().toLowerCase();
+    if (!search) return res.status(400).json({ success: false, error: "Phone or email search is required." });
+
+    const { data, error } = await supabase.auth.admin.listUsers({ page: 1, perPage: 1000 });
+    if (error) throw error;
+    const users = data?.users || [];
+    const normalizedSearch = search.replace(/\s+/g, "");
+    const user = users.find((candidate) => {
+      const email = String(candidate.email || "").toLowerCase();
+      const phone = String(candidate.phone || "").toLowerCase().replace(/\s+/g, "");
+      return email === search || phone === normalizedSearch || phone.endsWith(normalizedSearch);
+    });
+    if (!user) return res.json({ success: true, user: null });
+
+    await writeAdminAudit({ req, action: "admin_auth_user_lookup", entityType: "auth.users", targetUserId: user.id, metadata: { search_kind: search.includes("@") ? "email" : "phone" } });
+    return res.json({
+      success: true,
+      user: {
+        id: user.id,
+        email: user.email || null,
+        phone: user.phone || null,
+        name: user.user_metadata?.full_name || user.user_metadata?.name || "",
+        created_at: user.created_at || null,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+router.get("/admins", ...requireAdminViewer, async (req, res) => {
   try {
     const search = String(req.query.search || "").trim();
     let query = supabase
@@ -210,7 +244,7 @@ router.get("/admins", ...requireAnyCompanyAdmin, async (req, res) => {
   }
 });
 
-router.post("/admins", ...requireAnyCompanyAdmin, async (req, res) => {
+router.post("/admins", ...requireAdminManager, async (req, res) => {
   try {
     const { user_id, admin_name, phone, email = null, role, permissions = {}, jurisdiction = {} } = req.body || {};
     if (!user_id || !admin_name?.trim() || !phone?.trim() || !role?.trim()) {
@@ -252,7 +286,7 @@ router.post("/admins", ...requireAnyCompanyAdmin, async (req, res) => {
   }
 });
 
-router.patch("/admins/:admin_id/status", ...requireAnyCompanyAdmin, async (req, res) => {
+router.patch("/admins/:admin_id/status", ...requireAdminManager, async (req, res) => {
   try {
     const { account_status } = req.body || {};
     if (!["active", "suspended", "revoked"].includes(account_status)) {

@@ -1251,5 +1251,7 @@ Supabase migration verified as applied. Repaired application-side integration:
 - Vendor order inbox displays response countdown, accept confirmation, partial-offer action, rejection shortcuts and repeated bell/vibration attention alert.
 - PWA service worker marks vendor new-order notifications as require-interaction and opens the order page.
 
-Remaining production validation: test real vendor device behavior for PWA open/background/locked states. Full native Android closed-app custom ringtone still requires FCM/Expo notification-channel implementation.
-
+Remaining production validation: test real vendor device behavior for PWA open/background/locked states. Full native Android closed-app custom ringtone still requires FCM/Expo notification-channel implementation.\n\n## 2026-08-16 - Admin Appointment UI
+- Added visible Master Admin controls inside Company CRM Admin Directory to lookup an existing Supabase Auth user by phone/email, assign a scoped admin role, authorize the admin profile and suspend/reactivate/revoke admin access.
+- Backend admin appointment now uses explicit admin-view/admin-management guards instead of relying on manual SQL. Only Master Admin/Super Admin style roles with all permissions can create or revoke admins.
+- Remaining manual rule: the proposed admin must already have a Supabase Auth user account before appointment; the CRM lookup finds that account and fills the internal Auth User ID.\n

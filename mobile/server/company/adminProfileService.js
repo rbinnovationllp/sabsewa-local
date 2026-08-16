@@ -1,6 +1,8 @@
 import { supabase } from "../connection.js";
 import { isMasterAdminRole, verifyMasterAdminSessionToken } from "../security/masterAdminSecurity.js";
 
+export const ADMIN_MANAGEMENT_PERMISSION = "admins.manage";
+
 const ROLE_PERMISSIONS = {
   master_admin: ["all"],
   national_admin: ["kyc.review", "vendors.manage", "reports.view", "admins.view"],

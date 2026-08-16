@@ -58,6 +58,7 @@ SabSewa Local is prepared for participation in the Gemini XPRIZE / AI Hackathon.
 - **Unified Workflows:** Dedicated customer, vendor, rider and Company CRM interfaces.
 - **Catalogue & Inventory:** Vendor catalogue setup after registration with searchable multi-select master catalogue, image pending handling, and daily availability toggles.
 - **Order Fulfilment:** Full/partial order acceptance with customer details hidden until vendor accepts.
+- **Order Alerts:** New customer orders are submitted to the vendor notification system, shown in the vendor order inbox with a 10-minute response countdown, and keep customer contact/address locked until vendor acceptance. The vendor order screen repeats a three-burst bell/vibration alert while pending orders require action.
 - **Monetization Structure:** Fixed Rs 15 platform facilitation fee on order acceptance; vendor advance-wallet deposits managed via Razorpay.
 - **Razorpay Payments:** Rs 5,500 first vendor activation (Rs 500 non-refundable service charge + Rs 5,000 refundable advance wallet balance) and Rs 5,000 standard top-ups.
 - **Web-Resilient Routing:** Hard browser fallback handlers (`window.location.href`) guaranteeing smooth state transitions after OTP verification on web builds.

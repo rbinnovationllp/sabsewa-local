@@ -6,6 +6,59 @@ import { recordPartnerCommissionForVendorRevenue } from "../partner/partnerCommi
 
 const router = express.Router();
 
+const VENDOR_RESPONSE_EXPIRED_STATUS = "expired_vendor_no_response";
+
+function isVendorResponseExpired(order) {
+  if (!order || order.status !== "pending" || !order.vendor_response_deadline_at) return false;
+  return new Date(order.vendor_response_deadline_at).getTime() <= Date.now();
+}
+
+async function markVendorResponseExpired(order, req = null) {
+  if (!order?.id || order.status !== "pending") return order;
+  const now = new Date().toISOString();
+  const { data, error } = await supabase
+    .from("hyperlocal_orders")
+    .update({
+      status: VENDOR_RESPONSE_EXPIRED_STATUS,
+      vendor_response_status: "expired",
+      vendor_response_action_at: now,
+      updated_at: now,
+    })
+    .eq("id", order.id)
+    .eq("status", "pending")
+    .select()
+    .maybeSingle();
+  if (error) throw error;
+  const expired = data || { ...order, status: VENDOR_RESPONSE_EXPIRED_STATUS, vendor_response_status: "expired" };
+  await writeOrderAuditLog({
+    orderId: order.id,
+    vendorId: order.vendor_id,
+    action: "vendor_response_window_expired",
+    fromStatus: "pending",
+    toStatus: VENDOR_RESPONSE_EXPIRED_STATUS,
+    metadata: { vendor_response_deadline_at: order.vendor_response_deadline_at },
+    req,
+  });
+  return expired;
+}
+
+async function expirePendingVendorResponses({ vendorId, terminalId } = {}, req = null) {
+  if (!vendorId) return 0;
+  let query = supabase
+    .from("hyperlocal_orders")
+    .select("id, vendor_id, terminal_id, status, vendor_response_deadline_at")
+    .eq("vendor_id", vendorId)
+    .eq("status", "pending")
+    .not("vendor_response_deadline_at", "is", null)
+    .lte("vendor_response_deadline_at", new Date().toISOString())
+    .limit(50);
+  if (terminalId) query = query.eq("terminal_id", terminalId);
+  const { data, error } = await query;
+  if (error) throw error;
+  for (const order of data || []) await markVendorResponseExpired(order, req);
+  return (data || []).length;
+}
+
 const FULL_DETAIL_STATUSES = new Set([
   "accepted",
   "packed",
@@ -112,6 +165,8 @@ router.get("/count", async (req, res) => {
     const terminalId = req.query.terminal_id;
     if (!vendorId) return res.status(400).json({ success: false, error: "vendor_id is required" });
 
+    await expirePendingVendorResponses({ vendorId, terminalId }, req);
+
     let orderQuery = supabase
       .from("hyperlocal_orders")
       .select("id", { count: "exact", head: true })
@@ -147,11 +202,13 @@ router.get("/", async (req, res) => {
       return res.status(400).json({ success: false, error: "vendor_id is required" });
     }
 
+    await expirePendingVendorResponses({ vendorId, terminalId }, req);
+
     let query = supabase
       .from("hyperlocal_orders")
       .select("*")
       .eq("vendor_id", vendorId)
-      .in("status", ["pending", "accepted", "packed", "out_for_delivery", "completed"])
+      .in("status", ["pending", "accepted", "packed", "out_for_delivery", "completed", "expired_vendor_no_response", "rejected"])
       .order("created_at", { ascending: false });
 
     if (terminalId) query = query.eq("terminal_id", terminalId);
@@ -207,7 +264,7 @@ async function verifyVendor(req, res, next) {
 
     const { data: order, error } = await supabase
       .from("hyperlocal_orders")
-      .select("id, vendor_id, status, total_amount, delivery_charge, partial_fulfillment_status, price_quote_required, price_quote_status")
+      .select("id, vendor_id, status, total_amount, delivery_charge, partial_fulfillment_status, price_quote_required, price_quote_status, vendor_response_deadline_at, vendor_response_status")
       .eq("id", order_id)
       .single();
 
@@ -219,6 +276,15 @@ async function verifyVendor(req, res, next) {
       return res.status(403).json({
         success: false,
         message: "Not allowedâ€”Vendor mismatch",
+      });
+    }
+
+    if (isVendorResponseExpired(order)) {
+      const expired = await markVendorResponseExpired(order, req);
+      return res.status(409).json({
+        success: false,
+        message: "This order response window has expired.",
+        order: limitedOrderSummary(expired),
       });
     }
 
@@ -267,6 +333,15 @@ router.post("/accept", verifyVendor, async (req, res) => {
 
   if (error)
     return res.status(500).json({ success: false, error: error.message });
+
+  await supabase
+    .from("hyperlocal_orders")
+    .update({
+      vendor_response_status: "accepted",
+      vendor_response_action_at: new Date().toISOString(),
+      vendor_response_actor_user_id: actor_user_id || null,
+    })
+    .eq("id", order_id);
 
   return res.json({
     success: true,
@@ -629,6 +704,9 @@ router.post("/reject", verifyVendor, async (req, res) => {
       status: "rejected",
       vendor_comment,
       rejection_reason: vendor_comment,
+      vendor_response_status: "rejected",
+      vendor_response_action_at: new Date().toISOString(),
+      vendor_response_actor_user_id: actor_user_id || null,
       gemini_customer_message,
       gemini_audit_log_id,
       updated_at: new Date(),

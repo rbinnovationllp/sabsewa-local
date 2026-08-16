@@ -94,6 +94,10 @@ self.addEventListener("push", (event) => {
       icon: "/pwa-icons/icon-192.png",
       badge: "/pwa-icons/icon-192.png",
       data: payload.data || { url: "/" },
+      tag: payload.data?.order_id || payload.data?.notification_type || "sabsewa-local",
+      renotify: true,
+      requireInteraction: payload.data?.notification_type === "vendor_new_order",
+      actions: [{ action: "open_order", title: "Open Order" }],
     })
   );
 });

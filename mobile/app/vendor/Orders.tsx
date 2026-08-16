@@ -1,10 +1,54 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput, Alert } from "react-native";
 import { useLocalSearchParams, Link } from "expo-router";
 import { apiUrl } from "@/lib/backend";
 import * as Haptics from "expo-haptics";
 import { createSmartRejectionMessage } from "@/services/gemini";
 import { useAuth } from "@/providers/AuthProvider";
+
+const VENDOR_ORDER_ALERT_REPEAT_MS = 15000;
+const VENDOR_ORDER_VIBRATION_PATTERN = [700, 250, 700, 250, 700];
+const REJECTION_REASON_OPTIONS = [
+  "Requested products unavailable",
+  "Shop is temporarily busy",
+  "Delivery not available right now",
+  "Insufficient stock",
+  "Shop closing soon",
+  "Other reason",
+];
+
+async function ringVendorOrderAlert() {
+  try {
+    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+  } catch {}
+
+  if (typeof navigator !== "undefined" && "vibrate" in navigator) {
+    try { navigator.vibrate?.(VENDOR_ORDER_VIBRATION_PATTERN); } catch {}
+  }
+
+  if (typeof window !== "undefined") {
+    try {
+      const AudioContextCtor = (window as any).AudioContext || (window as any).webkitAudioContext;
+      if (!AudioContextCtor) return;
+      const context = new AudioContextCtor();
+      const now = context.currentTime;
+      [0, 0.55, 1.1].forEach((offset, index) => {
+        const oscillator = context.createOscillator();
+        const gain = context.createGain();
+        oscillator.type = "sine";
+        oscillator.frequency.setValueAtTime(index % 2 === 0 ? 880 : 1040, now + offset);
+        gain.gain.setValueAtTime(0.0001, now + offset);
+        gain.gain.exponentialRampToValueAtTime(0.35, now + offset + 0.03);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + offset + 0.32);
+        oscillator.connect(gain);
+        gain.connect(context.destination);
+        oscillator.start(now + offset);
+        oscillator.stop(now + offset + 0.34);
+      });
+      setTimeout(() => context.close?.(), 1800);
+    } catch {}
+  }
+}
 
 export default function VendorOrdersScreen() {
   const params: any = useLocalSearchParams();
@@ -19,14 +63,36 @@ export default function VendorOrdersScreen() {
   const [quotePrices, setQuotePrices] = useState<Record<string, Record<string, string>>>({});
   const [deliveryOverrides, setDeliveryOverrides] = useState<Record<string, string>>({});
   const [deliveryOverrideReasons, setDeliveryOverrideReasons] = useState<Record<string, string>>({});
+  const alertLoopRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [nowMs, setNowMs] = useState(Date.now());
 
   useEffect(() => {
     fetchOrders();
 
     // Auto-refresh every 10 seconds
     const interval = setInterval(fetchOrders, 10000);
-    return () => clearInterval(interval);
+    const clock = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => {
+      clearInterval(interval);
+      clearInterval(clock);
+      stopVendorAlertLoop();
+    };
   }, []);
+
+  function stopVendorAlertLoop() {
+    if (alertLoopRef.current) {
+      clearInterval(alertLoopRef.current);
+      alertLoopRef.current = null;
+    }
+  }
+
+  function startVendorAlertLoop() {
+    if (alertLoopRef.current) return;
+    ringVendorOrderAlert();
+    alertLoopRef.current = setInterval(() => {
+      ringVendorOrderAlert();
+    }, VENDOR_ORDER_ALERT_REPEAT_MS);
+  }
 
   async function fetchOrders() {
     if (!vendorId) return;
@@ -54,6 +120,12 @@ export default function VendorOrdersScreen() {
         try { navigator.vibrate?.([200, 100, 200]); } catch {}
       }
     }
+    if (pendingIds.length > 0) {
+      startVendorAlertLoop();
+    } else {
+      stopVendorAlertLoop();
+    }
+
     setLastPendingOrderIds(pendingIds);
     setNewOrderCount(pendingIds.length);
     setOrders(nextOrders);
@@ -82,6 +154,61 @@ export default function VendorOrdersScreen() {
       return;
     }
 
+    stopVendorAlertLoop();
+    fetchOrders();
+  }
+
+  function responseCountdown(order: any) {
+    if (!order.vendor_response_deadline_at || order.status !== "pending") return null;
+    const remaining = new Date(order.vendor_response_deadline_at).getTime() - nowMs;
+    if (remaining <= 0) return "Response window expired";
+    const minutes = Math.floor(remaining / 60000);
+    const seconds = Math.floor((remaining % 60000) / 1000);
+    return `Respond within ${minutes}:${String(seconds).padStart(2, "0")}`;
+  }
+
+  function confirmAccept(order: any) {
+    Alert.alert(
+      "Accept order?",
+      "Customer contact and full delivery details unlock after acceptance. The platform fee applies only after acceptance.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Accept", onPress: () => updateStatus(order.id, "accepted") },
+      ]
+    );
+  }
+
+  async function offerVisibleItems(order: any) {
+    const items = orderItems(order).map((item: any) => ({
+      item_id: item.item_id || item.id || null,
+      item_name: item.item_name || item.product_name || item.name || "Item",
+      qty: Number(item.qty || item.quantity || 1),
+      price: item.price == null ? null : Number(item.price),
+    })).filter((item: any) => item.item_id || item.item_name);
+
+    if (!items.length) {
+      Alert.alert("Partial fulfilment", "No visible items are available to offer.");
+      return;
+    }
+
+    const response = await fetch(apiUrl("/api/vendor/orders/partial-offer"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        order_id: order.id,
+        vendor_id: vendorId,
+        actor_user_id: user?.id,
+        offered_items: items,
+        vendor_comment: "Vendor can fulfil the listed available items.",
+      }),
+    });
+    const json = await response.json();
+    if (!response.ok || !json.success) {
+      Alert.alert("Partial offer failed", json.error || json.message || "Unable to send partial offer.");
+      return;
+    }
+    Alert.alert("Partial offer sent", "Customer must confirm before final acceptance.");
+    stopVendorAlertLoop();
     fetchOrders();
   }
 
@@ -152,6 +279,7 @@ export default function VendorOrdersScreen() {
       Alert.alert("Order rejected", geminiMessage);
     }
 
+    stopVendorAlertLoop();
     fetchOrders();
   }
 
@@ -189,6 +317,7 @@ export default function VendorOrdersScreen() {
     }
 
     Alert.alert("Quote sent", "Customer must approve the quoted price before acceptance.");
+    stopVendorAlertLoop();
     fetchOrders();
   }
 
@@ -222,6 +351,7 @@ export default function VendorOrdersScreen() {
     Alert.alert("Delivery charge updated", "The order delivery charge has been adjusted.");
     setDeliveryOverrides((current) => ({ ...current, [order.id]: "" }));
     setDeliveryOverrideReasons((current) => ({ ...current, [order.id]: "" }));
+    stopVendorAlertLoop();
     fetchOrders();
   }
 
@@ -231,7 +361,7 @@ export default function VendorOrdersScreen() {
 
       <View style={styles.counterCard}>
         <Text style={styles.counterValue}>New Orders ({newOrderCount})</Text>
-        <Text style={styles.counterText}>This page refreshes every 10 seconds while open. Push notification opens this order page when permitted.</Text>
+        <Text style={styles.counterText}>This page refreshes every 10 seconds while open. Push notification opens this order page when permitted. Bell/vibration alert repeats until pending orders are accepted, rejected, partially offered, or expired.</Text>
       </View>
 
       {orders.length === 0 && (
@@ -241,6 +371,11 @@ export default function VendorOrdersScreen() {
       {orders.map((order: any) => (
         <View key={order.id} style={styles.orderCard}>
           <Text style={styles.orderId}>Order #{order.id.slice(0, 8)}</Text>
+          {responseCountdown(order) ? (
+            <Text style={responseCountdown(order) === "Response window expired" ? styles.deadlineExpired : styles.deadlineText}>
+              {responseCountdown(order)}
+            </Text>
+          ) : null}
           {order.details_unlocked ? (
             <>
               <Text>Customer Phone: {order.customer_phone || order.customer?.phone || "Not provided"}</Text>
@@ -308,6 +443,17 @@ export default function VendorOrdersScreen() {
             </Text>
             {["pending", "accepted", "packed"].includes(order.status) ? (
               <>
+                <View style={styles.reasonChipRow}>
+                  {REJECTION_REASON_OPTIONS.map((reason) => (
+                    <TouchableOpacity
+                      key={`${order.id}-${reason}`}
+                      style={styles.reasonChip}
+                      onPress={() => setRejectionReasons((current) => ({ ...current, [order.id]: reason }))}
+                    >
+                      <Text style={styles.reasonChipText}>{reason}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
                 <TextInput
                   style={styles.reasonInput}
                   placeholder="New delivery charge, use 0 to waive"
@@ -369,9 +515,16 @@ export default function VendorOrdersScreen() {
                 ) : null}
                 <TouchableOpacity
                   style={styles.acceptBtn}
-                  onPress={() => updateStatus(order.id, "accepted")}
+                  onPress={() => confirmAccept(order)}
                 >
                   <Text style={styles.btnTxt}>Accept</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.quoteBtn}
+                  onPress={() => offerVisibleItems(order)}
+                >
+                  <Text style={styles.btnTxt}>Offer Available Items</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -441,6 +594,8 @@ const styles = StyleSheet.create({
   },
 
   orderId: { fontSize: 18, fontWeight: "700", marginBottom: 5 },
+  deadlineText: { color: "#b45309", fontWeight: "900", marginBottom: 8 },
+  deadlineExpired: { color: "#991b1b", fontWeight: "900", marginBottom: 8 },
   lockedPanel: {
     backgroundColor: "#fff7ed",
     borderWidth: 1,
@@ -474,6 +629,9 @@ const styles = StyleSheet.create({
   deliveryTitle: { fontWeight: "900", color: "#0f172a", marginBottom: 4 },
 
   btnRow: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 10 },
+  reasonChipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 6, width: "100%" },
+  reasonChip: { borderWidth: 1, borderColor: "#bfdbfe", borderRadius: 999, paddingVertical: 6, paddingHorizontal: 10, backgroundColor: "#eff6ff" },
+  reasonChipText: { color: "#1d4ed8", fontWeight: "700", fontSize: 12 },
   reasonInput: {
     width: "100%",
     borderWidth: 1,

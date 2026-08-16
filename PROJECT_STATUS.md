@@ -1231,3 +1231,25 @@ Manual Supabase action required:
 - [ ] **AI (Gemini Flash) Cart Structuring Service:** (Depends on backend secure service deployment).
 - [ ] **Accessibility (ARIA/Screen Reader):** accessibilityLabel announcements setup; require manual testing.
 - [ ] **Localized Voice Privacy Notice:** drafting before deployment.
+
+## 2026-08-16 MyGate-Style Vendor Order Bell Alert
+
+Added an in-app/PWA repeated vendor order attention alert:
+
+- Pending vendor orders trigger a three-burst bell tone where browser audio is permitted.
+- Haptics/vibration repeats every 15 seconds while orders remain pending.
+- The alert stops after the vendor accepts, rejects, sends a partial offer, or the order expires.
+
+Limit: browser/PWA push notifications cannot force a custom ringtone while the app is closed on every OS/browser. Native Android closed-app custom sound still requires Firebase/FCM or Expo notification-channel implementation with a packaged sound asset and device testing.
+
+## 2026-08-16 Repaired Vendor New-Order Alert Foundation
+
+Supabase migration verified as applied. Repaired application-side integration:
+
+- Order placement writes a vendor response deadline and dispatches the vendor notification service.
+- Vendor order API expires unanswered pending orders after the response deadline and blocks late accept/reject/quote actions.
+- Vendor order inbox displays response countdown, accept confirmation, partial-offer action, rejection shortcuts and repeated bell/vibration attention alert.
+- PWA service worker marks vendor new-order notifications as require-interaction and opens the order page.
+
+Remaining production validation: test real vendor device behavior for PWA open/background/locked states. Full native Android closed-app custom ringtone still requires FCM/Expo notification-channel implementation.
+

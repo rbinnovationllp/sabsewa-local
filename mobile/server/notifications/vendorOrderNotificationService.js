@@ -21,10 +21,17 @@ function orderTitle(order) {
   return "New SabSewa Order Received";
 }
 
+function orderItemCount(order) {
+  const items = Array.isArray(order.items) ? order.items : [];
+  return items.reduce((sum, item) => sum + Number(item.qty || item.quantity || 1), 0);
+}
+
 function orderBody(order) {
   const number = String(order.receipt_number || order.id || "").slice(0, 8).toUpperCase();
-  const amount = Number(order.total_amount || 0).toFixed(2);
-  return `Order #${number} - Rs ${amount}. Open to review.`;
+  const itemCount = orderItemCount(order);
+  const area = order.general_delivery_area ? ` near ${order.general_delivery_area}` : "";
+  const distance = order.approx_distance_km != null ? ` (${Number(order.approx_distance_km).toFixed(1)} km approx.)` : "";
+  return `Order #${number}: ${itemCount || "New"} item(s)${area}${distance}. Respond within 10 minutes.`;
 }
 
 async function sendWebPushToVendor(ownerUserId, payload) {
@@ -88,6 +95,8 @@ export async function notifyVendorNewHyperlocalOrder(order) {
       order_id: order.id,
       vendor_id: order.vendor_id,
       notification_type: "vendor_new_order",
+      response_deadline_at: order.vendor_response_deadline_at || null,
+      privacy: "customer_details_locked_until_vendor_acceptance",
     },
   };
 
@@ -112,6 +121,7 @@ export async function notifyVendorNewHyperlocalOrder(order) {
       delivery_channel: deliveryChannel,
       delivery_status: deliveryStatus,
       sent_at: deliveryStatus === "sent" ? new Date().toISOString() : null,
+      expires_at: order.vendor_response_deadline_at || null,
     })
     .select()
     .single();

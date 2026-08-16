@@ -10,6 +10,8 @@ import { notifyVendorNewHyperlocalOrder } from "../notifications/vendorOrderNoti
 
 const router = express.Router();
 
+const ORDER_RESPONSE_WINDOW_MS = 10 * 60 * 1000;
+
 /**
  * POST /api/order/place
  * Body:
@@ -204,6 +206,8 @@ router.post("/place", async (req, res) => {
         message: "Invalid payment method.",
       });
     }
+    const orderCreatedAt = new Date();
+    const vendorResponseDeadlineAt = new Date(orderCreatedAt.getTime() + ORDER_RESPONSE_WINDOW_MS).toISOString();
 
     // Insert into hyperlocal_orders
     const { data, error } = await supabase
@@ -234,6 +238,10 @@ router.post("/place", async (req, res) => {
           general_delivery_area,
           approx_distance_km,
           status: "pending",
+          vendor_response_deadline_at: vendorResponseDeadlineAt,
+          vendor_response_status: "awaiting_vendor_response",
+          vendor_notified_at: orderCreatedAt.toISOString(),
+          notification_status: "pending_dispatch",
         },
       ])
       .select()
@@ -250,10 +258,44 @@ router.post("/place", async (req, res) => {
       });
     }
 
+
+    let vendorNotification = null;
+    try {
+      vendorNotification = await notifyVendorNewHyperlocalOrder({
+        ...data,
+        vendor_response_deadline_at: vendorResponseDeadlineAt,
+      });
+      await supabase
+        .from("hyperlocal_orders")
+        .update({
+          notification_status: vendorNotification?.web_push_result?.sent > 0 || vendorNotification?.fcm_result?.sent > 0
+            ? "sent_to_vendor_device"
+            : "queued_in_app",
+          last_vendor_notification_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", data.id);
+    } catch (notificationError) {
+      console.error("vendor_new_order_notification_failed", {
+        order_id: data.id,
+        vendor_id,
+        message: notificationError?.message || String(notificationError),
+      });
+      vendorNotification = { error: notificationError?.message || String(notificationError) };
+      await supabase
+        .from("hyperlocal_orders")
+        .update({
+          notification_status: "dispatch_failed",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", data.id);
+    }
+
     return res.status(200).json({
       success: true,
       message: "Order placed successfully",
-      order: data,
+      order: { ...data, vendor_response_deadline_at: vendorResponseDeadlineAt },
+      vendor_notification: vendorNotification,
     });
   } catch (err) {
     console.error("PLACE ORDER ERROR:", err);

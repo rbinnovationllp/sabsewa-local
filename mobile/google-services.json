@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "669505734978",
+    "project_id": "sabsewa-local",
+    "storage_bucket": "sabsewa-local.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:669505734978:android:364e53cac2787eb1bca0db",
+        "android_client_info": {
+          "package_name": "in.sabsewa.local"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBPZ0rYUWC7XgkuSaWLlUrv0Gc0eZjAFNQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

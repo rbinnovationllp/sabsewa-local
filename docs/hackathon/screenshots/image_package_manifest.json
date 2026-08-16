@@ -1,0 +1,96 @@
+{
+  "generated_at": "2026-08-16",
+  "source_project": "C:\\Users\\HP\\SabSewa-Local",
+  "public_url": "https://www.sabsewa.in",
+  "privacy_checks": [
+    "No secret credentials shown",
+    "No real KYC documents shown",
+    "No unmasked phone numbers shown",
+    "No private addresses shown",
+    "No personal payment details or real QR code shown",
+    "No third-party product images used",
+    "Prototype/Test Mode labels applied where live evidence is pending"
+  ],
+  "files": [
+    {
+      "file": "01_sabsewa_local_home.png",
+      "title": "SabSewa Local",
+      "status_label": "Operational"
+    },
+    {
+      "file": "02_nearby_vendor_discovery.png",
+      "title": "Discover Verified Shops Near You",
+      "status_label": "Operational / Live data required"
+    },
+    {
+      "file": "03_gemini_multilingual_ordering.png",
+      "title": "Gemini-Powered Multilingual Ordering",
+      "status_label": "Test Mode / Gemini evidence required"
+    },
+    {
+      "file": "04_visual_product_catalogue.png",
+      "title": "Visual Product Catalogue",
+      "status_label": "Operational"
+    },
+    {
+      "file": "05_bulk_catalogue_upload.png",
+      "title": "Upload Catalogue in Seconds",
+      "status_label": "Implemented / AI extraction review"
+    },
+    {
+      "file": "06_customer_privacy.png",
+      "title": "Privacy Before Acceptance",
+      "status_label": "Operational"
+    },
+    {
+      "file": "07_vendor_order_alert.png",
+      "title": "Real-Time Vendor Order Alert",
+      "status_label": "Device testing pending"
+    },
+    {
+      "file": "08_alternative_vendor_search.png",
+      "title": "Automatic Alternative Vendor Search",
+      "status_label": "Prototype / policy flow"
+    },
+    {
+      "file": "09_wallet_fee_ledger.png",
+      "title": "Transparent Fifteen-Rupee Platform Fee",
+      "status_label": "Operational / test evidence"
+    },
+    {
+      "file": "10_direct_vendor_payment.png",
+      "title": "Direct Customer-to-Vendor Payment",
+      "status_label": "Policy implemented"
+    },
+    {
+      "file": "11_vendor_onboarding_razorpay.png",
+      "title": "Secure Vendor Onboarding",
+      "status_label": "Live mode configured"
+    },
+    {
+      "file": "12_vendor_credit_facility.png",
+      "title": "Vendor-Controlled Credit Facility",
+      "status_label": "Implemented"
+    },
+    {
+      "file": "13_multilingual_interface.png",
+      "title": "English, Hindi and Kannada",
+      "status_label": "Foundation operational"
+    },
+    {
+      "file": "14_customer_vendor_pwa.png",
+      "title": "Built for Customers and Local Vendors",
+      "status_label": "Operational"
+    },
+    {
+      "file": "15_cloud_architecture.png",
+      "title": "Secure Cloud Architecture",
+      "status_label": "Architecture"
+    },
+    {
+      "file": "16_company_investor_closing.png",
+      "title": "Built by Rashi Bhartiya Innovation LLP",
+      "status_label": "Founder slide"
+    }
+  ]
+}

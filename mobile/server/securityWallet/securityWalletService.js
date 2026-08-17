@@ -2,11 +2,11 @@ import crypto from "crypto";
 import axios from "axios";
 import { supabase } from "../connection.js";
 import { getPaymentReadiness } from "../payments/paymentEnvironment.js";
+import { assertVendorOrderPricingEligibility, recordMonthlyCoveredOrder, resolveVendorCategoryPricing } from "../billing/vendorPricingPlanService.js";
 
 export const SECURITY_DEPOSIT_MINIMUM = 5000;
 export const INITIAL_VENDOR_PAYMENT = 5500;
 export const STANDARD_WALLET_TOPUP = 5000;
-export const ORDER_FEE = 15;
 export const REMINDER_THRESHOLD = 1000;
 export const FINAL_WARNING_THRESHOLD = 500;
 export const STOP_ORDERS_THRESHOLD = 515;
@@ -97,7 +97,7 @@ export async function createWalletWarning(wallet, status) {
   const messageMap = {
     top_up_reminder: "Your SabSewa Local vendor advance balance is Rs 1,000 or below. Please top up soon.",
     final_warning: "Final warning: your SabSewa Local vendor advance balance is below Rs 500.",
-    orders_stopped: "New SabSewa Local orders are stopped because your vendor advance balance is below Rs 515. Please top up before receiving new orders. Existing accepted orders must still be completed and applicable Rs 15 fees recorded.",
+    orders_stopped: "New SabSewa Local orders are stopped because your vendor advance balance is below the operational minimum. Please top up before receiving new orders. Existing accepted orders must still be completed and applicable category-based fees recorded.",
     restored: "Your SabSewa Local order eligibility has been restored.",
   };
 
@@ -115,6 +115,7 @@ export async function assertVendorCanReceiveOrders(vendorId) {
   const wallet = await updateWalletStatus(await getOrCreateSecurityWallet(vendorId));
 
   if (wallet.eligibility_status === "eligible" || wallet.eligibility_status === "low_balance" || wallet.eligibility_status === "final_warning") {
+    await assertVendorOrderPricingEligibility(vendorId);
     return wallet;
   }
 
@@ -123,7 +124,7 @@ export async function assertVendorCanReceiveOrders(vendorId) {
       ? "Vendor must deposit the minimum Rs 5,000 SabSewa Local advance balance before receiving orders."
       : wallet.eligibility_status === "closure_requested" || wallet.eligibility_status === "refund_processing" || wallet.eligibility_status === "closed"
         ? "Vendor closure/refund is in progress. New orders are stopped."
-        : "Vendor is not eligible to receive new orders because the vendor advance balance is below Rs 515. Existing accepted orders may still be completed and charged.";
+        : "Vendor is not eligible to receive new orders because the vendor advance balance is below the operational minimum. Existing accepted orders may still be completed and charged.";
 
   const error = new Error(message);
   error.statusCode = 403;
@@ -133,6 +134,14 @@ export async function assertVendorCanReceiveOrders(vendorId) {
 
 export async function deductConfirmedOrderFee({ vendorId, orderId }) {
   const wallet = await getOrCreateSecurityWallet(vendorId);
+  const pricing = await assertVendorOrderPricingEligibility(vendorId);
+  if (!pricing.per_order_fee_required) {
+    await recordMonthlyCoveredOrder({ vendorId, orderId });
+    return wallet;
+  }
+  const categoryPricing = await resolveVendorCategoryPricing(vendorId);
+  const orderFeeRupees = Number(categoryPricing.gross_fee_paise || 0) / 100;
+
   const { data: existingTx, error: existingTxError } = await supabase
     .from("vendor_security_wallet_transactions")
     .select("id")
@@ -146,14 +155,14 @@ export async function deductConfirmedOrderFee({ vendorId, orderId }) {
 
   const balanceBefore = Number(wallet.current_balance);
 
-  if (balanceBefore < ORDER_FEE) {
+  if (balanceBefore < orderFeeRupees) {
     await updateWalletStatus(wallet);
     const error = new Error("Vendor advance balance does not have enough balance for the platform fee.");
     error.statusCode = 403;
     throw error;
   }
 
-  const balanceAfter = balanceBefore - ORDER_FEE;
+  const balanceAfter = balanceBefore - orderFeeRupees;
   const nextStatus = deriveEligibility(balanceAfter, Number(wallet.opening_balance));
 
   const { data: updatedWallet, error: walletError } = await supabase
@@ -179,14 +188,30 @@ export async function deductConfirmedOrderFee({ vendorId, orderId }) {
       vendor_id: vendorId,
       order_id: orderId,
       transaction_type: "order_fee",
-      amount: -ORDER_FEE,
+      amount: -orderFeeRupees,
       balance_before: balanceBefore,
       balance_after: balanceAfter,
       payment_reference: `PLATFORM_FACILITATION_CHARGE_${orderId}`,
+      idempotency_key: `order_acceptance_fee:${orderId}`,
       warning_level: warningLevel,
       metadata: {
-        platform_facilitation_charge: ORDER_FEE,
-        charge_description: "Rs 15 platform facilitation fee recorded when the vendor accepts a real-world SabSewa Local order",
+        transaction_reason: "ORDER_ACCEPTANCE_FEE",
+        pricing_model: "pay_per_order",
+        pricing_version: categoryPricing.pricing_version,
+        vendor_business_category: categoryPricing.vendor_category,
+        category_rule_code: categoryPricing.rule_code,
+        category_label: categoryPricing.category_label,
+        gross_platform_fee_inclusive_gst_paise: categoryPricing.tax_breakup.gross_platform_fee_paise,
+        taxable_value_paise: categoryPricing.tax_breakup.taxable_value_paise,
+        gst_rate_bps: categoryPricing.tax_breakup.gst_rate_bps,
+        gst_amount_paise: categoryPricing.tax_breakup.gst_amount_paise,
+        cgst_amount_paise: categoryPricing.tax_breakup.cgst_amount_paise,
+        sgst_amount_paise: categoryPricing.tax_breakup.sgst_amount_paise,
+        igst_amount_paise: categoryPricing.tax_breakup.igst_amount_paise,
+        tax_treatment: categoryPricing.tax_breakup.tax_treatment,
+        place_of_supply: categoryPricing.tax_breakup.place_of_supply,
+        rounding_policy: categoryPricing.tax_breakup.rounding_policy,
+        charge_description: `Category-based platform fee inclusive of GST recorded when the vendor accepts a real-world SabSewa Local order`,
       },
     });
 
@@ -441,7 +466,9 @@ export async function calculateVendorExitPreview({ vendorId, legalAdjustments = 
 
   const chargedSet = new Set(chargedOrderIds);
   const unpaidCompletedOrderIds = completedOrderIds.filter((id) => !chargedSet.has(id));
-  const unpaidOrderFees = unpaidCompletedOrderIds.length * ORDER_FEE;
+  const categoryPricing = await resolveVendorCategoryPricing(vendorId);
+  const orderFeeRupees = Number(categoryPricing.gross_fee_paise || 0) / 100;
+  const unpaidOrderFees = unpaidCompletedOrderIds.length * orderFeeRupees;
   const legalAdjustmentAmount = Math.max(0, Number(legalAdjustments || 0));
   const totalDeductions = activationCharge + unpaidOrderFees + legalAdjustmentAmount;
   const estimatedRefund = Math.max(0, balance - totalDeductions);
@@ -462,7 +489,10 @@ export async function calculateVendorExitPreview({ vendorId, legalAdjustments = 
       completed_order_count: completedOrderIds.length,
       charged_order_count: chargedOrderIds.length,
       unpaid_completed_order_ids: unpaidCompletedOrderIds,
-      order_fee: ORDER_FEE,
+      order_fee: orderFeeRupees,
+      order_fee_pricing_model: "pay_per_order",
+      order_fee_pricing_version: categoryPricing.pricing_version,
+      order_fee_category_rule: categoryPricing.rule_code,
       note: "Customer order payments are direct between customer and vendor. The initial Rs 500 activation/service charge was collected separately at activation and is not deducted again at closure.",
     },
   };

@@ -4,6 +4,12 @@ import { getPaymentReadiness } from "../payments/paymentEnvironment.js";
 import { getRazorpayPayment, verifyRazorpaySignature } from "../securityWallet/securityWalletService.js";
 import { getVendorOnboardingSummary } from "../vendor/onboardingPolicyService.js";
 import { eligibleRevenueFromBillingAttempt, recordPartnerCommissionForVendorRevenue } from "../partner/partnerCommissionService.js";
+import {
+  activateMonthlyOrderPlanFromPayment,
+  getMonthlyOrderPlans,
+  getVendorPricingDashboard,
+  resolveMonthlyOrderPlanItem,
+} from "./vendorPricingPlanService.js";
 
 const SUPPORTED_CHARGE_TYPES = new Set([
   "onboarding",
@@ -12,6 +18,7 @@ const SUPPORTED_CHARGE_TYPES = new Set([
   "featured_listing",
   "promotion",
   "premium_service",
+  "monthly_order_plan",
 ]);
 
 const CYCLE_DAYS = {
@@ -43,6 +50,7 @@ function receiptFor(chargeType) {
 function legacyVendorPaymentChargeType(chargeType) {
   if (chargeType === "storage_addon") return "additional_storage_purchase";
   if (chargeType === "subscription") return "subscription_payment";
+  if (chargeType === "monthly_order_plan") return "subscription_payment";
   if (["featured_listing", "promotion", "premium_service"].includes(chargeType)) return "featured_listing_payment";
   return chargeType;
 }
@@ -218,6 +226,7 @@ export async function resolveBillingItem({ vendorId, chargeType, referenceId, bi
   }
   if (chargeType === "onboarding") return resolveOnboardingItem({ vendorId });
   if (chargeType === "subscription") return resolveSubscriptionItem({ referenceId, billingCycle });
+  if (chargeType === "monthly_order_plan") return resolveMonthlyOrderPlanItem({ vendorId, planCode: referenceId });
   if (chargeType === "storage_addon") return resolveStorageItem({ referenceId });
   return resolveBillingProductItem({ chargeType, referenceId });
 }
@@ -567,6 +576,7 @@ async function activatePromotion({ attempt }) {
 async function activateService({ attempt, payment }) {
   if (attempt.charge_type === "onboarding_fee") return activateOnboarding({ attempt, payment });
   if (attempt.charge_type === "subscription") return activateSubscription({ attempt });
+  if (attempt.charge_type === "monthly_order_plan") return activateMonthlyOrderPlanFromPayment({ attempt, payment });
   if (attempt.charge_type === "storage_addon") return activateStorage({ attempt, payment });
   if (["featured_listing", "promotion", "premium_service"].includes(attempt.charge_type)) return activatePromotion({ attempt });
   return null;
@@ -640,7 +650,7 @@ export async function verifyPlatformBillingPayment({ vendorId, auth, razorpayOrd
   }
 
   const invoice = await createInvoice({ attempt, vendor, payment });
-  const activation = await activateService({ attempt: { ...attempt, razorpay_signature: razorpaySignature }, payment });
+  const activation = await activateService({ attempt: { ...attempt, invoice_id: invoice.id, razorpay_signature: razorpaySignature }, payment });
 
   const { data: updatedAttempt, error: updateError } = await supabase
     .from("vendor_payment_attempts")
@@ -751,7 +761,7 @@ export async function processCapturedPlatformBillingWebhookPayment({ payment }) 
 
   const vendor = await getVendor(attempt.vendor_id);
   const invoice = await createInvoice({ attempt, vendor, payment });
-  const activation = await activateService({ attempt, payment });
+  const activation = await activateService({ attempt: { ...attempt, invoice_id: invoice.id }, payment });
 
   const { data: updatedAttempt, error: updateError } = await supabase
     .from("vendor_payment_attempts")
@@ -840,6 +850,7 @@ export async function getVendorBillingDashboard({ vendorId, auth }) {
   const sub = subscription || null;
   const expiresAt = sub?.expires_at ? new Date(sub.expires_at) : null;
   const daysRemaining = expiresAt ? Math.ceil((expiresAt.getTime() - Date.now()) / (24 * 60 * 60 * 1000)) : null;
+  const pricingModel = await getVendorPricingDashboard(vendorId);
 
   return {
     vendor: {
@@ -852,6 +863,8 @@ export async function getVendorBillingDashboard({ vendorId, auth }) {
     },
     onboarding: onboarding.data || null,
     current_subscription: sub ? { ...sub, days_remaining: daysRemaining } : null,
+    pricing_model: pricingModel,
+    monthly_order_plans: getMonthlyOrderPlans(),
     available_plans: plans || [],
     storage_plans: storagePlans || [],
     billing_products: products || [],

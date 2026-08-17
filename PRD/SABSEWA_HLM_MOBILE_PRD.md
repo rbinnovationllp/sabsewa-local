@@ -233,10 +233,18 @@ When vendor rejects an order:
 - Every new vendor must make an initial Rs 5,500 Razorpay payment before becoming eligible to receive orders.
 - The initial payment is split into a one-time non-refundable Rs 500 setup, activation and platform-service charge plus Rs 5,000 credited to the refundable vendor advance wallet.
 - Subsequent standard top-ups are Rs 5,000 and do not include another activation/service charge.
-- SabSewa Local deducts a fixed Rs 15 platform facilitation fee from the vendor advance balance only when the vendor securely confirms and accepts a real-world order, before customer contact and full delivery details are unlocked.
-- Once the vendor formally accepts the order and the Rs 15 platform facilitation fee is deducted, the company will not refund, reverse or adjust the Rs 15 merely because the vendor later claims that the order was cancelled, not completed, settled privately or handled outside the platform.
+- SabSewa Local supports two vendor pricing models: GST-inclusive category-based platform facilitation fee per accepted real-world order, or an optional monthly accepted-order plan chosen and paid by the vendor.
+- If a vendor is on the category pay-per-order model, SabSewa Local deducts the backend-resolved GST-inclusive platform facilitation fee from the vendor advance balance only when the vendor securely confirms and accepts a real-world order, before customer contact and full delivery details are unlocked.
+- Current category pay-per-order gross fees are Rs 15 for vegetables/fruits, Rs 20 for kirana/general stores and Rs 25 for restaurants/pharmacies. GST is included in these amounts and must not be added on top.
+- If a vendor has an active monthly accepted-order plan, orders covered within the monthly allowance must not also be charged the category pay-per-order fee. Usage must be counted against the active monthly plan period.
+- Monthly plan final prices, included GST, and required refundable security balance must be shown clearly. Refundable security is not company revenue and must not be treated as monthly service fee.
+- Current monthly plans are Local Starter, Local Growth, Local Pro and Local Enterprise, with accepted-order allowances of 500, 1,000, 2,000 and 5,000 respectively. Plan pricing must remain configurable through backend/database configuration.
+- Monthly plan upgrades may take effect after payment. Downgrades or switching back to category pay-per-order pricing should normally take effect after the current paid billing period unless Master Admin authorizes a documented exception. No retrospective refund should be automatically created for past accepted orders.
+- When a monthly allowance is exhausted, the vendor must be clearly offered upgrade, renewal, switch to category pay-per-order pricing for future accepted orders, or order-receiving pause. No silent extra charge is allowed.
+- When the required refundable security balance is below the plan minimum, the vendor must be notified of the exact top-up amount and new orders must stop until the required balance is restored.
+- Once the vendor formally accepts an order and the applicable pricing charge or monthly-plan usage record is created, the company will not refund, reverse or adjust it merely because the vendor later claims that the order was cancelled, not completed, settled privately or handled outside the platform.
 - Reversal or correction may be considered only for a company-confirmed duplicate deduction, technical error, unauthorised transaction or correction required under applicable law.
-- New orders automatically stop when the available advance balance falls below Rs 515. Existing accepted orders must still be completed and applicable Rs 15 charges must still be recorded.
+- New orders automatically stop when the available advance balance falls below the required operational minimum or applicable backend-resolved category fee. Existing accepted orders must still be completed and applicable charges must still be recorded.
 - If a vendor voluntarily closes the account, the refund preview must show current balance, the Rs 500 activation/service charge already collected and not deducted again, unpaid completed-order fees, authorised adjustments, and estimated eligible refund before submission.
 
 ### 4.13 Vendor Delivery Settings

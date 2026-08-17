@@ -1,6 +1,6 @@
 # SabSewa Local Project Status
 
-Updated: 2026-07-31
+Updated: 2026-08-17
 
 Scope: `C:\Users\HP\SabSewa-Local`
 
@@ -11,6 +11,38 @@ Production web URL: `https://www.sabsewa.in`
 Production backend API URL: `https://api.sabsewa.in`
 
 Official support contact: `support@sabsewa.in`, `+91 8450092846`, `+91 8178113449`
+
+## 2026-08-17 - GST-Inclusive Vendor Pricing and Optional Monthly Accepted-Order Plans
+
+- Added backend-resolved GST-inclusive category pay-per-order pricing:
+  - Vegetables/fruits: Rs 15 gross, taxable Rs 12.71, GST Rs 2.29.
+  - Kirana/general stores: Rs 20 gross, taxable Rs 16.95, GST Rs 3.05.
+  - Restaurants/pharmacies: Rs 25 gross, taxable Rs 21.19, GST Rs 3.81.
+- Added an optional monthly accepted-order pricing model alongside category-based pay-per-order pricing.
+- Monthly plans are configured as final GST-inclusive prices:
+  - Local Starter: 500 accepted orders, Rs 2,360/month inclusive of Rs 360 GST, Rs 5,000 required refundable security balance.
+  - Local Growth: 1,000 accepted orders, Rs 4,484/month inclusive of Rs 684 GST, Rs 5,000 required refundable security balance.
+  - Local Pro: 2,000 accepted orders, Rs 8,850/month inclusive of Rs 1,350 GST, Rs 10,000 required refundable security balance.
+  - Local Enterprise: 5,000 accepted orders, Rs 20,060/month inclusive of Rs 3,060 GST, Rs 25,000 required refundable security balance.
+- Added backend monthly-plan service:
+  - `mobile/server/billing/vendorPricingPlanService.js`
+  - Connects Razorpay monthly-plan payment activation, active billing periods, usage counting, security-balance requirement, and pricing audit records.
+- Patched live billing flow:
+  - `mobile/server/billing/platformBillingService.js`
+  - New charge type: `monthly_order_plan`
+  - Vendor Billing dashboard now returns current pricing model and available monthly order plans.
+- Patched live order-fee flow:
+  - `mobile/server/securityWallet/securityWalletService.js`
+  - Covered monthly-plan accepted orders are recorded in plan usage and are not also charged the category-based wallet/order fee.
+  - Pay-per-order wallet deductions now store order ID, vendor ID, category pricing rule, gross fee inclusive GST, taxable value, GST rate, CGST/SGST/IGST placeholders, balance before/after, idempotency key and `ORDER_ACCEPTANCE_FEE` reason metadata.
+- Updated Vendor Billing UI:
+  - `mobile/app/vendor/Billing.tsx`
+  - Shows My Pricing Model, current monthly-plan usage, security shortfall, monthly plan comparison, GST breakdown, required refundable security balance, and terms confirmation before Razorpay checkout.
+- Required manual Supabase SQL:
+  - `supabase/RUN_ONLY_VENDOR_MONTHLY_ORDER_PRICING_2026_08_17.sql`
+- Remaining production work after SQL/deploy:
+  - End-to-end test category-based accepted-order deductions for Rs 15/Rs 20/Rs 25 categories, monthly plan purchase, accepted-order coverage, 80/90/100% usage warnings, renewal reminders, 30-day non-payment deactivation, and Master Admin pricing adjustment controls.
+  - CA/accounting review is still required for final invoice numbering, GST return treatment, place-of-supply automation and interstate IGST handling.
 
 ## Hackathon Guideline Alignment
 

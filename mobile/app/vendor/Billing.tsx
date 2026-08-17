@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Alert, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Alert, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import BrandHeader from "@/components/BrandHeader";
 import { apiUrl, authenticatedFetch } from "@/lib/backend";
@@ -23,6 +23,8 @@ export default function VendorBillingScreen() {
   const [paying, setPaying] = useState(false);
   const [dashboard, setDashboard] = useState<any>(null);
   const [billingCycle, setBillingCycle] = useState<"monthly" | "quarterly" | "annual">("monthly");
+  const [expectedMonthlyOrders, setExpectedMonthlyOrders] = useState("500");
+  const [pricingTermsAccepted, setPricingTermsAccepted] = useState(false);
 
   useEffect(() => {
     resolveAndLoad();
@@ -55,6 +57,10 @@ export default function VendorBillingScreen() {
 
   async function pay(chargeType: string, referenceId?: string | null, description = "SabSewa Local platform payment") {
     if (!vendorId) return;
+    if (chargeType === "monthly_order_plan" && !pricingTermsAccepted) {
+      Alert.alert("Pricing terms", "Please confirm that displayed plan prices are GST-inclusive, refundable security is separate, and covered monthly orders will not also be charged the category-based per-order fee.");
+      return;
+    }
     setPaying(true);
     try {
       const response = await authenticatedFetch(`/api/vendor/billing/${vendorId}/platform-order`, {
@@ -149,6 +155,11 @@ export default function VendorBillingScreen() {
 
   const subscription = dashboard?.current_subscription;
   const onboarding = dashboard?.onboarding;
+  const pricing = dashboard?.pricing_model || {};
+  const payPerOrderPricing = pricing?.pay_per_order_pricing || {};
+  const expectedOrders = Math.max(Number(expectedMonthlyOrders || 0), 0);
+  const payPerOrderFeePaise = Number(pricing.pay_per_order_fee_paise || payPerOrderPricing.gross_fee_paise || 1500);
+  const payPerOrderEstimatePaise = expectedOrders * payPerOrderFeePaise;
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -170,6 +181,66 @@ export default function VendorBillingScreen() {
         <TouchableOpacity style={[styles.primaryBtn, paying && styles.disabled]} onPress={() => pay("onboarding", null, "Vendor onboarding fee and security deposit")} disabled={paying || onboarding?.payment_status === "payment_completed"}>
           <Text style={styles.primaryText}>{onboarding?.payment_status === "payment_completed" ? "Onboarding Paid" : paying ? "Opening Razorpay..." : "Pay Onboarding"}</Text>
         </TouchableOpacity>
+      </View>
+
+      <View style={styles.panel}>
+        <Text style={styles.section}>My Pricing Model</Text>
+        <Text style={styles.title}>
+          {pricing.current_model === "monthly_order_plan"
+            ? `${pricing.current_plan?.plan_name || "Monthly Order Plan"}`
+            : "Pay Per Accepted Order"}
+        </Text>
+        {pricing.current_model === "monthly_order_plan" ? (
+          <>
+            <Text style={styles.muted}>Billing period: {pricing.current_period?.period_start ? new Date(pricing.current_period.period_start).toLocaleDateString() : "N/A"} to {pricing.current_period?.period_end ? new Date(pricing.current_period.period_end).toLocaleDateString() : "N/A"}</Text>
+            <Text style={styles.muted}>Accepted orders used: {pricing.accepted_orders_used || 0} | Remaining: {pricing.accepted_orders_remaining ?? "N/A"} | Usage: {pricing.usage_percent || 0}%</Text>
+            <Text style={styles.muted}>Security balance: {rupees(pricing.current_security_balance_paise)} | Required: {rupees(pricing.required_security_balance_paise)}</Text>
+            {Number(pricing.security_shortfall_paise || 0) > 0 ? (
+              <Text style={styles.warn}>Top-up required: {rupees(pricing.security_shortfall_paise)} before receiving new orders under this plan.</Text>
+            ) : null}
+            {pricing.warning_level && pricing.warning_level !== "none" ? <Text style={styles.warn}>Alert: {String(pricing.warning_level).replace(/_/g, " ")}</Text> : null}
+          </>
+        ) : (
+          <Text style={styles.muted}>Current category charge: {rupees(payPerOrderFeePaise)} per accepted order, inclusive of GST. Monthly plans below are optional.</Text>
+        )}
+        {payPerOrderPricing?.tax_breakup ? (
+          <Text style={styles.muted}>Taxable value: {rupees(payPerOrderPricing.tax_breakup.taxable_value_paise)} | Included GST: {rupees(payPerOrderPricing.tax_breakup.gst_amount_paise)}</Text>
+        ) : null}
+
+        <Text style={[styles.title, { marginTop: 12 }]}>Compare Monthly Plans</Text>
+        <Text style={styles.muted}>Expected accepted orders this month</Text>
+        <TextInput
+          style={styles.input}
+          keyboardType="numeric"
+          value={expectedMonthlyOrders}
+          onChangeText={(value) => setExpectedMonthlyOrders(value.replace(/[^0-9]/g, ""))}
+          placeholder="Example: 500"
+        />
+        <Text style={styles.muted}>Estimated pay-per-order cost: {rupees(payPerOrderEstimatePaise)} at {rupees(payPerOrderFeePaise)} per accepted order, inclusive of GST.</Text>
+
+        <TouchableOpacity style={styles.checkboxRow} onPress={() => setPricingTermsAccepted((value) => !value)}>
+          <Text style={[styles.checkbox, pricingTermsAccepted && styles.checkboxActive]}>{pricingTermsAccepted ? "✓" : ""}</Text>
+          <Text style={styles.checkboxText}>I understand displayed monthly prices are inclusive of GST, refundable security is separate, and covered monthly-plan orders will not also be charged the category-based per-order fee.</Text>
+        </TouchableOpacity>
+
+        {(dashboard?.monthly_order_plans || []).map((plan: any) => {
+          const covered = Number(plan.max_order_allowance || 0);
+          const savingPaise = Math.max(payPerOrderEstimatePaise - Number(plan.total_payable_paise || 0), 0);
+          return (
+            <View key={plan.plan_code} style={styles.card}>
+              <Text style={styles.title}>{plan.plan_name}</Text>
+              <Text style={styles.muted}>Covers up to {covered} accepted orders in the monthly billing period.</Text>
+              <Text style={styles.muted}>SabSewa Local service fee before GST: {rupees(plan.service_fee_before_gst_paise)}</Text>
+              <Text style={styles.muted}>Included GST: {rupees(plan.gst_amount_paise)}</Text>
+              <Text style={styles.total}>Final monthly price payable: {rupees(plan.total_payable_paise)} inclusive of GST</Text>
+              <Text style={styles.muted}>Required refundable security balance: {rupees(plan.required_security_balance_paise)}</Text>
+              {savingPaise > 0 ? <Text style={styles.saving}>Estimated saving vs category per-order pricing: {rupees(savingPaise)}</Text> : null}
+              <TouchableOpacity style={[styles.secondaryBtn, paying && styles.disabled]} onPress={() => pay("monthly_order_plan", plan.plan_code, `${plan.plan_name} monthly order plan`)} disabled={paying}>
+                <Text style={styles.secondaryText}>{pricing.current_plan?.plan_code === plan.plan_code ? "Renew / Continue Plan" : "Select Monthly Plan"}</Text>
+              </TouchableOpacity>
+            </View>
+          );
+        })}
       </View>
 
       <View style={styles.panel}>
@@ -266,6 +337,13 @@ const styles = StyleSheet.create({
   chipText: { color: "#334155", fontWeight: "900" },
   chipTextActive: { color: "#fff" },
   card: { borderWidth: 1, borderColor: "#e5e7eb", borderRadius: 8, padding: 12, marginBottom: 10, backgroundColor: "#f9fafb" },
+  input: { borderWidth: 1, borderColor: "#cbd5e1", borderRadius: 8, padding: 12, marginVertical: 8, color: "#111827", backgroundColor: "#fff" },
+  warn: { color: "#991b1b", backgroundColor: "#fef2f2", borderWidth: 1, borderColor: "#fecaca", borderRadius: 8, padding: 8, marginTop: 8, fontWeight: "800" },
+  saving: { color: "#047857", fontWeight: "900", marginTop: 6 },
+  checkboxRow: { flexDirection: "row", alignItems: "flex-start", gap: 10, marginVertical: 12 },
+  checkbox: { width: 22, height: 22, borderWidth: 1, borderColor: "#1166ff", borderRadius: 6, textAlign: "center", color: "#fff", fontWeight: "900", lineHeight: 20 },
+  checkboxActive: { backgroundColor: "#1166ff" },
+  checkboxText: { flex: 1, color: "#334155", lineHeight: 19, fontSize: 12, fontWeight: "700" },
   primaryBtn: { backgroundColor: "#1166ff", borderRadius: 8, padding: 13, marginTop: 10 },
   primaryText: { color: "#fff", fontWeight: "900", textAlign: "center" },
   secondaryBtn: { borderWidth: 1, borderColor: "#1166ff", borderRadius: 8, padding: 11, marginTop: 10, backgroundColor: "#fff" },

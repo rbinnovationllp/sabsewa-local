@@ -73,7 +73,27 @@ If you only need the revised vendor activation payment and wallet accounting upd
 C:\Users\HP\SabSewa-Local\supabase\RUN_ONLY_REVISED_VENDOR_ACTIVATION_WALLET_POLICY.sql
 ```
 
-The `vendor_security_*` table names are legacy internal names. In SabSewa Local product wording, this is the vendor advance balance. The first vendor payment is Rs 5,500, split into a one-time non-refundable Rs 500 activation/service charge and Rs 5,000 refundable advance wallet credit. Later standard top-ups are Rs 5,000. Rs 15 is deducted when the vendor securely confirms and accepts a real-world order, and customer order payment remains direct between customer and vendor.
+The `vendor_security_*` table names are legacy internal names. In SabSewa Local product wording, this is the vendor advance balance. The first vendor payment is Rs 5,500, split into a one-time non-refundable Rs 500 activation/service charge and Rs 5,000 refundable advance wallet credit. Later standard top-ups are Rs 5,000. A backend-resolved GST-inclusive category platform fee is deducted when the vendor securely confirms and accepts a real-world order, and customer order payment remains direct between customer and vendor.
+
+## Vendor GST-Inclusive Pricing and Monthly Accepted-Order Plans - 2026-08-17
+
+Run this revised SQL before enabling the pricing changes in production:
+
+```text
+C:\Users\HP\SabSewa-Local\supabase\RUN_ONLY_VENDOR_MONTHLY_ORDER_PRICING_2026_08_17.sql
+```
+
+It adds:
+
+- `vendor_order_fee_pricing_rules`
+- `vendor_monthly_order_plans`
+- `vendor_pricing_preferences`
+- `vendor_order_plan_periods`
+- `vendor_order_plan_usage_events`
+- `vendor_pricing_change_audit`
+- `vendor_pricing_notifications`
+
+The pay-per-order model is category-based and GST-inclusive: Rs 15 for vegetables/fruits, Rs 20 for kirana/general stores, and Rs 25 for restaurants/pharmacies. The SQL also replaces `accept_order_with_wallet_fee` so accepted-order wallet transactions store taxable value, GST amount, CGST/SGST/IGST fields, pricing version and idempotency details. If a vendor has an active monthly order plan, accepted orders covered by that plan are written to `vendor_order_plan_usage_events` and must not also create a category-based order-fee wallet transaction.
 
 ## After Applying
 

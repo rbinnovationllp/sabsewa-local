@@ -107,7 +107,7 @@ export default function VendorDashboard() {
     },
     {
       title: "Vendor Advance Balance",
-      description: "Review Rs 5,500 activation split, Rs 5,000 wallet, top-ups and Rs 15 fees.",
+      description: "Review Rs 5,500 activation split, Rs 5,000 wallet, top-ups and category-based platform fees.",
       color: "#1166ff",
       route: vendorLoaded ? `/vendor/SecurityWallet?vendor=${vendor.id}` : "",
     },

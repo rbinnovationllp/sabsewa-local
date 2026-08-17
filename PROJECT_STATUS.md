@@ -12,18 +12,24 @@ Production backend API URL: `https://api.sabsewa.in`
 
 Official support contact: `support@sabsewa.in`, `+91 8450092846`, `+91 8178113449`
 
-## 2026-08-17 - GST-Inclusive Vendor Pricing and Optional Monthly Accepted-Order Plans
+## 2026-08-17 - Final Vendor Pricing, GST, Security Deposit and Optional Monthly Plans
 
-- Added backend-resolved GST-inclusive category pay-per-order pricing:
-  - Vegetables/fruits: Rs 15 gross, taxable Rs 12.71, GST Rs 2.29.
-  - Kirana/general stores: Rs 20 gross, taxable Rs 16.95, GST Rs 3.05.
-  - Restaurants/pharmacies: Rs 25 gross, taxable Rs 21.19, GST Rs 3.81.
+- Updated backend-resolved category Pay As You Go pricing to base platform fee plus GST:
+  - Fruits/vegetables: Rs 15 base + Rs 2.70 GST = Rs 17.70 payable.
+  - Kirana/general stores: Rs 20 base + Rs 3.60 GST = Rs 23.60 payable.
+  - Restaurants/food and pharmacies/medical: Rs 25 base + Rs 4.50 GST = Rs 29.50 payable.
+  - Other/default categories: minimum Rs 25 base + Rs 4.50 GST = Rs 29.50 payable, configurable by backend/database rules.
 - Added an optional monthly accepted-order pricing model alongside category-based pay-per-order pricing.
-- Monthly plans are configured as final GST-inclusive prices:
-  - Local Starter: 500 accepted orders, Rs 2,360/month inclusive of Rs 360 GST, Rs 5,000 required refundable security balance.
-  - Local Growth: 1,000 accepted orders, Rs 4,484/month inclusive of Rs 684 GST, Rs 5,000 required refundable security balance.
-  - Local Pro: 2,000 accepted orders, Rs 8,850/month inclusive of Rs 1,350 GST, Rs 10,000 required refundable security balance.
-  - Local Enterprise: 5,000 accepted orders, Rs 20,060/month inclusive of Rs 3,060 GST, Rs 25,000 required refundable security balance.
+- Monthly plans are configured as base fee plus GST:
+  - Standard: 300 accepted orders, Rs 3,000 base + Rs 540 GST = Rs 3,540/month, Rs 3,750 required refundable/adjustable advance balance.
+  - Plus: 750 accepted orders, Rs 7,000 base + Rs 1,260 GST = Rs 8,260/month, Rs 8,750 required refundable/adjustable advance balance.
+  - Pro: 1,500 accepted orders, Rs 13,500 base + Rs 2,430 GST = Rs 15,930/month, Rs 16,875 required refundable/adjustable advance balance.
+- PAYG vendors require Rs 5,000 advance/security balance, receive a low-balance warning below Rs 500, and any shortfall against the next accepted-order platform charge is recorded as vendor platform liability rather than silently creating a negative ledger balance.
+- Monthly plan orders above the included allowance use plan-specific configurable overage pricing instead of category Pay As You Go:
+  - Standard overage: Rs 10 base + GST per additional eligible order.
+  - Plus overage: Rs 9 base + GST per additional eligible order.
+  - Pro overage: Rs 8 base + GST per additional eligible order.
+- When an overage/platform-fee shortfall occurs, the available wallet balance is applied, the unpaid amount is recorded as vendor platform liability, and the affected terminal is marked `billing_hold` without suspending the full vendor account.
 - Added backend monthly-plan service:
   - `mobile/server/billing/vendorPricingPlanService.js`
   - Connects Razorpay monthly-plan payment activation, active billing periods, usage counting, security-balance requirement, and pricing audit records.
@@ -34,7 +40,7 @@ Official support contact: `support@sabsewa.in`, `+91 8450092846`, `+91 817811344
 - Patched live order-fee flow:
   - `mobile/server/securityWallet/securityWalletService.js`
   - Covered monthly-plan accepted orders are recorded in plan usage and are not also charged the category-based wallet/order fee.
-  - Pay-per-order wallet deductions now store order ID, vendor ID, category pricing rule, gross fee inclusive GST, taxable value, GST rate, CGST/SGST/IGST placeholders, balance before/after, idempotency key and `ORDER_ACCEPTANCE_FEE` reason metadata.
+  - Pay-per-order wallet deductions now store order ID, vendor ID, category pricing rule, base fee, GST amount, total platform charge, CGST/SGST/IGST placeholders, balance before/after, liability shortfall if any, idempotency key and `ORDER_ACCEPTANCE_FEE` reason metadata.
 - Updated Vendor Billing UI:
   - `mobile/app/vendor/Billing.tsx`
   - Shows My Pricing Model, current monthly-plan usage, security shortfall, monthly plan comparison, GST breakdown, required refundable security balance, and terms confirmation before Razorpay checkout.

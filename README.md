@@ -4,7 +4,7 @@
 
 SabSewa Local is a mobile-first hyperlocal marketplace connecting customers with verified nearby shops, including kirana stores, vegetable and fruit sellers, medical stores, dairy shops, bakeries, restaurants and tiffin providers.
 
-The platform supports local product discovery, multilingual ordering, vendor catalogues, delivery tracking, vendor advance wallets, GST-inclusive category-based platform facilitation fees linked to confirmed vendor order acceptance, optional monthly accepted-order plans for higher-volume vendors, and vendor-managed customer credit records.
+The platform supports local product discovery, multilingual ordering, vendor catalogues, delivery tracking, vendor advance wallets, category-based platform base fees plus GST linked to confirmed vendor order acceptance, optional monthly accepted-order plans for higher-volume vendors, and vendor-managed customer credit records.
 
 SabSewa Local is an independent project. It does not include SabSewa Pro, SabSewa Job or SabSewa SHG.
 
@@ -59,7 +59,7 @@ SabSewa Local is prepared for participation in the Gemini XPRIZE / AI Hackathon.
 - **Catalogue & Inventory:** Vendor catalogue setup after registration with searchable multi-select master catalogue, image pending handling, and daily availability toggles.
 - **Order Fulfilment:** Full/partial order acceptance with customer details hidden until vendor accepts.
 - **Order Alerts:** New customer orders are submitted to the vendor notification system, shown in the vendor order inbox with a 10-minute response countdown, and keep customer contact/address locked until vendor acceptance. The vendor order screen repeats a three-burst bell/vibration alert while pending orders require action.
-- **Monetization Structure:** Vendors can stay on GST-inclusive category-based pay-per-order pricing or choose an optional monthly accepted-order plan. Covered monthly-plan orders are not also charged a category-based accepted-order fee.
+- **Monetization Structure:** Vendors can stay on category-based Pay As You Go pricing charged as base platform fee plus GST, or choose an optional monthly accepted-order plan. Covered monthly-plan orders are not also charged a category-based accepted-order fee; orders above the monthly allowance use the selected plan's configurable overage fee plus GST.
 - **Razorpay Payments:** Rs 5,500 first vendor activation (Rs 500 non-refundable service charge + Rs 5,000 refundable advance wallet balance) and Rs 5,000 standard top-ups.
 - **Web-Resilient Routing:** Hard browser fallback handlers (`window.location.href`) guaranteeing smooth state transitions after OTP verification on web builds.
 
@@ -74,18 +74,17 @@ Vendor payments are strictly separated by Razorpay mode:
 
 ## Vendor Pricing Models
 
-SabSewa Local supports two vendor pricing models. The default pay-per-order model charges a GST-inclusive platform fee only when the vendor accepts a real customer order: Rs 15 for vegetables/fruits, Rs 20 for kirana/general stores, and Rs 25 for restaurants/pharmacies. The backend resolves the applicable category fee and GST breakup; the frontend never decides the charge.
+SabSewa Local supports two vendor pricing models. The default Pay As You Go model charges a category-based base platform fee plus GST only when the vendor accepts a real customer order. Current base fees are Rs 15 for fruits/vegetables, Rs 20 for kirana/general stores, and Rs 25 for pharmacies, restaurants/food and other default categories. At 18% GST, the current payable totals are Rs 17.70, Rs 23.60 and Rs 29.50 respectively. The backend resolves the applicable category fee and GST breakup; the frontend never decides the charge.
 
 The optional monthly accepted-order plan model is available for shops with larger order volumes and narrow margins.
 
 Monthly plans:
 
-- Local Starter: up to 500 accepted orders, Rs 2,360/month final price inclusive of Rs 360 GST, Rs 5,000 required refundable security balance.
-- Local Growth: up to 1,000 accepted orders, Rs 4,484/month final price inclusive of Rs 684 GST, Rs 5,000 required refundable security balance.
-- Local Pro: up to 2,000 accepted orders, Rs 8,850/month final price inclusive of Rs 1,350 GST, Rs 10,000 required refundable security balance.
-- Local Enterprise: up to 5,000 accepted orders, Rs 20,060/month final price inclusive of Rs 3,060 GST, Rs 25,000 required refundable security balance.
+- Standard: up to 300 accepted orders, Rs 3,000 base + Rs 540 GST = Rs 3,540/month, Rs 3,750 required refundable/adjustable advance balance.
+- Plus: up to 750 accepted orders, Rs 7,000 base + Rs 1,260 GST = Rs 8,260/month, Rs 8,750 required refundable/adjustable advance balance.
+- Pro: up to 1,500 accepted orders, Rs 13,500 base + Rs 2,430 GST = Rs 15,930/month, Rs 16,875 required refundable/adjustable advance balance.
 
-Monthly plan prices are displayed as final GST-inclusive prices; refundable security is separate. Vendors choose the model from Vendor Billing, and all selections/changes are recorded in pricing audit tables. Run the revised `supabase/RUN_ONLY_VENDOR_MONTHLY_ORDER_PRICING_2026_08_17.sql` before production use.
+Monthly plan prices are displayed as base fee plus GST, with the advance/security balance shown separately. Plan-specific overage fees are configurable in the backend/database and are currently seeded as Standard Rs 10 + GST/order, Plus Rs 9 + GST/order, and Pro Rs 8 + GST/order after the included allowance is exhausted. If wallet balance is insufficient, the available balance is applied, the shortfall is recorded as vendor platform liability, and only the affected terminal is placed on billing hold until recharge. Vendors choose the model from Vendor Billing, and all selections/changes are recorded in pricing audit tables. Run the revised `supabase/RUN_ONLY_VENDOR_MONTHLY_ORDER_PRICING_2026_08_17.sql` before production use.
 
 ---
 

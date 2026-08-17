@@ -7,10 +7,10 @@ import { assertVendorOrderPricingEligibility, recordMonthlyCoveredOrder, resolve
 export const SECURITY_DEPOSIT_MINIMUM = 5000;
 export const INITIAL_VENDOR_PAYMENT = 5500;
 export const STANDARD_WALLET_TOPUP = 5000;
-export const REMINDER_THRESHOLD = 1000;
-export const FINAL_WARNING_THRESHOLD = 500;
-export const STOP_ORDERS_THRESHOLD = 515;
-export const OPERATIONAL_MINIMUM_BALANCE = 515;
+export const REMINDER_THRESHOLD = 500;
+export const FINAL_WARNING_THRESHOLD = 0;
+export const STOP_ORDERS_THRESHOLD = 0;
+export const OPERATIONAL_MINIMUM_BALANCE = 0;
 export const ACTIVATION_USAGE_CHARGE = 500;
 
 const CLOSED_STATUSES = new Set(["closure_requested", "refund_processing", "closed", "suspended"]);
@@ -48,9 +48,9 @@ export async function getOrCreateSecurityWallet(vendorId) {
 
 export function deriveEligibility(balance, openingBalance) {
   if (openingBalance < SECURITY_DEPOSIT_MINIMUM) return "security_deposit_required";
-  if (balance < STOP_ORDERS_THRESHOLD) return "orders_stopped";
-  if (balance < FINAL_WARNING_THRESHOLD) return "final_warning";
-  if (balance <= REMINDER_THRESHOLD) return "low_balance";
+  if (balance <= STOP_ORDERS_THRESHOLD) return "orders_stopped";
+  if (FINAL_WARNING_THRESHOLD > 0 && balance < FINAL_WARNING_THRESHOLD) return "final_warning";
+  if (balance < REMINDER_THRESHOLD) return "low_balance";
   return "eligible";
 }
 
@@ -95,9 +95,9 @@ export async function createWalletWarning(wallet, status) {
   if (warningLevel === "none") return;
 
   const messageMap = {
-    top_up_reminder: "Your SabSewa Local vendor advance balance is Rs 1,000 or below. Please top up soon.",
+    top_up_reminder: "Your SabSewa Local advance security balance has fallen below Rs 500. Please recharge your security deposit to maintain sufficient balance for upcoming platform charges.",
     final_warning: "Final warning: your SabSewa Local vendor advance balance is below Rs 500.",
-    orders_stopped: "New SabSewa Local orders are stopped because your vendor advance balance is below the operational minimum. Please top up before receiving new orders. Existing accepted orders must still be completed and applicable category-based fees recorded.",
+    orders_stopped: "New SabSewa Local orders are stopped for the affected shop because your vendor advance balance is exhausted or platform charges are outstanding. Please recharge before receiving new orders. Existing accepted orders must still be completed and applicable platform fees or plan overage charges recorded.",
     restored: "Your SabSewa Local order eligibility has been restored.",
   };
 
@@ -124,7 +124,7 @@ export async function assertVendorCanReceiveOrders(vendorId) {
       ? "Vendor must deposit the minimum Rs 5,000 SabSewa Local advance balance before receiving orders."
       : wallet.eligibility_status === "closure_requested" || wallet.eligibility_status === "refund_processing" || wallet.eligibility_status === "closed"
         ? "Vendor closure/refund is in progress. New orders are stopped."
-        : "Vendor is not eligible to receive new orders because the vendor advance balance is below the operational minimum. Existing accepted orders may still be completed and charged.";
+        : "Vendor is not eligible to receive new orders because the vendor advance balance is below the operational minimum or platform charges are outstanding. Existing accepted orders may still be completed and charged.";
 
   const error = new Error(message);
   error.statusCode = 403;
@@ -139,8 +139,10 @@ export async function deductConfirmedOrderFee({ vendorId, orderId }) {
     await recordMonthlyCoveredOrder({ vendorId, orderId });
     return wallet;
   }
-  const categoryPricing = await resolveVendorCategoryPricing(vendorId);
-  const orderFeeRupees = Number(categoryPricing.gross_fee_paise || 0) / 100;
+  const categoryPricing = pricing.overage_after_plan_allowance && pricing.overage_pricing
+    ? pricing.overage_pricing
+    : await resolveVendorCategoryPricing(vendorId);
+  const orderFeeRupees = Number(categoryPricing.gross_fee_paise || categoryPricing.tax_breakup?.gross_platform_fee_paise || 0) / 100;
 
   const { data: existingTx, error: existingTxError } = await supabase
     .from("vendor_security_wallet_transactions")
@@ -155,15 +157,12 @@ export async function deductConfirmedOrderFee({ vendorId, orderId }) {
 
   const balanceBefore = Number(wallet.current_balance);
 
-  if (balanceBefore < orderFeeRupees) {
-    await updateWalletStatus(wallet);
-    const error = new Error("Vendor advance balance does not have enough balance for the platform fee.");
-    error.statusCode = 403;
-    throw error;
-  }
-
-  const balanceAfter = balanceBefore - orderFeeRupees;
-  const nextStatus = deriveEligibility(balanceAfter, Number(wallet.opening_balance));
+  const amountToDeduct = Math.min(balanceBefore, orderFeeRupees);
+  const unpaidLiabilityPaise = Math.max(Number(categoryPricing.gross_fee_paise || 0) - Math.round(amountToDeduct * 100), 0);
+  const balanceAfter = balanceBefore - amountToDeduct;
+  const nextStatus = unpaidLiabilityPaise > 0
+    ? "orders_stopped"
+    : deriveEligibility(balanceAfter, Number(wallet.opening_balance));
 
   const { data: updatedWallet, error: walletError } = await supabase
     .from("vendor_security_wallets")
@@ -188,7 +187,7 @@ export async function deductConfirmedOrderFee({ vendorId, orderId }) {
       vendor_id: vendorId,
       order_id: orderId,
       transaction_type: "order_fee",
-      amount: -orderFeeRupees,
+      amount: -amountToDeduct,
       balance_before: balanceBefore,
       balance_after: balanceAfter,
       payment_reference: `PLATFORM_FACILITATION_CHARGE_${orderId}`,
@@ -196,12 +195,20 @@ export async function deductConfirmedOrderFee({ vendorId, orderId }) {
       warning_level: warningLevel,
       metadata: {
         transaction_reason: "ORDER_ACCEPTANCE_FEE",
-        pricing_model: "pay_per_order",
+        pricing_model: pricing.overage_after_plan_allowance ? "monthly_plan_overage" : "pay_per_order",
         pricing_version: categoryPricing.pricing_version,
         vendor_business_category: categoryPricing.vendor_category,
         category_rule_code: categoryPricing.rule_code,
         category_label: categoryPricing.category_label,
-        gross_platform_fee_inclusive_gst_paise: categoryPricing.tax_breakup.gross_platform_fee_paise,
+        monthly_plan_code: pricing.current_plan?.plan_code || null,
+        monthly_plan_name_snapshot: pricing.current_plan?.plan_name || null,
+        monthly_included_orders: pricing.current_plan?.max_order_allowance || null,
+        monthly_orders_used: pricing.accepted_orders_used || null,
+        overage_base_fee_snapshot_paise: pricing.overage_after_plan_allowance ? categoryPricing.overage_base_fee_snapshot_paise : null,
+        base_platform_fee_paise: categoryPricing.tax_breakup.base_platform_fee_paise,
+        total_platform_charge_paise: categoryPricing.tax_breakup.gross_platform_fee_paise,
+        amount_deducted_paise: Math.round(amountToDeduct * 100),
+        unpaid_liability_paise: unpaidLiabilityPaise,
         taxable_value_paise: categoryPricing.tax_breakup.taxable_value_paise,
         gst_rate_bps: categoryPricing.tax_breakup.gst_rate_bps,
         gst_amount_paise: categoryPricing.tax_breakup.gst_amount_paise,
@@ -211,11 +218,67 @@ export async function deductConfirmedOrderFee({ vendorId, orderId }) {
         tax_treatment: categoryPricing.tax_breakup.tax_treatment,
         place_of_supply: categoryPricing.tax_breakup.place_of_supply,
         rounding_policy: categoryPricing.tax_breakup.rounding_policy,
-        charge_description: `Category-based platform fee inclusive of GST recorded when the vendor accepts a real-world SabSewa Local order`,
+        charge_description: pricing.overage_after_plan_allowance
+          ? `Monthly plan overage base fee plus applicable GST recorded after the included order allowance was exhausted`
+          : `Category-based platform base fee plus applicable GST recorded when the vendor accepts a real-world SabSewa Local order`,
       },
     });
 
   if (txError) throw txError;
+
+  await supabase.from("vendor_security_deposit_ledger").insert({
+    vendor_id: vendorId,
+    wallet_id: wallet.id,
+    order_id: orderId,
+    event_type: pricing.overage_after_plan_allowance ? "MONTHLY_PLAN_OVERAGE_DEDUCTION" : "PAYG_ORDER_DEDUCTION",
+    amount_paise: -Math.round(amountToDeduct * 100),
+    balance_before_paise: Math.round(balanceBefore * 100),
+    balance_after_paise: Math.round(balanceAfter * 100),
+    metadata: {
+      base_platform_fee_paise: categoryPricing.tax_breakup.base_platform_fee_paise,
+      gst_amount_paise: categoryPricing.tax_breakup.gst_amount_paise,
+      total_platform_charge_paise: categoryPricing.tax_breakup.gross_platform_fee_paise,
+      unpaid_liability_paise: unpaidLiabilityPaise,
+      pricing_version: categoryPricing.pricing_version,
+    },
+  });
+
+  if (unpaidLiabilityPaise > 0) {
+    const { data: order } = await supabase
+      .from("hyperlocal_orders")
+      .select("terminal_id")
+      .eq("id", orderId)
+      .maybeSingle();
+
+    await supabase.from("vendor_platform_liabilities").insert({
+      vendor_id: vendorId,
+      terminal_id: order?.terminal_id || null,
+      order_id: orderId,
+      liability_type: pricing.overage_after_plan_allowance ? "MONTHLY_PLAN_OVERAGE_SHORTFALL" : "PAYG_ORDER_FEE_SHORTFALL",
+      base_amount_paise: categoryPricing.tax_breakup.base_platform_fee_paise,
+      gst_amount_paise: categoryPricing.tax_breakup.gst_amount_paise,
+      total_amount_paise: categoryPricing.tax_breakup.gross_platform_fee_paise,
+      amount_paise: unpaidLiabilityPaise,
+      outstanding_amount_paise: unpaidLiabilityPaise,
+      status: "open",
+      metadata: {
+        total_platform_charge_paise: categoryPricing.tax_breakup.gross_platform_fee_paise,
+        amount_deducted_paise: Math.round(amountToDeduct * 100),
+        reason: "advance_balance_below_next_order_charge",
+      },
+    });
+
+    if (order?.terminal_id) {
+      await supabase
+        .from("vendor_terminals")
+        .update({
+          billing_status: "billing_hold",
+          billing_hold_reason: "advance_wallet_exhausted_or_platform_liability_open",
+          billing_hold_at: new Date().toISOString(),
+        })
+        .eq("id", order.terminal_id);
+    }
+  }
 
   if (warningLevel !== "none") await createWalletWarning(updatedWallet, nextStatus);
 
@@ -389,7 +452,38 @@ export async function applyWalletCredit({
 
   const balanceBefore = Number(wallet.current_balance);
   const creditAmount = Number(amount);
-  const balanceAfter = balanceBefore + creditAmount;
+  let remainingCredit = creditAmount;
+  let liabilityClearedAmount = 0;
+
+  const { data: openLiabilities, error: liabilityReadError } = await supabase
+    .from("vendor_platform_liabilities")
+    .select("id, outstanding_amount_paise")
+    .eq("vendor_id", vendorId)
+    .eq("status", "open")
+    .order("created_at", { ascending: true });
+
+  if (liabilityReadError && liabilityReadError.code !== "42P01") throw liabilityReadError;
+
+  for (const liability of openLiabilities || []) {
+    if (remainingCredit <= 0) break;
+    const outstandingRupees = Number(liability.outstanding_amount_paise || 0) / 100;
+    const appliedRupees = Math.min(remainingCredit, outstandingRupees);
+    const nextOutstandingPaise = Math.max(Number(liability.outstanding_amount_paise || 0) - Math.round(appliedRupees * 100), 0);
+    remainingCredit -= appliedRupees;
+    liabilityClearedAmount += appliedRupees;
+
+    await supabase
+      .from("vendor_platform_liabilities")
+      .update({
+        outstanding_amount_paise: nextOutstandingPaise,
+        status: nextOutstandingPaise === 0 ? "paid" : "open",
+        cleared_at: nextOutstandingPaise === 0 ? new Date().toISOString() : null,
+        clearance_payment_reference: paymentReference || razorpayPaymentId || razorpayOrderId || null,
+      })
+      .eq("id", liability.id);
+  }
+
+  const balanceAfter = balanceBefore + remainingCredit;
   const openingBalance = Number(wallet.opening_balance) || creditAmount;
   const nextOpeningBalance = Number(wallet.opening_balance) > 0 ? Number(wallet.opening_balance) : creditAmount;
   const nextStatus = deriveEligibility(balanceAfter, openingBalance);
@@ -414,7 +508,7 @@ export async function applyWalletCredit({
       wallet_id: wallet.id,
       vendor_id: vendorId,
       transaction_type: transactionType,
-      amount: creditAmount,
+      amount: remainingCredit,
       balance_before: balanceBefore,
       balance_after: balanceAfter,
       payment_reference: paymentReference,
@@ -424,13 +518,38 @@ export async function applyWalletCredit({
       admin_user_id: adminUserId,
       admin_reason: adminReason,
       warning_level: warningLevelForStatus(nextStatus),
-      metadata,
+      metadata: {
+        ...metadata,
+        gross_recharge_amount: creditAmount,
+        liability_cleared_amount: liabilityClearedAmount,
+        wallet_credit_after_liability_clearance: remainingCredit,
+      },
     });
 
   if (txError) throw txError;
 
   if (nextStatus === "eligible" && wallet.eligibility_status !== "eligible") {
     await createWalletWarning(updatedWallet, "eligible");
+  }
+
+  const { count: remainingLiabilityCount, error: remainingLiabilityError } = await supabase
+    .from("vendor_platform_liabilities")
+    .select("id", { count: "exact", head: true })
+    .eq("vendor_id", vendorId)
+    .eq("status", "open");
+
+  if (remainingLiabilityError && remainingLiabilityError.code !== "42P01") throw remainingLiabilityError;
+
+  if (nextStatus === "eligible" && (!remainingLiabilityError || remainingLiabilityError.code === "42P01") && Number(remainingLiabilityCount || 0) === 0) {
+    await supabase
+      .from("vendor_terminals")
+      .update({
+        billing_status: "active",
+        billing_hold_reason: null,
+        billing_reactivated_at: new Date().toISOString(),
+      })
+      .eq("vendor_id", vendorId)
+      .in("billing_status", ["billing_hold", "wallet_recharge_required"]);
   }
 
   return updatedWallet;

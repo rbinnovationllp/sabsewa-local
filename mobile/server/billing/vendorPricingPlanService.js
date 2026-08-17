@@ -1,75 +1,87 @@
 import { supabase } from "../connection.js";
 
 export const GST_RATE_BPS = 1800;
-export const GST_DIVISOR_BPS = 11800;
-export const VENDOR_MONTHLY_ORDER_PLAN_TERMS_VERSION = "vendor-monthly-order-pricing-local-2026-08-17";
-export const VENDOR_GST_INCLUSIVE_PRICING_VERSION = "vendor-gst-inclusive-pricing-local-2026-08-17";
+export const VENDOR_MONTHLY_ORDER_PLAN_TERMS_VERSION = "vendor-final-pricing-local-2026-08-17";
+export const VENDOR_FINAL_PRICING_VERSION = "vendor-final-pricing-local-2026-08-17";
+export const PAYG_SECURITY_DEPOSIT_PAISE = 500000;
+export const PAYG_LOW_BALANCE_THRESHOLD_PAISE = 50000;
+export const SUBSCRIPTION_SECURITY_MULTIPLIER_BPS = 12500;
 
 const CATEGORY_PRICING = [
   {
     rule_code: "vegetables_fruits_15",
     category_slugs: ["vegetables", "vegetable", "fruit", "fruits", "fruit_vegetable", "fruit_and_vegetable"],
     category_label: "Vegetables and fruits",
-    gross_fee_paise: 1500,
+    base_fee_paise: 1500,
   },
   {
     rule_code: "kirana_general_20",
     category_slugs: ["kirana", "grocery", "general_store", "general_stores", "general"],
     category_label: "Kirana and general stores",
-    gross_fee_paise: 2000,
+    base_fee_paise: 2000,
   },
   {
     rule_code: "restaurants_pharmacies_25",
     category_slugs: ["restaurant", "restaurants", "tiffin", "restaurant_tiffin", "pharmacy", "pharmacies", "medical", "medical_store"],
     category_label: "Restaurants and pharmacies",
-    gross_fee_paise: 2500,
+    base_fee_paise: 2500,
+  },
+  {
+    rule_code: "other_categories_25",
+    category_slugs: ["other", "misc", "miscellaneous"],
+    category_label: "Other categories",
+    base_fee_paise: 2500,
   },
 ];
 
 export const MONTHLY_ORDER_PLANS = [
   {
-    plan_code: "local_starter_500",
-    plan_name: "Local Starter",
+    plan_code: "standard_300",
+    plan_name: "Standard",
     min_order_number: 0,
-    max_order_allowance: 500,
-    service_fee_before_gst_paise: 200000,
+    max_order_allowance: 300,
+    service_fee_before_gst_paise: 300000,
     gst_rate_percent: 18,
-    gst_amount_paise: 36000,
-    total_payable_paise: 236000,
-    required_security_balance_paise: 500000,
+    gst_amount_paise: 54000,
+    total_payable_paise: 354000,
+    required_security_balance_paise: 375000,
+    overage_base_fee_paise: 1000,
+    overage_gst_rate_bps: GST_RATE_BPS,
+    minimum_operational_wallet_balance_paise: 1000,
+    billing_hold_enabled: true,
+    automatic_reactivation_enabled: true,
   },
   {
-    plan_code: "local_growth_1000",
-    plan_name: "Local Growth",
-    min_order_number: 501,
-    max_order_allowance: 1000,
-    service_fee_before_gst_paise: 380000,
+    plan_code: "plus_750",
+    plan_name: "Plus",
+    min_order_number: 301,
+    max_order_allowance: 750,
+    service_fee_before_gst_paise: 700000,
     gst_rate_percent: 18,
-    gst_amount_paise: 68400,
-    total_payable_paise: 448400,
-    required_security_balance_paise: 500000,
+    gst_amount_paise: 126000,
+    total_payable_paise: 826000,
+    required_security_balance_paise: 875000,
+    overage_base_fee_paise: 900,
+    overage_gst_rate_bps: GST_RATE_BPS,
+    minimum_operational_wallet_balance_paise: 900,
+    billing_hold_enabled: true,
+    automatic_reactivation_enabled: true,
   },
   {
-    plan_code: "local_pro_2000",
-    plan_name: "Local Pro",
-    min_order_number: 1001,
-    max_order_allowance: 2000,
-    service_fee_before_gst_paise: 750000,
+    plan_code: "pro_1500",
+    plan_name: "Pro",
+    min_order_number: 751,
+    max_order_allowance: 1500,
+    service_fee_before_gst_paise: 1350000,
     gst_rate_percent: 18,
-    gst_amount_paise: 135000,
-    total_payable_paise: 885000,
-    required_security_balance_paise: 1000000,
-  },
-  {
-    plan_code: "local_enterprise_5000",
-    plan_name: "Local Enterprise",
-    min_order_number: 2001,
-    max_order_allowance: 5000,
-    service_fee_before_gst_paise: 1700000,
-    gst_rate_percent: 18,
-    gst_amount_paise: 306000,
-    total_payable_paise: 2006000,
-    required_security_balance_paise: 2500000,
+    gst_amount_paise: 243000,
+    total_payable_paise: 1593000,
+    required_security_balance_paise: 1687500,
+    overage_base_fee_paise: 800,
+    overage_gst_rate_bps: GST_RATE_BPS,
+    minimum_operational_wallet_balance_paise: 800,
+    billing_hold_enabled: true,
+    automatic_reactivation_enabled: true,
   },
 ];
 
@@ -94,10 +106,10 @@ function normalizeCategory(value) {
     .replace(/^_+|_+$/g, "");
 }
 
-export function splitIncludedGst(grossFeePaise, placeOfSupply = {}) {
-  const gross = Number(grossFeePaise || 0);
-  const taxable = Math.floor((gross * 10000 + GST_DIVISOR_BPS / 2) / GST_DIVISOR_BPS);
-  const gst = gross - taxable;
+export function calculateGstOnBase(baseFeePaise, placeOfSupply = {}) {
+  const taxable = Number(baseFeePaise || 0);
+  const gst = Math.round((taxable * GST_RATE_BPS) / 10000);
+  const gross = taxable + gst;
   const vendorState = normalizeCategory(placeOfSupply.vendor_state || placeOfSupply.vendorState || "");
   const customerState = normalizeCategory(placeOfSupply.customer_state || placeOfSupply.customerState || vendorState);
   const intrastate = !customerState || !vendorState || customerState === vendorState;
@@ -107,6 +119,7 @@ export function splitIncludedGst(grossFeePaise, placeOfSupply = {}) {
 
   return {
     gross_platform_fee_paise: gross,
+    base_platform_fee_paise: taxable,
     taxable_value_paise: taxable,
     gst_rate_bps: GST_RATE_BPS,
     gst_amount_paise: gst,
@@ -118,7 +131,7 @@ export function splitIncludedGst(grossFeePaise, placeOfSupply = {}) {
       vendor_state: placeOfSupply.vendor_state || placeOfSupply.vendorState || null,
       customer_state: placeOfSupply.customer_state || placeOfSupply.customerState || null,
     },
-    rounding_policy: "paise_integer_gross_reconciliation",
+    rounding_policy: "paise_integer_base_plus_gst",
   };
 }
 
@@ -137,10 +150,27 @@ export function getMonthlyOrderPlans() {
   return MONTHLY_ORDER_PLANS.map((plan) => ({ ...plan }));
 }
 
+async function getConfiguredMonthlyOrderPlans() {
+  const { data, error } = await supabase
+    .from("vendor_monthly_order_plans")
+    .select("*")
+    .eq("is_active", true)
+    .order("sort_order", { ascending: true });
+
+  if (error) {
+    if (tableMissing(error)) return getMonthlyOrderPlans();
+    throw error;
+  }
+
+  return (data && data.length > 0 ? data : getMonthlyOrderPlans()).map((plan) => ({ ...plan }));
+}
+
 export function getCategoryPricingRules() {
   return CATEGORY_PRICING.map((rule) => ({
     ...rule,
-    tax_breakup: splitIncludedGst(rule.gross_fee_paise),
+    gst_rate_bps: GST_RATE_BPS,
+    gross_fee_paise: rule.base_fee_paise + Math.round((rule.base_fee_paise * GST_RATE_BPS) / 10000),
+    tax_breakup: calculateGstOnBase(rule.base_fee_paise),
   }));
 }
 
@@ -157,11 +187,14 @@ export function resolveCategoryPricingFromCategory(category) {
 
   return {
     ...rule,
+    gst_rate_bps: GST_RATE_BPS,
+    gross_fee_paise: rule.base_fee_paise + Math.round((rule.base_fee_paise * GST_RATE_BPS) / 10000),
     category_slug: normalized || null,
     pricing_model: "pay_per_order",
-    pricing_version: VENDOR_GST_INCLUSIVE_PRICING_VERSION,
-    tax_breakup: splitIncludedGst(rule.gross_fee_paise),
-    gross_fee_rupees: paiseToRupeeNumber(rule.gross_fee_paise),
+    pricing_version: VENDOR_FINAL_PRICING_VERSION,
+    tax_breakup: calculateGstOnBase(rule.base_fee_paise),
+    base_fee_rupees: paiseToRupeeNumber(rule.base_fee_paise),
+    gross_fee_rupees: paiseToRupeeNumber(rule.base_fee_paise + Math.round((rule.base_fee_paise * GST_RATE_BPS) / 10000)),
   };
 }
 
@@ -177,7 +210,7 @@ export async function resolveVendorCategoryPricing(vendorId, placeOfSupply = {})
   return {
     ...rule,
     vendor_category: vendor?.category || null,
-    tax_breakup: splitIncludedGst(rule.gross_fee_paise, {
+    tax_breakup: calculateGstOnBase(rule.base_fee_paise, {
       vendor_state: placeOfSupply.vendor_state || null,
       customer_state: placeOfSupply.customer_state || null,
     }),
@@ -186,6 +219,27 @@ export async function resolveVendorCategoryPricing(vendorId, placeOfSupply = {})
 
 export function getMonthlyOrderPlan(planCode) {
   return MONTHLY_ORDER_PLANS.find((plan) => plan.plan_code === planCode) || null;
+}
+
+export function resolveMonthlyPlanOveragePricing(plan, placeOfSupply = {}) {
+  if (!plan) return null;
+  const baseFeePaise = Number(plan.overage_base_fee_paise || 0);
+  const tax = calculateGstOnBase(baseFeePaise, placeOfSupply);
+  return {
+    pricing_model: "monthly_plan_overage",
+    plan_code: plan.plan_code,
+    plan_name: plan.plan_name,
+    plan_name_snapshot: plan.plan_name,
+    overage_base_fee_paise: baseFeePaise,
+    overage_base_fee_snapshot_paise: baseFeePaise,
+    gst_rate_bps: Number(plan.overage_gst_rate_bps || GST_RATE_BPS),
+    gross_fee_paise: tax.gross_platform_fee_paise,
+    tax_breakup: tax,
+    minimum_operational_wallet_balance_paise: Number(plan.minimum_operational_wallet_balance_paise || baseFeePaise),
+    billing_hold_enabled: plan.billing_hold_enabled !== false,
+    automatic_reactivation_enabled: plan.automatic_reactivation_enabled !== false,
+    pricing_version: VENDOR_FINAL_PRICING_VERSION,
+  };
 }
 
 async function getCurrentWallet(vendorId) {
@@ -242,13 +296,19 @@ export async function getVendorPricingDashboard(vendorId) {
   ]);
 
   const currentModel = preference?.pricing_model === "monthly_order_plan" ? "monthly_order_plan" : "pay_per_order";
-  const activePlan = currentPeriod ? getMonthlyOrderPlan(currentPeriod.plan_code) : null;
+  const monthlyPlans = await getConfiguredMonthlyOrderPlans();
+  const activePlan = currentPeriod ? monthlyPlans.find((plan) => plan.plan_code === currentPeriod.plan_code) || getMonthlyOrderPlan(currentPeriod.plan_code) : null;
   const acceptedUsed = Number(currentPeriod?.accepted_orders_used || 0);
   const allowance = Number(activePlan?.max_order_allowance || 0);
   const usagePercent = allowance > 0 ? Math.round((acceptedUsed / allowance) * 100) : 0;
   const currentSecurityPaise = rupeeNumberToPaise(wallet?.current_balance);
-  const requiredSecurityPaise = Number(activePlan?.required_security_balance_paise || 500000);
+  const requiredSecurityPaise = Number(activePlan?.required_security_balance_paise || PAYG_SECURITY_DEPOSIT_PAISE);
   const securityShortfallPaise = Math.max(requiredSecurityPaise - currentSecurityPaise, 0);
+  const overagePricing = activePlan ? resolveMonthlyPlanOveragePricing(activePlan) : null;
+  const estimatedOverageOrdersSupported =
+    overagePricing?.gross_fee_paise > 0
+      ? Math.floor(currentSecurityPaise / overagePricing.gross_fee_paise)
+      : null;
 
   let warningLevel = "none";
   if (currentModel === "monthly_order_plan") {
@@ -261,9 +321,14 @@ export async function getVendorPricingDashboard(vendorId) {
   return {
     current_model: currentModel,
     pay_per_order_fee_paise: categoryPricing.gross_fee_paise,
+    pay_per_order_base_fee_paise: categoryPricing.base_fee_paise,
+    payg_required_security_balance_paise: PAYG_SECURITY_DEPOSIT_PAISE,
+    payg_low_balance_threshold_paise: PAYG_LOW_BALANCE_THRESHOLD_PAISE,
     pay_per_order_pricing: categoryPricing,
     category_pricing_rules: getCategoryPricingRules(),
     current_plan: activePlan,
+    monthly_plan_overage_pricing: overagePricing,
+    estimated_overage_orders_supported: estimatedOverageOrdersSupported,
     current_period: currentPeriod,
     accepted_orders_used: acceptedUsed,
     accepted_orders_remaining: activePlan ? Math.max(allowance - acceptedUsed, 0) : null,
@@ -277,12 +342,13 @@ export async function getVendorPricingDashboard(vendorId) {
     next_effective_at: preference?.next_effective_at || null,
     warning_level: warningLevel,
     terms_version: preference?.terms_version || VENDOR_MONTHLY_ORDER_PLAN_TERMS_VERSION,
-    monthly_order_plans: getMonthlyOrderPlans(),
+    monthly_order_plans: monthlyPlans,
   };
 }
 
 export async function resolveMonthlyOrderPlanItem({ vendorId, planCode }) {
-  const plan = getMonthlyOrderPlan(planCode);
+  const monthlyPlans = await getConfiguredMonthlyOrderPlans();
+  const plan = monthlyPlans.find((item) => item.plan_code === planCode) || getMonthlyOrderPlan(planCode);
   if (!plan) {
     const error = new Error("Monthly order plan is not available.");
     error.statusCode = 404;
@@ -307,13 +373,15 @@ export async function resolveMonthlyOrderPlanItem({ vendorId, planCode }) {
       terms_version: VENDOR_MONTHLY_ORDER_PLAN_TERMS_VERSION,
       covered_orders: plan.max_order_allowance,
       required_security_balance_paise: plan.required_security_balance_paise,
-      double_charge_guard: "Covered accepted orders must not be charged the category-based pay-per-order fee.",
+      deposit_policy: "Security deposit is an advance refundable balance. Plan fee and GST may be adjusted from this balance when due, and the vendor must replenish the prescribed security level.",
+      double_charge_guard: "Covered eligible completed orders must not be charged the category-based pay-as-you-go fee.",
     },
   };
 }
 
 export async function activateMonthlyOrderPlanFromPayment({ attempt, payment, actorUserId = null }) {
-  const plan = getMonthlyOrderPlan(attempt.reference_id || attempt.metadata?.allocation?.plan?.plan_code);
+  const monthlyPlans = await getConfiguredMonthlyOrderPlans();
+  const plan = monthlyPlans.find((item) => item.plan_code === (attempt.reference_id || attempt.metadata?.allocation?.plan?.plan_code)) || getMonthlyOrderPlan(attempt.reference_id || attempt.metadata?.allocation?.plan?.plan_code);
   if (!plan) throw pricingError("Monthly order plan configuration was not found for this payment.", 409);
 
   const now = new Date();
@@ -406,7 +474,12 @@ export async function assertVendorOrderPricingEligibility(vendorId) {
   }
 
   if (dashboard.accepted_orders_remaining <= 0) {
-    throw pricingError("Monthly accepted-order allowance is exhausted. Please upgrade, renew, or switch to category-based pay-per-accepted-order pricing before receiving more orders.", 403, dashboard);
+    return {
+      ...dashboard,
+      per_order_fee_required: true,
+      overage_after_plan_allowance: true,
+      overage_pricing: dashboard.monthly_plan_overage_pricing,
+    };
   }
 
   return { ...dashboard, per_order_fee_required: false, monthly_covered: true };

@@ -23,7 +23,7 @@ export default function VendorBillingScreen() {
   const [paying, setPaying] = useState(false);
   const [dashboard, setDashboard] = useState<any>(null);
   const [billingCycle, setBillingCycle] = useState<"monthly" | "quarterly" | "annual">("monthly");
-  const [expectedMonthlyOrders, setExpectedMonthlyOrders] = useState("500");
+  const [expectedMonthlyOrders, setExpectedMonthlyOrders] = useState("300");
   const [pricingTermsAccepted, setPricingTermsAccepted] = useState(false);
 
   useEffect(() => {
@@ -58,7 +58,7 @@ export default function VendorBillingScreen() {
   async function pay(chargeType: string, referenceId?: string | null, description = "SabSewa Local platform payment") {
     if (!vendorId) return;
     if (chargeType === "monthly_order_plan" && !pricingTermsAccepted) {
-      Alert.alert("Pricing terms", "Please confirm that displayed plan prices are GST-inclusive, refundable security is separate, and covered monthly orders will not also be charged the category-based per-order fee.");
+      Alert.alert("Pricing terms", "Please confirm that the monthly platform charge is separate from the refundable security deposit, GST is charged separately, and covered monthly orders will not also be charged the category-based Pay As You Go fee.");
       return;
     }
     setPaying(true);
@@ -195,16 +195,22 @@ export default function VendorBillingScreen() {
             <Text style={styles.muted}>Billing period: {pricing.current_period?.period_start ? new Date(pricing.current_period.period_start).toLocaleDateString() : "N/A"} to {pricing.current_period?.period_end ? new Date(pricing.current_period.period_end).toLocaleDateString() : "N/A"}</Text>
             <Text style={styles.muted}>Accepted orders used: {pricing.accepted_orders_used || 0} | Remaining: {pricing.accepted_orders_remaining ?? "N/A"} | Usage: {pricing.usage_percent || 0}%</Text>
             <Text style={styles.muted}>Security balance: {rupees(pricing.current_security_balance_paise)} | Required: {rupees(pricing.required_security_balance_paise)}</Text>
+            {pricing.monthly_plan_overage_pricing ? (
+              <Text style={styles.muted}>
+                Overage after included orders: base {rupees(pricing.monthly_plan_overage_pricing.overage_base_fee_paise)} + GST {rupees(pricing.monthly_plan_overage_pricing.tax_breakup?.gst_amount_paise)} = {rupees(pricing.monthly_plan_overage_pricing.gross_fee_paise)} per additional eligible order.
+                Estimated additional overage orders supported by current wallet: {pricing.estimated_overage_orders_supported ?? "N/A"}.
+              </Text>
+            ) : null}
             {Number(pricing.security_shortfall_paise || 0) > 0 ? (
               <Text style={styles.warn}>Top-up required: {rupees(pricing.security_shortfall_paise)} before receiving new orders under this plan.</Text>
             ) : null}
             {pricing.warning_level && pricing.warning_level !== "none" ? <Text style={styles.warn}>Alert: {String(pricing.warning_level).replace(/_/g, " ")}</Text> : null}
           </>
         ) : (
-          <Text style={styles.muted}>Current category charge: {rupees(payPerOrderFeePaise)} per accepted order, inclusive of GST. Monthly plans below are optional.</Text>
+          <Text style={styles.muted}>Pay As You Go: base fee {rupees(payPerOrderPricing.base_fee_paise || pricing.pay_per_order_base_fee_paise || 1500)} + applicable GST per eligible order. Current total deduction: {rupees(payPerOrderFeePaise)}.</Text>
         )}
         {payPerOrderPricing?.tax_breakup ? (
-          <Text style={styles.muted}>Taxable value: {rupees(payPerOrderPricing.tax_breakup.taxable_value_paise)} | Included GST: {rupees(payPerOrderPricing.tax_breakup.gst_amount_paise)}</Text>
+          <Text style={styles.muted}>Taxable base fee: {rupees(payPerOrderPricing.tax_breakup.taxable_value_paise)} | GST added: {rupees(payPerOrderPricing.tax_breakup.gst_amount_paise)} | Pay As You Go security target: {rupees(pricing.payg_required_security_balance_paise || 500000)}</Text>
         ) : null}
 
         <Text style={[styles.title, { marginTop: 12 }]}>Compare Monthly Plans</Text>
@@ -214,13 +220,13 @@ export default function VendorBillingScreen() {
           keyboardType="numeric"
           value={expectedMonthlyOrders}
           onChangeText={(value) => setExpectedMonthlyOrders(value.replace(/[^0-9]/g, ""))}
-          placeholder="Example: 500"
+          placeholder="Example: 300"
         />
-        <Text style={styles.muted}>Estimated pay-per-order cost: {rupees(payPerOrderEstimatePaise)} at {rupees(payPerOrderFeePaise)} per accepted order, inclusive of GST.</Text>
+        <Text style={styles.muted}>Estimated Pay As You Go cost: {rupees(payPerOrderEstimatePaise)} at current category total {rupees(payPerOrderFeePaise)} per eligible order.</Text>
 
         <TouchableOpacity style={styles.checkboxRow} onPress={() => setPricingTermsAccepted((value) => !value)}>
           <Text style={[styles.checkbox, pricingTermsAccepted && styles.checkboxActive]}>{pricingTermsAccepted ? "✓" : ""}</Text>
-          <Text style={styles.checkboxText}>I understand displayed monthly prices are inclusive of GST, refundable security is separate, and covered monthly-plan orders will not also be charged the category-based per-order fee.</Text>
+          <Text style={styles.checkboxText}>I understand the security deposit is an advance refundable balance. Monthly plan fee and GST may be adjusted from this balance when due, the balance must be restored to the prescribed plan amount, and covered monthly-plan orders will not also be charged the category Pay As You Go fee.</Text>
         </TouchableOpacity>
 
         {(dashboard?.monthly_order_plans || []).map((plan: any) => {
@@ -232,8 +238,9 @@ export default function VendorBillingScreen() {
               <Text style={styles.muted}>Covers up to {covered} accepted orders in the monthly billing period.</Text>
               <Text style={styles.muted}>SabSewa Local service fee before GST: {rupees(plan.service_fee_before_gst_paise)}</Text>
               <Text style={styles.muted}>Included GST: {rupees(plan.gst_amount_paise)}</Text>
-              <Text style={styles.total}>Final monthly price payable: {rupees(plan.total_payable_paise)} inclusive of GST</Text>
-              <Text style={styles.muted}>Required refundable security balance: {rupees(plan.required_security_balance_paise)}</Text>
+              <Text style={styles.total}>Monthly platform charge: {rupees(plan.service_fee_before_gst_paise)} + GST {rupees(plan.gst_amount_paise)} = {rupees(plan.total_payable_paise)}</Text>
+              <Text style={styles.muted}>Required refundable / adjustable security deposit: {rupees(plan.required_security_balance_paise)}</Text>
+              <Text style={styles.muted}>Overage after {covered} orders: base {rupees(plan.overage_base_fee_paise || 0)} + GST per additional eligible order, configurable by Finance/Admin.</Text>
               {savingPaise > 0 ? <Text style={styles.saving}>Estimated saving vs category per-order pricing: {rupees(savingPaise)}</Text> : null}
               <TouchableOpacity style={[styles.secondaryBtn, paying && styles.disabled]} onPress={() => pay("monthly_order_plan", plan.plan_code, `${plan.plan_name} monthly order plan`)} disabled={paying}>
                 <Text style={styles.secondaryText}>{pricing.current_plan?.plan_code === plan.plan_code ? "Renew / Continue Plan" : "Select Monthly Plan"}</Text>

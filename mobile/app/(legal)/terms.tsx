@@ -26,11 +26,11 @@ export default function TermsScreen() {
         },
         {
           title: "Vendor activation payment",
-          body: "Every vendor must pay Rs 5,500 at initial activation. Rs 500 is a one-time, non-refundable setup, activation and platform-service charge. Rs 5,000 is credited to the vendor's refundable advance wallet for Rs 15 order-fee deductions. Later standard top-ups are Rs 5,000 and no second activation charge is deducted at voluntary closure.",
+          body: "Every vendor must pay Rs 5,500 at initial activation. Rs 500 is a one-time, non-refundable setup, activation and platform-service charge. Rs 5,000 is credited to the vendor's refundable advance wallet for applicable category-based order-fee deductions. Later standard top-ups are Rs 5,000 and no second activation charge is deducted at voluntary closure.",
         },
         {
           title: "Platform facilitation fee after acceptance",
-          body: "The Rs 15 platform facilitation fee is charged when the vendor formally accepts an order through SabSewa Local. Once the vendor has accepted the order and the fee has been deducted, the company will not refund, reverse or adjust this Rs 15 charge merely because the vendor later claims that the order was cancelled, not completed, settled privately or handled outside the platform. This does not prevent correction of a company-confirmed duplicate deduction, technical error, unauthorised transaction or correction required by applicable law.",
+          body: "The applicable category-based platform base fee plus GST is charged when the vendor formally accepts an order through SabSewa Local, unless that order is covered by an active monthly accepted-order plan. Once the vendor has accepted the order and the applicable fee or monthly-plan usage record has been created, the company will not refund, reverse or adjust the charge merely because the vendor later claims that the order was cancelled, not completed, settled privately or handled outside the platform. This does not prevent correction of a company-confirmed duplicate deduction, technical error, unauthorised transaction or correction required by applicable law.",
         },
         {
           title: "Delivery estimate and safety",

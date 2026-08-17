@@ -73,9 +73,9 @@ If you only need the revised vendor activation payment and wallet accounting upd
 C:\Users\HP\SabSewa-Local\supabase\RUN_ONLY_REVISED_VENDOR_ACTIVATION_WALLET_POLICY.sql
 ```
 
-The `vendor_security_*` table names are legacy internal names. In SabSewa Local product wording, this is the vendor advance balance. The first vendor payment is Rs 5,500, split into a one-time non-refundable Rs 500 activation/service charge and Rs 5,000 refundable advance wallet credit. Later standard top-ups are Rs 5,000. A backend-resolved GST-inclusive category platform fee is deducted when the vendor securely confirms and accepts a real-world order, and customer order payment remains direct between customer and vendor.
+The `vendor_security_*` table names are legacy internal names. In SabSewa Local product wording, this is the vendor advance balance. The first vendor payment is Rs 5,500, split into a one-time non-refundable Rs 500 activation/service charge and Rs 5,000 refundable advance wallet credit. Later standard top-ups are Rs 5,000. A backend-resolved category base platform fee plus GST is deducted when the vendor securely confirms and accepts a real-world order, and customer order payment remains direct between customer and vendor.
 
-## Vendor GST-Inclusive Pricing and Monthly Accepted-Order Plans - 2026-08-17
+## Vendor Final Pricing, GST and Monthly Accepted-Order Plans - 2026-08-17
 
 Run this revised SQL before enabling the pricing changes in production:
 
@@ -93,7 +93,7 @@ It adds:
 - `vendor_pricing_change_audit`
 - `vendor_pricing_notifications`
 
-The pay-per-order model is category-based and GST-inclusive: Rs 15 for vegetables/fruits, Rs 20 for kirana/general stores, and Rs 25 for restaurants/pharmacies. The SQL also replaces `accept_order_with_wallet_fee` so accepted-order wallet transactions store taxable value, GST amount, CGST/SGST/IGST fields, pricing version and idempotency details. If a vendor has an active monthly order plan, accepted orders covered by that plan are written to `vendor_order_plan_usage_events` and must not also create a category-based order-fee wallet transaction.
+The Pay As You Go model is category-based and charged as base fee plus GST: Rs 15 + GST for fruits/vegetables, Rs 20 + GST for kirana/general stores, and Rs 25 + GST for restaurants/pharmacies/other default categories. The SQL also replaces `accept_order_with_wallet_fee` so accepted-order wallet transactions store base fee, GST amount, CGST/SGST/IGST fields, total platform charge, pricing version, liability shortfall if any, and idempotency details. If a vendor has an active monthly order plan, accepted orders covered by that plan are written to `vendor_order_plan_usage_events`; orders above the allowance use the plan-specific overage fee plus GST from `vendor_monthly_order_plans`. A shortfall creates `vendor_platform_liabilities` and marks only the affected `vendor_terminals` row as `billing_hold`.
 
 ## After Applying
 

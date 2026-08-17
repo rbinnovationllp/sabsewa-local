@@ -216,7 +216,7 @@ router.get("/vendors", async (req, res) => {
     const [{ data: terminals, error: terminalError }, { data: items, error: itemError }] = await Promise.all([
       supabase
         .from("vendor_terminals")
-        .select("id, vendor_id, public_terminal_id, terminal_name, status, is_open_today, operating_hours, delivery_available, pickup_available, estimated_fulfilment_minutes, lat, lng, city, phone")
+        .select("id, vendor_id, public_terminal_id, terminal_name, status, billing_status, is_open_today, operating_hours, delivery_available, pickup_available, estimated_fulfilment_minutes, lat, lng, city, phone")
         .in("vendor_id", vendorIds)
         .eq("status", "active"),
       supabase
@@ -243,6 +243,7 @@ router.get("/vendors", async (req, res) => {
 
     const allCards = [];
     for (const terminal of terminals || []) {
+      if (terminal.billing_status && terminal.billing_status !== "active") continue;
       const vendor = vendorById.get(terminal.vendor_id);
       if (!vendor) continue;
 

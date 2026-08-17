@@ -1,6 +1,6 @@
--- SabSewa Local - GST-inclusive category pricing plus optional monthly vendor accepted-order pricing
+-- SabSewa Local - Final vendor pricing: PAYG base + GST plus Standard/Plus/Pro plans
 -- Safe to run more than once.
--- Run this revised file instead of any earlier monthly-only pricing SQL.
+-- Run this revised file instead of any earlier monthly-only or GST-inclusive pricing SQL.
 
 create extension if not exists pgcrypto;
 
@@ -8,6 +8,7 @@ create table if not exists public.vendor_order_fee_pricing_rules (
   rule_code text primary key,
   category_group text not null,
   category_slugs text[] not null,
+  base_fee_paise integer not null default 0 check (base_fee_paise >= 0),
   gross_fee_paise integer not null check (gross_fee_paise > 0),
   gst_rate_bps integer not null default 1800 check (gst_rate_bps >= 0),
   taxable_value_paise integer not null check (taxable_value_paise >= 0),
@@ -20,8 +21,12 @@ create table if not exists public.vendor_order_fee_pricing_rules (
   rounding_policy text not null default 'paise_integer_gross_reconciliation',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  check (taxable_value_paise + gst_amount_paise = gross_fee_paise)
+  check (taxable_value_paise + gst_amount_paise = gross_fee_paise),
+  check (base_fee_paise = taxable_value_paise)
 );
+
+alter table public.vendor_order_fee_pricing_rules
+  add column if not exists base_fee_paise integer not null default 0;
 
 alter table public.vendor_order_fee_pricing_rules enable row level security;
 
@@ -39,14 +44,16 @@ create policy "Admins manage vendor order pricing rules"
   with check ((auth.jwt() -> 'user_metadata' ->> 'role') in ('master_admin', 'super_admin', 'admin', 'company_admin', 'finance_admin'));
 
 insert into public.vendor_order_fee_pricing_rules
-  (rule_code, category_group, category_slugs, gross_fee_paise, taxable_value_paise, gst_amount_paise)
+  (rule_code, category_group, category_slugs, base_fee_paise, gross_fee_paise, taxable_value_paise, gst_amount_paise)
 values
-  ('vegetables_fruits_15', 'Vegetables and fruits', array['vegetables','vegetable','fruits','fruit','fruit_vegetable','fruit_and_vegetable'], 1500, 1271, 229),
-  ('kirana_general_20', 'Kirana and general stores', array['kirana','grocery','general_store','general_stores','general'], 2000, 1695, 305),
-  ('restaurants_pharmacies_25', 'Restaurants and pharmacies', array['restaurant','restaurants','tiffin','restaurant_tiffin','pharmacy','pharmacies','medical','medical_store'], 2500, 2119, 381)
+  ('vegetables_fruits_15', 'Vegetables and fruits', array['vegetables','vegetable','fruits','fruit','fruit_vegetable','fruit_and_vegetable'], 1500, 1770, 1500, 270),
+  ('kirana_general_20', 'Kirana and general stores', array['kirana','grocery','general_store','general_stores','general'], 2000, 2360, 2000, 360),
+  ('restaurants_pharmacies_25', 'Restaurants and pharmacies', array['restaurant','restaurants','tiffin','restaurant_tiffin','pharmacy','pharmacies','medical','medical_store'], 2500, 2950, 2500, 450),
+  ('other_categories_25', 'Other categories', array['other','misc','miscellaneous'], 2500, 2950, 2500, 450)
 on conflict (rule_code) do update set
   category_group = excluded.category_group,
   category_slugs = excluded.category_slugs,
+  base_fee_paise = excluded.base_fee_paise,
   gross_fee_paise = excluded.gross_fee_paise,
   taxable_value_paise = excluded.taxable_value_paise,
   gst_amount_paise = excluded.gst_amount_paise,
@@ -116,6 +123,7 @@ $$;
 
 alter table if exists public.vendor_security_wallet_transactions
   add column if not exists gross_platform_fee_paise integer,
+  add column if not exists base_platform_fee_paise integer,
   add column if not exists taxable_value_paise integer,
   add column if not exists gst_rate_bps integer,
   add column if not exists gst_amount_paise integer,
@@ -128,6 +136,123 @@ alter table if exists public.vendor_security_wallet_transactions
   add column if not exists place_of_supply jsonb,
   add column if not exists transaction_reason text;
 
+create table if not exists public.platform_tax_rate_rules (
+  id uuid primary key default gen_random_uuid(),
+  service_type text not null,
+  gst_rate_bps integer not null check (gst_rate_bps >= 0),
+  effective_from timestamptz not null default now(),
+  effective_to timestamptz,
+  is_active boolean not null default true,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  unique (service_type, effective_from)
+);
+
+insert into public.platform_tax_rate_rules (service_type, gst_rate_bps, effective_from, is_active, metadata)
+values
+  ('vendor_payg_order_fee', 1800, '2026-08-17 00:00:00+00', true, '{"rate_percent": 18.00}'::jsonb),
+  ('vendor_monthly_order_plan', 1800, '2026-08-17 00:00:00+00', true, '{"rate_percent": 18.00}'::jsonb)
+on conflict (service_type, effective_from) do update set
+  gst_rate_bps = excluded.gst_rate_bps,
+  is_active = excluded.is_active,
+  metadata = excluded.metadata;
+
+create table if not exists public.vendor_security_deposit_ledger (
+  id uuid primary key default gen_random_uuid(),
+  vendor_id uuid not null references public.vendors(id) on delete cascade,
+  terminal_id uuid,
+  plan_code text,
+  order_id uuid,
+  transaction_type text not null check (transaction_type in (
+    'INITIAL_DEPOSIT',
+    'TOP_UP',
+    'PLAN_FEE_DEDUCTION',
+    'PAYG_ORDER_DEDUCTION',
+    'OVERAGE_DEDUCTION',
+    'GST_DEDUCTION',
+    'AUTHORIZED_ADJUSTMENT',
+    'REVERSAL',
+    'REFUND'
+  )),
+  base_amount_paise integer not null default 0,
+  gst_amount_paise integer not null default 0,
+  total_amount_paise integer not null default 0,
+  balance_before_paise integer,
+  balance_after_paise integer,
+  reference_id text,
+  idempotency_key text,
+  created_by uuid,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  unique (idempotency_key)
+);
+
+create index if not exists idx_vendor_security_deposit_ledger_vendor
+  on public.vendor_security_deposit_ledger(vendor_id, created_at desc);
+
+create table if not exists public.vendor_platform_liabilities (
+  id uuid primary key default gen_random_uuid(),
+  vendor_id uuid not null references public.vendors(id) on delete cascade,
+  terminal_id uuid,
+  order_id uuid,
+  liability_type text not null default 'platform_fee_shortfall',
+  base_amount_paise integer not null default 0,
+  gst_amount_paise integer not null default 0,
+  total_amount_paise integer not null default 0,
+  amount_paid_paise integer not null default 0,
+  status text not null default 'open' check (status in ('open', 'partially_paid', 'paid', 'waived', 'disputed')),
+  amount_paise integer not null default 0,
+  outstanding_amount_paise integer not null default 0,
+  cleared_at timestamptz,
+  clearance_payment_reference text,
+  reference_id text,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table if exists public.vendor_platform_liabilities
+  add column if not exists amount_paise integer not null default 0,
+  add column if not exists outstanding_amount_paise integer not null default 0,
+  add column if not exists cleared_at timestamptz,
+  add column if not exists clearance_payment_reference text;
+
+create index if not exists idx_vendor_platform_liabilities_vendor_status
+  on public.vendor_platform_liabilities(vendor_id, status, created_at desc);
+
+create table if not exists public.vendor_billing_documents (
+  id uuid primary key default gen_random_uuid(),
+  vendor_id uuid not null references public.vendors(id) on delete cascade,
+  terminal_id uuid,
+  document_type text not null default 'tax_statement',
+  billing_period_start timestamptz,
+  billing_period_end timestamptz,
+  base_amount_paise integer not null default 0,
+  taxable_value_paise integer not null default 0,
+  gst_amount_paise integer not null default 0,
+  cgst_amount_paise integer not null default 0,
+  sgst_amount_paise integer not null default 0,
+  igst_amount_paise integer not null default 0,
+  total_amount_paise integer not null default 0,
+  status text not null default 'generated',
+  document_number text,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_vendor_billing_documents_vendor
+  on public.vendor_billing_documents(vendor_id, created_at desc);
+
+alter table if exists public.vendor_terminals
+  add column if not exists billing_status text not null default 'active'
+    check (billing_status in ('active', 'billing_hold', 'wallet_recharge_required')),
+  add column if not exists billing_hold_reason text,
+  add column if not exists billing_hold_at timestamptz,
+  add column if not exists billing_reactivated_at timestamptz;
+
+create index if not exists idx_vendor_terminals_billing_status
+  on public.vendor_terminals(vendor_id, billing_status, status);
+
 create table if not exists public.vendor_monthly_order_plans (
   plan_code text primary key,
   plan_name text not null,
@@ -138,19 +263,30 @@ create table if not exists public.vendor_monthly_order_plans (
   gst_amount_paise integer not null check (gst_amount_paise >= 0),
   total_payable_paise integer not null check (total_payable_paise >= 0),
   required_security_balance_paise integer not null check (required_security_balance_paise >= 0),
+  overage_base_fee_paise integer not null default 0 check (overage_base_fee_paise >= 0),
+  overage_gst_rate_bps integer not null default 1800 check (overage_gst_rate_bps >= 0),
+  minimum_operational_wallet_balance_paise integer not null default 0 check (minimum_operational_wallet_balance_paise >= 0),
+  billing_hold_enabled boolean not null default true,
+  automatic_reactivation_enabled boolean not null default true,
   is_active boolean not null default true,
   sort_order integer not null default 100,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
+alter table if exists public.vendor_monthly_order_plans
+  add column if not exists overage_base_fee_paise integer not null default 0,
+  add column if not exists overage_gst_rate_bps integer not null default 1800,
+  add column if not exists minimum_operational_wallet_balance_paise integer not null default 0,
+  add column if not exists billing_hold_enabled boolean not null default true,
+  add column if not exists automatic_reactivation_enabled boolean not null default true;
+
 insert into public.vendor_monthly_order_plans
-  (plan_code, plan_name, min_order_number, max_order_allowance, service_fee_before_gst_paise, gst_rate_percent, gst_amount_paise, total_payable_paise, required_security_balance_paise, sort_order)
+  (plan_code, plan_name, min_order_number, max_order_allowance, service_fee_before_gst_paise, gst_rate_percent, gst_amount_paise, total_payable_paise, required_security_balance_paise, overage_base_fee_paise, overage_gst_rate_bps, minimum_operational_wallet_balance_paise, billing_hold_enabled, automatic_reactivation_enabled, sort_order)
 values
-  ('local_starter_500', 'Local Starter', 0, 500, 200000, 18.00, 36000, 236000, 500000, 10),
-  ('local_growth_1000', 'Local Growth', 501, 1000, 380000, 18.00, 68400, 448400, 500000, 20),
-  ('local_pro_2000', 'Local Pro', 1001, 2000, 750000, 18.00, 135000, 885000, 1000000, 30),
-  ('local_enterprise_5000', 'Local Enterprise', 2001, 5000, 1700000, 18.00, 306000, 2006000, 2500000, 40)
+  ('standard_300', 'Standard', 0, 300, 300000, 18.00, 54000, 354000, 375000, 1000, 1800, 1000, true, true, 10),
+  ('plus_750', 'Plus', 301, 750, 700000, 18.00, 126000, 826000, 875000, 900, 1800, 900, true, true, 20),
+  ('pro_1500', 'Pro', 751, 1500, 1350000, 18.00, 243000, 1593000, 1687500, 800, 1800, 800, true, true, 30)
 on conflict (plan_code) do update set
   plan_name = excluded.plan_name,
   min_order_number = excluded.min_order_number,
@@ -160,9 +296,19 @@ on conflict (plan_code) do update set
   gst_amount_paise = excluded.gst_amount_paise,
   total_payable_paise = excluded.total_payable_paise,
   required_security_balance_paise = excluded.required_security_balance_paise,
+  overage_base_fee_paise = excluded.overage_base_fee_paise,
+  overage_gst_rate_bps = excluded.overage_gst_rate_bps,
+  minimum_operational_wallet_balance_paise = excluded.minimum_operational_wallet_balance_paise,
+  billing_hold_enabled = excluded.billing_hold_enabled,
+  automatic_reactivation_enabled = excluded.automatic_reactivation_enabled,
   is_active = true,
   sort_order = excluded.sort_order,
   updated_at = now();
+
+update public.vendor_monthly_order_plans
+   set is_active = false,
+       updated_at = now()
+ where plan_code in ('local_starter_500', 'local_growth_1000', 'local_pro_2000', 'local_enterprise_5000');
 
 create table if not exists public.vendor_pricing_preferences (
   id uuid primary key default gen_random_uuid(),
@@ -304,6 +450,10 @@ alter table public.vendor_order_plan_periods enable row level security;
 alter table public.vendor_order_plan_usage_events enable row level security;
 alter table public.vendor_pricing_change_audit enable row level security;
 alter table public.vendor_pricing_notifications enable row level security;
+alter table public.platform_tax_rate_rules enable row level security;
+alter table public.vendor_security_deposit_ledger enable row level security;
+alter table public.vendor_platform_liabilities enable row level security;
+alter table public.vendor_billing_documents enable row level security;
 
 drop policy if exists "Vendors read active monthly order plans" on public.vendor_monthly_order_plans;
 create policy "Vendors read active monthly order plans"
@@ -384,13 +534,93 @@ create policy "Admins read pricing audit"
   to authenticated
   using ((auth.jwt() -> 'user_metadata' ->> 'role') in ('master_admin', 'super_admin', 'admin', 'company_admin', 'finance_admin'));
 
+drop policy if exists "Authenticated users read active platform tax rules" on public.platform_tax_rate_rules;
+create policy "Authenticated users read active platform tax rules"
+  on public.platform_tax_rate_rules for select
+  to authenticated
+  using (is_active = true);
+
+drop policy if exists "Vendor owners read own security deposit ledger" on public.vendor_security_deposit_ledger;
+create policy "Vendor owners read own security deposit ledger"
+  on public.vendor_security_deposit_ledger for select
+  to authenticated
+  using (
+    exists (
+      select 1 from public.vendors v
+      where v.id = vendor_security_deposit_ledger.vendor_id
+        and v.owner_user_id = auth.uid()
+    )
+  );
+
+drop policy if exists "Vendor owners read own platform liabilities" on public.vendor_platform_liabilities;
+create policy "Vendor owners read own platform liabilities"
+  on public.vendor_platform_liabilities for select
+  to authenticated
+  using (
+    exists (
+      select 1 from public.vendors v
+      where v.id = vendor_platform_liabilities.vendor_id
+        and v.owner_user_id = auth.uid()
+    )
+  );
+
+drop policy if exists "Vendor owners read own billing documents" on public.vendor_billing_documents;
+create policy "Vendor owners read own billing documents"
+  on public.vendor_billing_documents for select
+  to authenticated
+  using (
+    exists (
+      select 1 from public.vendors v
+      where v.id = vendor_billing_documents.vendor_id
+        and v.owner_user_id = auth.uid()
+    )
+  );
+
+drop policy if exists "Admins read vendor billing accounting records" on public.vendor_security_deposit_ledger;
+create policy "Admins read vendor billing accounting records"
+  on public.vendor_security_deposit_ledger for select
+  to authenticated
+  using ((auth.jwt() -> 'user_metadata' ->> 'role') in ('master_admin', 'super_admin', 'admin', 'company_admin', 'finance_admin'));
+
+drop policy if exists "Admins read vendor platform liabilities" on public.vendor_platform_liabilities;
+create policy "Admins read vendor platform liabilities"
+  on public.vendor_platform_liabilities for select
+  to authenticated
+  using ((auth.jwt() -> 'user_metadata' ->> 'role') in ('master_admin', 'super_admin', 'admin', 'company_admin', 'finance_admin'));
+
+drop policy if exists "Admins read vendor billing documents" on public.vendor_billing_documents;
+create policy "Admins read vendor billing documents"
+  on public.vendor_billing_documents for select
+  to authenticated
+  using ((auth.jwt() -> 'user_metadata' ->> 'role') in ('master_admin', 'super_admin', 'admin', 'company_admin', 'finance_admin'));
+
 grant select on public.vendor_monthly_order_plans to authenticated;
 grant select on public.vendor_order_fee_pricing_rules to authenticated;
+grant select on public.platform_tax_rate_rules to authenticated;
+grant select on public.vendor_security_deposit_ledger, public.vendor_platform_liabilities, public.vendor_billing_documents to authenticated;
 grant select on public.vendor_pricing_preferences, public.vendor_order_plan_periods, public.vendor_order_plan_usage_events, public.vendor_pricing_notifications to authenticated;
 grant select on public.vendor_pricing_change_audit to authenticated;
 
+drop policy if exists "Public read active terminals for active vendors" on public.vendor_terminals;
+create policy "Public read active terminals for active vendors"
+  on public.vendor_terminals
+  for select
+  to anon, authenticated
+  using (
+    status = 'active'
+    and coalesce(billing_status, 'active') = 'active'
+    and exists (
+      select 1
+      from public.vendors v
+      where v.id = vendor_terminals.vendor_id
+        and v.status = 'active'
+        and v.kyc_status = 'kyc_verified'
+        and v.onboarding_payment_status = 'payment_completed'
+    )
+  );
+
 comment on table public.vendor_monthly_order_plans is
-  'Configurable optional monthly accepted-order plans. Category-based GST-inclusive pay-per-accepted-order pricing remains available.';
+  'Configurable optional monthly accepted-order plans. Category-based Pay As You Go base fee plus GST per accepted order remains available.';
 
 comment on table public.vendor_pricing_preferences is
   'Current and scheduled vendor pricing model. Monthly-plan orders covered by an active plan must not also receive the category-based accepted-order fee.';
@@ -415,6 +645,7 @@ declare
   v_wallet public.vendor_security_wallets%rowtype;
   v_existing_tx public.vendor_security_wallet_transactions%rowtype;
   v_rule public.vendor_order_fee_pricing_rules%rowtype;
+  v_plan public.vendor_monthly_order_plans%rowtype;
   v_preference public.vendor_pricing_preferences%rowtype;
   v_period public.vendor_order_plan_periods%rowtype;
   v_balance_before numeric;
@@ -424,9 +655,21 @@ declare
   v_audit_log_id uuid;
   v_now timestamptz := now();
   v_fee_rupees numeric;
+  v_amount_to_deduct_rupees numeric := 0;
+  v_liability_paise integer := 0;
   v_cgst_paise integer;
   v_sgst_paise integer;
   v_igst_paise integer := 0;
+  v_charge_base_fee_paise integer := 0;
+  v_charge_gross_fee_paise integer := 0;
+  v_charge_taxable_value_paise integer := 0;
+  v_charge_gst_rate_bps integer := 1800;
+  v_charge_gst_amount_paise integer := 0;
+  v_charge_rule_code text := null;
+  v_charge_category_group text := null;
+  v_charge_pricing_model text := 'pay_per_order';
+  v_charge_pricing_version text := 'vendor-final-pricing-local-2026-08-17';
+  v_plan_name_snapshot text := null;
   v_fee_deducted boolean := false;
   v_monthly_covered boolean := false;
 begin
@@ -499,51 +742,79 @@ begin
       raise exception 'Monthly order plan is not active. Please renew, upgrade or switch to per-order pricing.';
     end if;
 
-    if v_period.accepted_orders_used >= (
+    if v_period.accepted_orders_used < (
       select max_order_allowance from public.vendor_monthly_order_plans where plan_code = v_period.plan_code
     ) then
-      raise exception 'Monthly accepted-order allowance is exhausted. Please upgrade, renew or switch pricing model.';
-    end if;
-
-    insert into public.vendor_order_plan_usage_events (
-      vendor_id,
-      period_id,
-      order_id,
-      event_type,
-      metadata
-    ) values (
-      p_vendor_id,
-      v_period.id,
-      p_order_id,
-      'accepted_order_covered',
-      jsonb_build_object(
-        'pricing_model', 'monthly_order_plan',
-        'plan_code', v_period.plan_code,
-        'covered_order_no_extra_per_order_fee', true
+      insert into public.vendor_order_plan_usage_events (
+        vendor_id,
+        period_id,
+        order_id,
+        event_type,
+        metadata
+      ) values (
+        p_vendor_id,
+        v_period.id,
+        p_order_id,
+        'accepted_order_covered',
+        jsonb_build_object(
+          'pricing_model', 'monthly_order_plan',
+          'plan_code', v_period.plan_code,
+          'covered_order_no_extra_per_order_fee', true
+        )
       )
-    )
-    on conflict (order_id) do nothing;
+      on conflict (order_id) do nothing;
 
-    update public.vendor_order_plan_periods
-       set accepted_orders_used = (
-             select count(*)::integer
-               from public.vendor_order_plan_usage_events
-              where period_id = v_period.id
-           ),
-           updated_at = v_now
-     where id = v_period.id
-     returning * into v_period;
+      update public.vendor_order_plan_periods
+         set accepted_orders_used = (
+               select count(*)::integer
+                 from public.vendor_order_plan_usage_events
+                where period_id = v_period.id
+             ),
+             updated_at = v_now
+       where id = v_period.id
+       returning * into v_period;
 
-    v_monthly_covered := true;
-  else
-    v_rule := public.resolve_vendor_order_fee_rule(p_vendor_id);
-    v_fee_rupees := v_rule.gross_fee_paise::numeric / 100;
-    v_cgst_paise := floor(v_rule.gst_amount_paise::numeric / 2)::integer;
-    v_sgst_paise := v_rule.gst_amount_paise - v_cgst_paise;
-
-    if v_wallet.current_balance < v_fee_rupees then
-      raise exception 'Vendor advance balance is below the applicable category fee of Rs %. Order cannot be accepted and customer details remain locked.', to_char(v_fee_rupees, 'FM999999990.00');
+      v_monthly_covered := true;
     end if;
+  end if;
+
+  if not v_monthly_covered then
+    if v_period.id is not null then
+      select *
+        into v_plan
+        from public.vendor_monthly_order_plans
+       where plan_code = v_period.plan_code
+       limit 1;
+
+      if not found then
+        raise exception 'Monthly order plan configuration is missing for overage billing.';
+      end if;
+
+      v_charge_base_fee_paise := v_plan.overage_base_fee_paise;
+      v_charge_gst_rate_bps := coalesce(v_plan.overage_gst_rate_bps, 1800);
+      v_charge_gst_amount_paise := round(v_charge_base_fee_paise::numeric * v_charge_gst_rate_bps::numeric / 10000)::integer;
+      v_charge_gross_fee_paise := v_charge_base_fee_paise + v_charge_gst_amount_paise;
+      v_charge_taxable_value_paise := v_charge_base_fee_paise;
+      v_charge_rule_code := v_plan.plan_code || '_overage';
+      v_charge_category_group := 'monthly_plan_overage';
+      v_charge_pricing_model := 'monthly_plan_overage';
+      v_plan_name_snapshot := v_plan.plan_name;
+    else
+      v_rule := public.resolve_vendor_order_fee_rule(p_vendor_id);
+      v_charge_base_fee_paise := v_rule.base_fee_paise;
+      v_charge_gst_rate_bps := v_rule.gst_rate_bps;
+      v_charge_gst_amount_paise := v_rule.gst_amount_paise;
+      v_charge_gross_fee_paise := v_rule.gross_fee_paise;
+      v_charge_taxable_value_paise := v_rule.taxable_value_paise;
+      v_charge_rule_code := v_rule.rule_code;
+      v_charge_category_group := v_rule.category_group;
+      v_charge_pricing_model := 'pay_per_order';
+      v_plan_name_snapshot := null;
+    end if;
+
+    v_fee_rupees := v_charge_gross_fee_paise::numeric / 100;
+    v_cgst_paise := floor(v_charge_gst_amount_paise::numeric / 2)::integer;
+    v_sgst_paise := v_charge_gst_amount_paise - v_cgst_paise;
 
     select *
       into v_existing_tx
@@ -556,13 +827,15 @@ begin
 
     if not found then
       v_balance_before := v_wallet.current_balance;
-      v_balance_after := v_balance_before - v_fee_rupees;
+      v_amount_to_deduct_rupees := least(v_balance_before, v_fee_rupees);
+      v_liability_paise := greatest(v_charge_gross_fee_paise - round(v_amount_to_deduct_rupees * 100)::integer, 0);
+      v_balance_after := v_balance_before - v_amount_to_deduct_rupees;
       v_next_status :=
         case
           when v_wallet.opening_balance < 5000 then 'security_deposit_required'
+          when v_liability_paise > 0 then 'orders_stopped'
           when v_balance_after < v_fee_rupees then 'orders_stopped'
-          when v_balance_after < 500 then 'final_warning'
-          when v_balance_after <= 1000 then 'low_balance'
+          when v_balance_after < 500 then 'low_balance'
           else 'eligible'
         end;
 
@@ -597,6 +870,7 @@ begin
         idempotency_key,
         terminal_id,
         warning_level,
+        base_platform_fee_paise,
         gross_platform_fee_paise,
         taxable_value_paise,
         gst_rate_bps,
@@ -615,32 +889,43 @@ begin
         p_vendor_id,
         p_order_id,
         'order_fee',
-        -v_fee_rupees,
+        -v_amount_to_deduct_rupees,
         v_balance_before,
         v_balance_after,
         'PLATFORM_FACILITATION_CHARGE_' || p_order_id::text,
         'order_acceptance_fee:' || p_order_id::text,
         v_order.terminal_id,
         v_warning_level,
-        v_rule.gross_fee_paise,
-        v_rule.taxable_value_paise,
-        v_rule.gst_rate_bps,
-        v_rule.gst_amount_paise,
+        v_charge_base_fee_paise,
+        v_charge_gross_fee_paise,
+        v_charge_taxable_value_paise,
+        v_charge_gst_rate_bps,
+        v_charge_gst_amount_paise,
         v_cgst_paise,
         v_sgst_paise,
         v_igst_paise,
-        'pay_per_order',
-        v_rule.pricing_version,
+        v_charge_pricing_model,
+        v_charge_pricing_version,
         (select category from public.vendors where id = p_vendor_id),
         jsonb_build_object('tax_treatment', 'intrastate_cgst_sgst', 'source', 'backend_pricing_rule_ca_review_required'),
         'ORDER_ACCEPTANCE_FEE',
         jsonb_build_object(
-          'platform_fee_inclusive_of_gst', true,
-          'category_group', v_rule.category_group,
-          'rule_code', v_rule.rule_code,
-          'gross_platform_fee_paise', v_rule.gross_fee_paise,
-          'taxable_value_paise', v_rule.taxable_value_paise,
-          'gst_amount_paise', v_rule.gst_amount_paise,
+          'platform_fee_inclusive_of_gst', false,
+          'base_plus_gst', true,
+          'pricing_model', v_charge_pricing_model,
+          'monthly_plan_code', case when v_period.id is null then null else v_period.plan_code end,
+          'monthly_plan_name_snapshot', v_plan_name_snapshot,
+          'monthly_included_orders', case when v_period.id is null then null else v_plan.max_order_allowance end,
+          'monthly_orders_used', case when v_period.id is null then null else v_period.accepted_orders_used end,
+          'category_group', v_charge_category_group,
+          'rule_code', v_charge_rule_code,
+          'base_platform_fee_paise', v_charge_base_fee_paise,
+          'overage_base_fee_snapshot_paise', case when v_period.id is null then null else v_charge_base_fee_paise end,
+          'gross_platform_fee_paise', v_charge_gross_fee_paise,
+          'taxable_value_paise', v_charge_taxable_value_paise,
+          'gst_amount_paise', v_charge_gst_amount_paise,
+          'amount_deducted_paise', round(v_amount_to_deduct_rupees * 100)::integer,
+          'unpaid_liability_paise', v_liability_paise,
           'cgst_amount_paise', v_cgst_paise,
           'sgst_amount_paise', v_sgst_paise,
           'igst_amount_paise', v_igst_paise,
@@ -649,6 +934,75 @@ begin
       );
 
       v_fee_deducted := true;
+
+      insert into public.vendor_security_deposit_ledger (
+        vendor_id,
+        wallet_id,
+        order_id,
+        event_type,
+        amount_paise,
+        balance_before_paise,
+        balance_after_paise,
+        metadata
+      ) values (
+        p_vendor_id,
+        v_wallet.id,
+        p_order_id,
+        case when v_period.id is null then 'PAYG_ORDER_DEDUCTION' else 'MONTHLY_PLAN_OVERAGE_DEDUCTION' end,
+        -round(v_amount_to_deduct_rupees * 100)::integer,
+        round(v_balance_before * 100)::integer,
+        round(v_balance_after * 100)::integer,
+        jsonb_build_object(
+          'base_platform_fee_paise', v_charge_base_fee_paise,
+          'gst_amount_paise', v_charge_gst_amount_paise,
+          'total_platform_charge_paise', v_charge_gross_fee_paise,
+          'unpaid_liability_paise', v_liability_paise,
+          'pricing_version', v_charge_pricing_version,
+          'pricing_model', v_charge_pricing_model,
+          'monthly_plan_code', case when v_period.id is null then null else v_period.plan_code end,
+          'monthly_plan_name_snapshot', v_plan_name_snapshot
+        )
+      );
+
+      if v_liability_paise > 0 then
+        insert into public.vendor_platform_liabilities (
+          vendor_id,
+          terminal_id,
+          order_id,
+          liability_type,
+          base_amount_paise,
+          gst_amount_paise,
+          total_amount_paise,
+          amount_paise,
+          outstanding_amount_paise,
+          status,
+          metadata
+        ) values (
+          p_vendor_id,
+          v_order.terminal_id,
+          p_order_id,
+          case when v_period.id is null then 'PAYG_ORDER_FEE_SHORTFALL' else 'MONTHLY_PLAN_OVERAGE_SHORTFALL' end,
+          v_charge_base_fee_paise,
+          v_charge_gst_amount_paise,
+          v_charge_gross_fee_paise,
+          v_liability_paise,
+          v_liability_paise,
+          'open',
+          jsonb_build_object(
+            'total_platform_charge_paise', v_charge_gross_fee_paise,
+            'amount_deducted_paise', round(v_amount_to_deduct_rupees * 100)::integer,
+            'reason', 'advance_balance_below_next_order_charge'
+          )
+        );
+
+        if v_order.terminal_id is not null then
+          update public.vendor_terminals
+             set billing_status = 'billing_hold',
+                 billing_hold_reason = 'advance_wallet_exhausted_or_platform_liability_open',
+                 billing_hold_at = coalesce(billing_hold_at, v_now)
+           where id = v_order.terminal_id;
+        end if;
+      end if;
 
       if v_warning_level <> 'none' then
         insert into public.vendor_security_wallet_warnings (
@@ -666,7 +1020,7 @@ begin
           case
             when v_warning_level = 'orders_stopped' then 'New SabSewa Local orders are stopped because your vendor advance balance is below the next applicable category fee.'
             when v_warning_level = 'final_warning' then 'Final warning: your SabSewa Local vendor advance balance is below Rs 500.'
-            else 'Your SabSewa Local vendor advance balance is Rs 1,000 or below. Please top up soon.'
+            else 'Your SabSewa Local vendor advance balance is below Rs 500. Please top up soon.'
           end,
           'in_app'
         );
@@ -706,7 +1060,9 @@ begin
       'fee_deducted', v_fee_deducted,
       'monthly_plan_covered', v_monthly_covered,
       'fee_amount_paise', coalesce(v_rule.gross_fee_paise, 0),
-      'fee_inclusive_of_gst', not v_monthly_covered,
+      'fee_inclusive_of_gst', false,
+      'base_plus_gst', not v_monthly_covered,
+      'unpaid_liability_paise', v_liability_paise,
       'vendor_comment', p_vendor_comment,
       'idempotency_key', 'order_acceptance_fee:' || p_order_id::text
     )
@@ -738,7 +1094,7 @@ revoke all on function public.accept_order_with_wallet_fee(uuid, uuid, uuid, tex
 grant execute on function public.accept_order_with_wallet_fee(uuid, uuid, uuid, text, jsonb) to service_role;
 
 comment on table public.vendor_monthly_order_plans is
-  'Configurable optional monthly accepted-order plans. Displayed plan totals are final prices inclusive of GST.';
+  'Configurable optional monthly accepted-order plans with plan-specific overage base fee plus GST after included order allowance.';
 
 comment on table public.vendor_pricing_preferences is
   'Current and scheduled vendor pricing model. A vendor must have only one active pricing model: category pay-per-order or monthly order plan.';

@@ -22,6 +22,8 @@ Official support contact: `support@sabsewa.in`, `+91 8450092846`, `+91 817811344
 ## 2026-08-18 - Multilingual UI And Product Search Hardening
 
 - Confirmed the active language architecture is the custom `LanguageProvider` with persisted English/Hindi/Kannada selection through web localStorage and mobile SecureStore/AsyncStorage.
+- Fixed Home page language selection reverting to English after selecting Hindi/Kannada. Root cause: `mobile/app/index.tsx` was reloading `user_profiles.preferred_language` after render and calling `setLanguage(...)`, overwriting the user's local choice. The profile language now only initializes when no local language choice is saved.
+- `mobile/providers/LanguageProvider.tsx` now reads the saved web language synchronously before the first render, preventing a visible default-English flash when a saved Hindi/Kannada preference already exists.
 - Added missing-translation warning telemetry in `mobile/providers/LanguageProvider.tsx` so unresolved UI keys are logged during testing instead of silently looking complete.
 - Expanded customer nearby-vendor discovery so the selected language and product search query are sent to the backend discovery API.
 - Updated `mobile/server/hyperlocal/discoveryRoutes.js` to enrich vendor items with `master_product_catalog` fields including `local_names`, `search_keywords`, `alternative_spellings`, category/subcategory and generic image data before filtering and returning nearby vendors.

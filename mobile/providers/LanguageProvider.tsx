@@ -29,8 +29,24 @@ const BUNDLED_TRANSLATIONS: Partial<Record<SabSewaLanguageCode, Record<string, s
   kn: knCommon,
 };
 
+function getInitialLanguage(): SabSewaLanguageCode {
+  if (Platform.OS !== "web") return DEFAULT_LANGUAGE;
+  try {
+    const saved =
+      globalThis.localStorage?.getItem(STORAGE_KEY) ||
+      LEGACY_LANGUAGE_STORAGE_KEYS.map((key) => globalThis.localStorage?.getItem(key)).find(Boolean) ||
+      null;
+    if (saved && FUNCTIONAL_LANGUAGES.includes(saved as SabSewaLanguageCode)) {
+      return saved as SabSewaLanguageCode;
+    }
+  } catch {
+    return DEFAULT_LANGUAGE;
+  }
+  return DEFAULT_LANGUAGE;
+}
+
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
-  const [language, setLanguageState] = useState<SabSewaLanguageCode>(DEFAULT_LANGUAGE);
+  const [language, setLanguageState] = useState<SabSewaLanguageCode>(getInitialLanguage);
   const missingKeysRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {

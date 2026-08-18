@@ -24,7 +24,7 @@ function sanitizeGreetingName(value?: string | null) {
 export default function HomeScreen() {
   const router = useRouter();
   const { user, loading, signOut } = useAuth();
-  const { t, setLanguage, isLanguageAvailable } = useLanguage();
+  const { language, t, setLanguage, isLanguageAvailable } = useLanguage();
   const [profileName, setProfileName] = useState("");
   const role = user?.user_metadata?.role;
   const isCustomer = role === "customer";
@@ -73,7 +73,11 @@ export default function HomeScreen() {
       setProfileName(sanitizeGreetingName(data?.full_name));
 
       const preferredLanguage = data?.preferred_language;
-      if (preferredLanguage && isLanguageAvailable(preferredLanguage as any)) {
+      const hasSavedLocalLanguage =
+        typeof globalThis !== "undefined" &&
+        typeof globalThis.localStorage !== "undefined" &&
+        Boolean(globalThis.localStorage.getItem("sabsewa_local_language") || globalThis.localStorage.getItem("user_language"));
+      if (preferredLanguage && !hasSavedLocalLanguage && language === "en" && isLanguageAvailable(preferredLanguage as any)) {
         setLanguage(preferredLanguage as any);
       }
     }
@@ -82,7 +86,7 @@ export default function HomeScreen() {
     return () => {
       active = false;
     };
-  }, [isLanguageAvailable, setLanguage, user?.id]);
+  }, [isLanguageAvailable, language, setLanguage, user?.id]);
 
   async function handleSwitchAccount() {
     await signOut();

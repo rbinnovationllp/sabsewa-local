@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { apiUrl, authenticatedApiHeaders, MASTER_ADMIN_SESSION_STORAGE_KEY } from "@/lib/backend";
 import { useAuth } from "@/providers/AuthProvider";
+import { isAdminRole } from "@/utils/roleRouter";
 
 export default function CompanyLayout() {
   const router = useRouter();
@@ -20,11 +21,7 @@ export default function CompanyLayout() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Allow master_admin, admin, or any authenticated admin user
-  const isMasterAdmin =
-    String(role || "").toLowerCase() === "master_admin" ||
-    String(role || "").toLowerCase() === "admin" ||
-    Boolean(user);
+  const hasAdminRole = isAdminRole(role);
 
   const handleGoHome = () => {
     if (typeof window !== "undefined") {
@@ -43,18 +40,12 @@ export default function CompanyLayout() {
   };
 
   useEffect(() => {
-    // Check if session token already exists in browser session
-    if (typeof window !== "undefined") {
-      const existingToken = window.sessionStorage.getItem(MASTER_ADMIN_SESSION_STORAGE_KEY);
-      if (existingToken) {
-        setVerified(true);
-        setChecking(false);
-        return;
-      }
-    }
-
     async function checkSession() {
-      if (loading || roleLoading || !user) {
+      if (loading || roleLoading) return;
+      if (!user || !hasAdminRole) {
+        if (typeof window !== "undefined") {
+          window.sessionStorage.removeItem(MASTER_ADMIN_SESSION_STORAGE_KEY);
+        }
         setChecking(false);
         return;
       }
@@ -71,7 +62,7 @@ export default function CompanyLayout() {
       }
     }
     checkSession();
-  }, [loading, roleLoading, user?.id]);
+  }, [loading, roleLoading, user?.id, hasAdminRole]);
 
   async function verifySecret() {
     setError(null);
@@ -79,18 +70,6 @@ export default function CompanyLayout() {
     const entered = secret.trim();
 
     try {
-      // 1. Direct fallback check for Master Admin Passcode
-      const fallbackCode = process.env.EXPO_PUBLIC_MASTER_ADMIN_SECRET || "SabSewaAdmin2026!";
-      if (entered === fallbackCode || entered === "SabSewaAdmin2026!" || entered === "SabSewa@2026") {
-        if (typeof window !== "undefined") {
-          window.sessionStorage.setItem(MASTER_ADMIN_SESSION_STORAGE_KEY, "master_admin_session_valid");
-        }
-        setSecret("");
-        setVerified(true);
-        return;
-      }
-
-      // 2. Attempt backend verification if endpoint exists
       const response = await fetch(apiUrl("/api/admin/master/verify-secret"), {
         method: "POST",
         headers: await authenticatedApiHeaders({ "Content-Type": "application/json" }),
@@ -141,6 +120,8 @@ export default function CompanyLayout() {
   }
 
   if (!user) return <Redirect href="/auth/Login" />;
+
+  if (!hasAdminRole) return <Redirect href="/auth/unauthorized" />;
 
   if (!verified) {
     return (

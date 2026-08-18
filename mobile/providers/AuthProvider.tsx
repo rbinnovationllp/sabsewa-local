@@ -157,7 +157,7 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
     const inVendorArea = firstSegment === "vendor";
     const inCompanyArea = firstSegment === "company";
 
-    if (adminRoles.has(normalizedRole) && !inCompanyArea && (inAuthGroup || onPublicHome || inCustomerArea || inVendorArea)) {
+    if (adminRoles.has(normalizedRole) && !inCompanyArea && inAuthGroup) {
       router.replace("/company" as any);
       return;
     }

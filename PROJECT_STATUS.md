@@ -1,6 +1,6 @@
 # SabSewa Local Project Status
 
-Updated: 2026-08-17
+Updated: 2026-08-18
 
 Scope: `C:\Users\HP\SabSewa-Local`
 
@@ -11,6 +11,13 @@ Production web URL: `https://www.sabsewa.in`
 Production backend API URL: `https://api.sabsewa.in`
 
 Official support contact: `support@sabsewa.in`, `+91 8450092846`, `+91 8178113449`
+
+## 2026-08-18 - Language Selection/Admin Routing Guard Fix
+
+- Fixed a routing bug where changing language while an admin/master-admin session existed could trigger the global auth redirect and open the Company CRM verification screen from a public page.
+- Public pages such as `/`, `/hlm`, customer discovery and language selection now remain public unless the user explicitly enters the admin flow or logs in through an auth route.
+- Hardened `mobile/app/company/_layout.tsx` so `/company` requires an authenticated admin role and backend Master Admin session/secret verification. Frontend hard-coded Master Admin secret fallbacks were removed.
+- Validation: production web build validation passed. TypeScript CLI was not available in the current local `mobile/node_modules`, so full `npm run typecheck` needs dev dependencies installed before rerunning locally.
 
 ## 2026-08-17 - Final Vendor Pricing, GST, Security Deposit and Optional Monthly Plans
 

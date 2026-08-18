@@ -1,4 +1,5 @@
 import { DimensionValue, Image, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from "react-native";
+import { useLanguage } from "@/providers/LanguageProvider";
 
 type ProductGridProps = {
   products: any[];
@@ -7,8 +8,21 @@ type ProductGridProps = {
   onOpenProduct?: (product: any) => void;
 };
 
-function getProductTitle(product: any) {
-  return product.generic_product_name || product.item_name || "Product";
+function localizedValue(values: any, language: string) {
+  if (!values || typeof values !== "object") return null;
+  const value = values[language];
+  if (Array.isArray(value)) return value[0] || null;
+  return value || null;
+}
+
+function getProductTitle(product: any, language = "en") {
+  return localizedValue(product.local_names, language) ||
+    product.local_name ||
+    product.generic_product_name ||
+    product.item_name ||
+    product.master_standard_title ||
+    product.standard_title ||
+    "Product";
 }
 
 function getSearchNames(product: any) {
@@ -73,6 +87,7 @@ function getCategoryLabel(product: any) {
 
 export default function ProductGrid({ products, quantities, onChangeQuantity, onOpenProduct }: ProductGridProps) {
   const { width } = useWindowDimensions();
+  const { language, t } = useLanguage();
   const columns = width >= 1024 ? 4 : width >= 720 ? 3 : 2;
   const gap = 10;
   const cardWidth = `${100 / columns}%` as DimensionValue;
@@ -80,8 +95,8 @@ export default function ProductGrid({ products, quantities, onChangeQuantity, on
   if (!products.length) {
     return (
       <View style={styles.emptyBox}>
-        <Text style={styles.emptyTitle}>No orderable products found</Text>
-        <Text style={styles.emptyText}>Try another search term, category or nearby shop.</Text>
+        <Text style={styles.emptyTitle}>{t("product.noOrderableFound")}</Text>
+        <Text style={styles.emptyText}>{t("product.tryAnotherSearch")}</Text>
       </View>
     );
   }
@@ -91,7 +106,7 @@ export default function ProductGrid({ products, quantities, onChangeQuantity, on
       {products.map((product) => {
         const productId = String(product.id);
         const qty = Number(quantities[productId] || 0);
-        const title = getProductTitle(product);
+        const title = getProductTitle(product, language);
         const imageUrl = getImageUrl(product);
         const orderable = isOrderable(product);
 

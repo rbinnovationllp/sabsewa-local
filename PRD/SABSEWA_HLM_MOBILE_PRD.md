@@ -28,6 +28,7 @@ SabSewa Local will launch first in Bengaluru, Karnataka with functional support 
 - Passwords, OTPs, payment data, phone numbers, precise addresses and other sensitive personal data must never be sent to Gemini for translation.
 - Registration, ordering, wallet top-up and payment flows must not depend on Gemini translation availability.
 - User language preference must be saved locally and, for registered users, in the user profile.
+- Product and vendor discovery must use stored multilingual catalogue metadata first: canonical master product ID, standard title, Hindi/Kannada/local names, aliases, spelling variants and approved search keywords. Gemini may assist only as a controlled fallback and must not invent stock, price, availability or vendor existence.
 
 ## 3. Target Users
 
@@ -73,6 +74,7 @@ SabSewa Local will launch first in Bengaluru, Karnataka with functional support 
 - Allow customer to pick a customer-friendly shop or branch without seeing raw internal vendor or terminal IDs.
 - Display shop name, category, locality or partial address, approximate distance, open status, verified badge and currently available products. If similar shop names exist, distinguish them by locality, partial address and distance, not by Vendor ID or Terminal ID.
 - Show vendor details, phone, address, and available catalog.
+- Product search must work across English, Hindi, Kannada, Hinglish/local spellings and stored aliases without changing vendor/shop/customer-entered text. Search results must remain limited to verified active vendors and real catalogue items from the database.
 
 ### 4.3 Catalog And Cart
 - Display item image, name, price, availability, and quantity controls.

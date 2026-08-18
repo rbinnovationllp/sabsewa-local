@@ -101,6 +101,12 @@ Monthly plan prices are displayed as base fee plus GST, with the advance/securit
 
 English, Hindi and Kannada form the core Bengaluru launch-language foundation across onboarding, registration, discovery and checkout. Other Eighth Schedule Indian languages are tagged as `Coming Soon`. Dynamic marketplace text (product details, vendor notes) is translated on the fly via Gemini Flash through backend endpoints (`POST /api/gemini/translation/dynamic`) with strict PII redaction and cache optimization.
 
+The active app language is managed by `mobile/providers/LanguageProvider.tsx` and persists on web through localStorage and on mobile through SecureStore/AsyncStorage. Missing translation keys are logged during development/testing so placeholder language buttons can be identified.
+
+Customer nearby-vendor discovery now passes the selected language and product query to the backend. The discovery API enriches vendor catalogue items from `master_product_catalog` and searches across standard English titles, Hindi/Kannada/local names, aliases, spelling variants and search keywords. Vendor, shop, product and user-entered names are not automatically translated; stored local names are used only where available.
+
+Current limitation: the multilingual foundation is functional for core discovery/search flows, but some legacy admin, vendor, partner, wallet and legal text remains English-first and requires phased localization/legal review before production claims of complete Hindi/Kannada coverage.
+
 ---
 
 ## Project Structure

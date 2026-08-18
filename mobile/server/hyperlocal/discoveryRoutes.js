@@ -33,6 +33,69 @@ function categoryMatches(vendorCategory, requestedCategory) {
   return vendor.includes(requested) || requested.includes(vendor);
 }
 
+function normalizeSearchText(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\u0900-\u097f\u0c80-\u0cff]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function flattenLocalNames(localNames) {
+  if (!localNames || typeof localNames !== "object") return [];
+  return Object.values(localNames).flatMap((value) => Array.isArray(value) ? value : [value]).filter(Boolean);
+}
+
+function productSearchHaystack(item, masterProduct) {
+  return normalizeSearchText([
+    item.item_name,
+    item.generic_product_name,
+    item.brand_name,
+    item.manufacturer,
+    item.variant_name,
+    item.pack_size,
+    item.pack_unit,
+    item.unit,
+    item.barcode,
+    item.sku,
+    item.ean,
+    masterProduct?.standard_title,
+    masterProduct?.category,
+    masterProduct?.subcategory,
+    masterProduct?.brand_name,
+    masterProduct?.pack_size,
+    ...(masterProduct?.common_units || []),
+    ...(masterProduct?.search_keywords || []),
+    ...(masterProduct?.alternative_spellings || []),
+    ...flattenLocalNames(masterProduct?.local_names),
+  ].filter(Boolean).join(" "));
+}
+
+function preferredLocalName(localNames, language) {
+  if (!localNames || typeof localNames !== "object") return null;
+  const value = localNames[language];
+  if (Array.isArray(value)) return value[0] || null;
+  return value || null;
+}
+
+function enrichItemForCustomer(item, masterProduct, language) {
+  const localNames = masterProduct?.local_names || {};
+  return {
+    ...item,
+    master_product_id: item.master_product_id || null,
+    master_standard_title: masterProduct?.standard_title || null,
+    category: masterProduct?.category || item.category || null,
+    subcategory: masterProduct?.subcategory || null,
+    local_names: localNames,
+    local_name: preferredLocalName(localNames, language),
+    hindi_name: preferredLocalName(localNames, "hi"),
+    kannada_name: preferredLocalName(localNames, "kn"),
+    search_keywords: masterProduct?.search_keywords || [],
+    alternative_spellings: masterProduct?.alternative_spellings || [],
+    master_image_url: masterProduct?.generic_image_url || null,
+  };
+}
+
 
 function publicVendorPhotoPath(vendorId) {
   return `/api/discovery/vendors/${vendorId}/profile-photo`;
@@ -116,7 +179,7 @@ function rankVendor(a, b) {
   return Number(a.estimated_fulfilment_minutes || 999) - Number(b.estimated_fulfilment_minutes || 999);
 }
 
-function vendorCard({ vendor, terminal, items, distanceM }) {
+function vendorCard({ vendor, terminal, items, distanceM, language }) {
   const terminalFulfilment = terminal.estimated_fulfilment_minutes;
   return {
     id: vendor.id,
@@ -144,6 +207,14 @@ function vendorCard({ vendor, terminal, items, distanceM }) {
       id: item.id,
       item_name: item.item_name,
       generic_product_name: item.generic_product_name || item.item_name,
+      master_product_id: item.master_product_id || null,
+      master_standard_title: item.master_standard_title || null,
+      local_names: item.local_names || {},
+      local_name: item.local_name || null,
+      hindi_name: item.hindi_name || null,
+      kannada_name: item.kannada_name || null,
+      search_keywords: item.search_keywords || [],
+      alternative_spellings: item.alternative_spellings || [],
       brand_name: item.brand_name || null,
       manufacturer: item.manufacturer || null,
       variant_name: item.variant_name || null,
@@ -166,6 +237,7 @@ function vendorCard({ vendor, terminal, items, distanceM }) {
       unit: item.unit || null,
       price_unit_label: item.price_unit_label || null,
       item_pic: item.item_pic || null,
+      master_image_url: item.master_image_url || null,
     })),
   };
 }
@@ -189,6 +261,9 @@ router.get("/vendors", async (req, res) => {
     const lng = Number(req.query.lng);
     const pincode = String(req.query.pincode || "").trim();
     const locality = String(req.query.locality || "").trim();
+    const productQuery = String(req.query.q || req.query.search || "").trim();
+    const language = String(req.query.language || "en").trim().toLowerCase();
+    const normalizedProductQuery = normalizeSearchText(productQuery);
 
     if ((!Number.isFinite(lat) || !Number.isFinite(lng)) && !pincode && !locality) {
       return res.status(400).json({
@@ -221,7 +296,7 @@ router.get("/vendors", async (req, res) => {
         .eq("status", "active"),
       supabase
         .from("vendor_items")
-        .select("id, vendor_id, terminal_id, item_name, item_pic, price, price_display_mode, price_unit_label, unit, is_available, available_today, stock_status, daily_availability_status, expected_restock_at, generic_product_name, brand_name, manufacturer, variant_name, pack_size, pack_unit, mrp, mrp_pricing_policy, mrp_discount_percent, barcode, sku, ean")
+        .select("id, vendor_id, terminal_id, master_product_id, item_name, item_pic, price, price_display_mode, price_unit_label, unit, is_available, available_today, stock_status, daily_availability_status, expected_restock_at, generic_product_name, brand_name, manufacturer, variant_name, pack_size, pack_unit, mrp, mrp_pricing_policy, mrp_discount_percent, barcode, sku, ean")
         .in("vendor_id", vendorIds)
         .eq("is_available", true)
         .eq("available_today", true)
@@ -232,12 +307,28 @@ router.get("/vendors", async (req, res) => {
     if (terminalError) throw terminalError;
     if (itemError) throw itemError;
 
+    const masterIds = [...new Set((items || []).map((item) => item.master_product_id).filter(Boolean))];
+    let masterById = new Map();
+    if (masterIds.length > 0) {
+      const { data: masterProducts, error: masterError } = await supabase
+        .from("master_product_catalog")
+        .select("id, standard_title, category, subcategory, generic_image_url, local_names, common_units, brand_name, pack_size, search_keywords, alternative_spellings")
+        .in("id", masterIds);
+      if (masterError) throw masterError;
+      masterById = new Map((masterProducts || []).map((product) => [product.id, product]));
+    }
+
     const vendorById = new Map(filteredVendors.map((vendor) => [vendor.id, vendor]));
     const itemsByTerminal = new Map();
     for (const item of items || []) {
+      const masterProduct = item.master_product_id ? masterById.get(item.master_product_id) : null;
+      const enrichedItem = enrichItemForCustomer(item, masterProduct, language);
+      if (normalizedProductQuery && !productSearchHaystack(enrichedItem, masterProduct).includes(normalizedProductQuery)) {
+        continue;
+      }
       const key = item.terminal_id || "vendor:" + item.vendor_id;
       const current = itemsByTerminal.get(key) || [];
-      current.push(item);
+      current.push(enrichedItem);
       itemsByTerminal.set(key, current);
     }
 
@@ -263,7 +354,7 @@ router.get("/vendors", async (req, res) => {
         distanceM = MAX_RADIUS_M;
       }
 
-      allCards.push(vendorCard({ vendor, terminal, items: terminalItems, distanceM }));
+      allCards.push(vendorCard({ vendor, terminal, items: terminalItems, distanceM, language }));
     }
 
     const within500 = allCards.filter((vendor) => vendor.distance_m <= FIRST_RADIUS_M);

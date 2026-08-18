@@ -15,15 +15,16 @@ import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { apiUrl } from "@/lib/backend";
 import { useAuth } from "@/providers/AuthProvider";
+import { useLanguage } from "@/providers/LanguageProvider";
 
 const CATEGORIES = [
-  { key: "kirana", label: "Grocery/Kirana" },
-  { key: "vegetables", label: "Vegetables" },
-  { key: "fruits", label: "Fruits" },
-  { key: "dairy", label: "Dairy" },
-  { key: "bakery", label: "Bakery" },
-  { key: "medical", label: "Medical store" },
-  { key: "restaurant", label: "Restaurant/Tiffin" },
+  { key: "kirana", labelKey: "category.groceryKirana" },
+  { key: "vegetables", labelKey: "category.vegetables" },
+  { key: "fruits", labelKey: "category.fruits" },
+  { key: "dairy", labelKey: "category.dairy" },
+  { key: "bakery", labelKey: "category.bakery" },
+  { key: "medical", labelKey: "category.medicalStore" },
+  { key: "restaurant", labelKey: "category.restaurantTiffin" },
 ];
 
 const DEFAULT_MASTER_IMAGES: Record<string, string> = {
@@ -35,9 +36,23 @@ const DEFAULT_MASTER_IMAGES: Record<string, string> = {
   default: "https://images.unsplash.com/photo-1542838132-92c53300491e?q=80&w=600",
 };
 
+function normalizeSearchText(value: string) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\u0900-\u097f\u0c80-\u0cff]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function flattenLocalNames(localNames: any) {
+  if (!localNames || typeof localNames !== "object") return [];
+  return Object.values(localNames).flatMap((value: any) => Array.isArray(value) ? value : [value]).filter(Boolean);
+}
+
 export default function CustomerVendorDiscoveryScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  const { language, t } = useLanguage();
 
   const [category, setCategory] = useState("vegetables");
   const [lat, setLat] = useState<number | null>(null);
@@ -58,20 +73,20 @@ export default function CustomerVendorDiscoveryScreen() {
 
   async function useCurrentLocation() {
     setErrorMessage("");
-    setStatusMessage("Requesting location permission...");
+    setStatusMessage(t("discovery.requestingLocation"));
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== "granted") {
       setStatusMessage("");
-      setErrorMessage("Location permission was not granted. You can still search by entering PIN code or locality manually.");
-      Alert.alert("Location permission", "Enter PIN code or locality manually to search nearby vendors.");
+      setErrorMessage(t("discovery.locationDenied"));
+      Alert.alert(t("discovery.locationPermissionTitle"), t("discovery.locationManualPrompt"));
       return;
     }
 
     const current = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
     setLat(current.coords.latitude);
     setLng(current.coords.longitude);
-    setStatusMessage("Location added. Click Search Nearby Vendors to continue.");
-    Alert.alert("Location added", "We will search nearby verified vendors within 1 kilometre.");
+    setStatusMessage(t("discovery.locationAdded"));
+    Alert.alert(t("auth.locationAdded"), t("discovery.locationAddedAlert"));
   }
 
   async function searchVendors() {
@@ -81,15 +96,17 @@ export default function CustomerVendorDiscoveryScreen() {
     setVendors([]);
 
     if (!lat && !lng && !pincode.trim() && !locality.trim()) {
-      setErrorMessage("Allow location permission or enter PIN code/locality before searching.");
-      Alert.alert("Location required", "Allow location permission or enter PIN code/locality.");
+      setErrorMessage(t("discovery.locationRequired"));
+      Alert.alert(t("discovery.locationRequiredTitle"), t("discovery.locationRequired"));
       return;
     }
 
     setLoading(true);
-    setStatusMessage("Searching verified vendors within 500 metres first, then up to 1 kilometre...");
+    setStatusMessage(t("discovery.searchingNearby"));
     try {
       const query = new URLSearchParams({ category });
+      query.set("language", language);
+      if (productSearch.trim()) query.set("q", productSearch.trim());
       if (lat != null && lng != null) {
         query.set("lat", String(lat));
         query.set("lng", String(lng));
@@ -99,7 +116,7 @@ export default function CustomerVendorDiscoveryScreen() {
 
       const response = await fetch(apiUrl(`/api/discovery/vendors?${query.toString()}`));
       const json = await response.json();
-      if (!response.ok || !json.success) throw new Error(json.error || "Unable to search vendors.");
+      if (!response.ok || !json.success) throw new Error(json.error || t("discovery.searchFailedGeneric"));
 
       setVendors(json.vendors || []);
       setSearchRadius(json.search_radius_m || null);
@@ -107,16 +124,16 @@ export default function CustomerVendorDiscoveryScreen() {
       setStatusMessage(
         (json.vendors || []).length > 0
           ? `Found ${(json.vendors || []).length} nearby vendor(s).`
-          : "No registered available vendor was found within 1 kilometre for this category."
+          : t("discovery.noVendorInRadius")
       );
     } catch (error) {
       setStatusMessage("");
       setErrorMessage(
         error instanceof Error
-          ? `Search failed: ${error.message}`
-          : "Search failed because the backend did not respond."
+          ? `${t("discovery.searchFailedTitle")}: ${error.message}`
+          : t("discovery.backendNoResponse")
       );
-      Alert.alert("Search failed", error instanceof Error ? error.message : "Unknown error");
+      Alert.alert(t("discovery.searchFailedTitle"), error instanceof Error ? error.message : t("discovery.unknownError"));
     } finally {
       setLoading(false);
     }
@@ -124,13 +141,13 @@ export default function CustomerVendorDiscoveryScreen() {
 
   async function saveUnservedLead(button: string) {
     if (!pincode.trim() && !locality.trim() && !lat && !lng) {
-      Alert.alert("Locality needed", "Enter at least a PIN code or locality so our team can identify nearby vendors.");
+      Alert.alert(t("discovery.localityNeededTitle"), t("discovery.localityNeeded"));
       return;
     }
 
     setLeadSaving(true);
     setErrorMessage("");
-    setStatusMessage("Saving your requirement for company follow-up...");
+    setStatusMessage(t("discovery.savingRequirement"));
     try {
       const response = await fetch(apiUrl("/api/discovery/unserved-area-leads"), {
         method: "POST",
@@ -149,20 +166,20 @@ export default function CustomerVendorDiscoveryScreen() {
       });
 
       const json = await response.json();
-      if (!response.ok || !json.success) throw new Error(json.error || "Unable to record requirement.");
-      setStatusMessage("Requirement recorded. We will notify you when a suitable registered vendor becomes active nearby.");
-      Alert.alert("Requirement recorded", "We will notify you when a suitable registered vendor becomes available nearby.");
+      if (!response.ok || !json.success) throw new Error(json.error || t("discovery.recordFailed"));
+      setStatusMessage(t("discovery.requirementRecorded"));
+      Alert.alert(t("discovery.requirementRecordedTitle"), t("discovery.requirementRecorded"));
     } catch (error) {
       setStatusMessage("");
-      setErrorMessage(error instanceof Error ? `Could not save: ${error.message}` : "Could not save your requirement.");
-      Alert.alert("Could not save", error instanceof Error ? error.message : "Unknown error");
+      setErrorMessage(error instanceof Error ? `${t("discovery.saveFailedTitle")}: ${error.message}` : t("discovery.saveFailed"));
+      Alert.alert(t("discovery.saveFailedTitle"), error instanceof Error ? error.message : t("discovery.unknownError"));
     } finally {
       setLeadSaving(false);
     }
   }
 
   const filteredVendors = useMemo(() => {
-    const term = productSearch.trim().toLowerCase();
+    const term = normalizeSearchText(productSearch);
     if (!term) return vendors;
     return vendors
       .map((vendor) => ({
@@ -171,10 +188,14 @@ export default function CustomerVendorDiscoveryScreen() {
           const text = [
             product.item_name,
             product.generic_product_name,
+            product.master_standard_title,
             product.local_name,
             product.local_language_name,
             product.hindi_name,
             product.kannada_name,
+            ...flattenLocalNames(product.local_names),
+            ...(product.search_keywords || []),
+            ...(product.alternative_spellings || []),
             product.brand_name,
             product.variant_name,
             product.pack_size,
@@ -183,9 +204,8 @@ export default function CustomerVendorDiscoveryScreen() {
             product.category,
           ]
             .filter(Boolean)
-            .join(" ")
-            .toLowerCase();
-          return text.includes(term);
+            .join(" ");
+          return normalizeSearchText(text).includes(term);
         }),
       }))
       .filter((vendor) => (vendor.available_products || []).length > 0);
@@ -213,7 +233,7 @@ export default function CustomerVendorDiscoveryScreen() {
   function openCart(vendor: any) {
     const cartData = cartByShop[shopKey(vendor)] || {};
     if (Object.keys(cartData).length === 0) {
-      Alert.alert("Select products", "Add at least one available product from this shop before opening the cart.");
+      Alert.alert(t("discovery.selectProductsTitle"), t("discovery.selectProducts"));
       return;
     }
 
@@ -236,12 +256,18 @@ export default function CustomerVendorDiscoveryScreen() {
     return DEFAULT_MASTER_IMAGES[category] || DEFAULT_MASTER_IMAGES.default;
   }
 
+  function localizedProductTitle(product: any) {
+    const localValue = product.local_names?.[language];
+    const localName = Array.isArray(localValue) ? localValue[0] : localValue;
+    return localName || product.local_name || product.generic_product_name || product.item_name || product.master_standard_title || t("product.generic");
+  }
+
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.heading}>Find Nearby Vendors</Text>
-      <Text style={styles.subtitle}>We search verified open vendors within 500 metres first, then up to 1 kilometre.</Text>
+      <Text style={styles.heading}>{t("discovery.title")}</Text>
+      <Text style={styles.subtitle}>{t("discovery.subtitle")}</Text>
 
-      <Text style={styles.label}>Select category</Text>
+      <Text style={styles.label}>{t("discovery.selectCategory")}</Text>
       <View style={styles.categoryGrid}>
         {CATEGORIES.map((item) => (
           <TouchableOpacity
@@ -249,22 +275,22 @@ export default function CustomerVendorDiscoveryScreen() {
             style={[styles.categoryChip, category === item.key && styles.categorySelected]}
             onPress={() => setCategory(item.key)}
           >
-            <Text style={[styles.categoryText, category === item.key && styles.categorySelectedText]}>{item.label}</Text>
+            <Text style={[styles.categoryText, category === item.key && styles.categorySelectedText]}>{t(item.labelKey)}</Text>
           </TouchableOpacity>
         ))}
       </View>
 
       <TouchableOpacity style={styles.locationBtn} onPress={useCurrentLocation}>
-        <Text style={styles.locationText}>Use Current Location</Text>
+        <Text style={styles.locationText}>{t("discovery.useCurrentLocation")}</Text>
       </TouchableOpacity>
 
-      <Text style={styles.orText}>Or enter location manually</Text>
-      <TextInput style={styles.input} placeholder="PIN code" value={pincode} onChangeText={setPincode} keyboardType="number-pad" />
-      <TextInput style={styles.input} placeholder="Locality" value={locality} onChangeText={setLocality} />
-      <TextInput style={styles.input} placeholder="City" value={city} onChangeText={setCity} />
+      <Text style={styles.orText}>{t("discovery.orManual")}</Text>
+      <TextInput style={styles.input} placeholder={t("auth.pinCode")} value={pincode} onChangeText={setPincode} keyboardType="number-pad" />
+      <TextInput style={styles.input} placeholder={t("auth.streetLocality")} value={locality} onChangeText={setLocality} />
+      <TextInput style={styles.input} placeholder={t("auth.city")} value={city} onChangeText={setCity} />
 
       <TouchableOpacity style={styles.searchBtn} onPress={searchVendors} disabled={loading}>
-        <Text style={styles.searchText}>{loading ? "Searching..." : "Search Nearby Vendors"}</Text>
+        <Text style={styles.searchText}>{loading ? t("discovery.searching") : t("discovery.searchNearbyVendors")}</Text>
       </TouchableOpacity>
 
       {loading ? <ActivityIndicator style={{ marginTop: 16 }} /> : null}
@@ -289,14 +315,14 @@ export default function CustomerVendorDiscoveryScreen() {
 
       {vendors.length > 0 ? (
         <View style={styles.catalogueIntro}>
-          <Text style={styles.catalogueTitle}>Shop available products</Text>
-          <Text style={styles.catalogueText}>Browse verified products from nearby shops. Vendor uploaded images take priority over catalog images.</Text>
+          <Text style={styles.catalogueTitle}>{t("discovery.shopProducts")}</Text>
+          <Text style={styles.catalogueText}>{t("discovery.shopProductsText")}</Text>
           <TextInput
             style={styles.input}
-            placeholder="Search product, brand, Hindi or Kannada name"
+            placeholder={t("discovery.productSearchPlaceholder")}
             value={productSearch}
             onChangeText={setProductSearch}
-            accessibilityLabel="Search products"
+            accessibilityLabel={t("discovery.productSearchLabel")}
           />
         </View>
       ) : null}
@@ -318,18 +344,18 @@ export default function CustomerVendorDiscoveryScreen() {
             )}
             <View style={{ flex: 1 }}>
               <Text style={styles.shopName}>{vendor.shop_name}</Text>
-              <Text style={styles.vendorMeta}>{vendor.category} | {vendor.distance_label || "Nearby"}</Text>
+              <Text style={styles.vendorMeta}>{vendor.category} | {vendor.distance_label || t("discovery.nearby")}</Text>
               {vendor.verified_vendor || vendor.verification_status === "kyc_verified" ? (
-                <Text style={styles.verifiedBadge}>Verified Vendor</Text>
+                <Text style={styles.verifiedBadge}>{t("discovery.verifiedVendor")}</Text>
               ) : null}
             </View>
             <Text style={[styles.status, vendor.open_now ? styles.open : styles.closed]}>
-              {vendor.open_now ? "Open" : "Closed"}
+              {vendor.open_now ? t("discovery.open") : t("discovery.closed")}
             </Text>
           </View>
 
-          <Text style={styles.vendorMeta}>Rating: ⭐ {Number(vendor.rating || 4.5).toFixed(1)} ({vendor.rating_count || 12}+ reviews)</Text>
-          <Text style={styles.vendorMeta}>Fulfilment: approx. {vendor.estimated_fulfilment_minutes || 15-20} mins</Text>
+          <Text style={styles.vendorMeta}>{t("discovery.rating")}: {Number(vendor.rating || 4.5).toFixed(1)} ({vendor.rating_count || 12}+)</Text>
+          <Text style={styles.vendorMeta}>{t("discovery.fulfilment")}: {vendor.estimated_fulfilment_minutes || 20} {t("discovery.minutes")}</Text>
 
           {/* Modern Blinkit / Zepto Product Showcase Cards */}
           <View style={styles.productsList}>
@@ -347,20 +373,20 @@ export default function CustomerVendorDiscoveryScreen() {
                   </View>
 
                   <View style={styles.productDetails}>
-                    <Text style={styles.itemTitle}>{product.item_name || product.generic_product_name}</Text>
+                    <Text style={styles.itemTitle}>{localizedProductTitle(product)}</Text>
                     {product.hindi_name || product.kannada_name ? (
                       <Text style={styles.localLangName}>{product.hindi_name || product.kannada_name}</Text>
                     ) : null}
                     
-                    <Text style={styles.freshnessBadge}>🌱 Fresh Stock Available</Text>
+                    <Text style={styles.freshnessBadge}>{t("discovery.freshStock")}</Text>
 
                     <View style={styles.priceActionRow}>
                       <View>
                         <Text style={styles.priceText}>
-                          ₹{product.price || product.selling_price || 20}{" "}
-                          {product.mrp ? <Text style={styles.mrpText}>₹{product.mrp}</Text> : null}
+                          Rs {product.price || product.selling_price || 20}{" "}
+                          {product.mrp ? <Text style={styles.mrpText}>Rs {product.mrp}</Text> : null}
                         </Text>
-                        <Text style={styles.unitMeta}>per {product.pack_size || "500g"}</Text>
+                        <Text style={styles.unitMeta}>{t("discovery.per")} {product.pack_size || product.pack_unit || product.unit || t("discovery.unit")}</Text>
                       </View>
 
                       {qty > 0 ? (
@@ -375,7 +401,7 @@ export default function CustomerVendorDiscoveryScreen() {
                         </View>
                       ) : (
                         <TouchableOpacity style={styles.addBtn} onPress={() => setProductQty(vendor, product.id, 1)}>
-                          <Text style={styles.addBtnText}>ADD</Text>
+                          <Text style={styles.addBtnText}>{t("home.add").toUpperCase()}</Text>
                         </TouchableOpacity>
                       )}
                     </View>
@@ -387,7 +413,7 @@ export default function CustomerVendorDiscoveryScreen() {
 
           <TouchableOpacity style={styles.orderBtn} onPress={() => openCart(vendor)}>
             <Text style={styles.orderText}>
-              {Object.keys(cartByShop[shopKey(vendor)] || {}).length > 0 ? "Review Cart & Pay" : "Add Items First"}
+              {Object.keys(cartByShop[shopKey(vendor)] || {}).length > 0 ? t("discovery.reviewCart") : t("discovery.addItemsFirst")}
             </Text>
           </TouchableOpacity>
         </View>
@@ -395,23 +421,23 @@ export default function CustomerVendorDiscoveryScreen() {
 
       {vendors.length > 0 && filteredVendors.length === 0 ? (
         <View style={styles.emptyCard}>
-          <Text style={styles.emptyTitle}>No matching products</Text>
-          <Text style={styles.emptyText}>Try another product name, brand, Hindi or Kannada term.</Text>
+          <Text style={styles.emptyTitle}>{t("discovery.noMatchingProducts")}</Text>
+          <Text style={styles.emptyText}>{t("discovery.tryAnotherLanguageTerm")}</Text>
         </View>
       ) : null}
 
       {!loading && (searchRadius || errorMessage) && vendors.length === 0 ? (
         <View style={styles.emptyCard}>
-          <Text style={styles.emptyTitle}>We are sorry!</Text>
+          <Text style={styles.emptyTitle}>{t("discovery.sorryTitle")}</Text>
           <Text style={styles.emptyText}>
-            No SabSewa Local vendor matching your requirement is currently listed in your area. As more people start using SabSewa Local in your locality, our team will work to identify and onboard suitable nearby vendors.
+            {t("vendor.noneFound")}
           </Text>
 
           <TouchableOpacity style={styles.emptyBtn} onPress={() => saveUnservedLead("request_local_vendor")} disabled={leadSaving}>
-            <Text style={styles.emptyBtnText}>Request a Vendor in My Area</Text>
+            <Text style={styles.emptyBtnText}>{t("vendor.requestArea")}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.secondaryBtn} onPress={() => setCategory("kirana")}>
-            <Text style={styles.secondaryText}>Choose Another Category</Text>
+            <Text style={styles.secondaryText}>{t("discovery.chooseAnotherCategory")}</Text>
           </TouchableOpacity>
         </View>
       ) : null}

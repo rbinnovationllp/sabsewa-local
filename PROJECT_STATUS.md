@@ -19,6 +19,18 @@ Official support contact: `support@sabsewa.in`, `+91 8450092846`, `+91 817811344
 - Hardened `mobile/app/company/_layout.tsx` so `/company` requires an authenticated admin role and backend Master Admin session/secret verification. Frontend hard-coded Master Admin secret fallbacks were removed.
 - Validation: production web build validation passed. TypeScript CLI was not available in the current local `mobile/node_modules`, so full `npm run typecheck` needs dev dependencies installed before rerunning locally.
 
+## 2026-08-18 - Multilingual UI And Product Search Hardening
+
+- Confirmed the active language architecture is the custom `LanguageProvider` with persisted English/Hindi/Kannada selection through web localStorage and mobile SecureStore/AsyncStorage.
+- Added missing-translation warning telemetry in `mobile/providers/LanguageProvider.tsx` so unresolved UI keys are logged during testing instead of silently looking complete.
+- Expanded customer nearby-vendor discovery so the selected language and product search query are sent to the backend discovery API.
+- Updated `mobile/server/hyperlocal/discoveryRoutes.js` to enrich vendor items with `master_product_catalog` fields including `local_names`, `search_keywords`, `alternative_spellings`, category/subcategory and generic image data before filtering and returning nearby vendors.
+- Updated the customer discovery UI and shared product grid to prefer selected-language product names where available and to search across English, Hindi, Kannada, aliases and local names without translating vendor/shop/user-entered content.
+- Added English, Hindi and Kannada translation keys for the customer discovery/search flow and basic product-grid empty states.
+- No Supabase migration is required for this change if the existing `master_product_catalog.local_names`, `search_keywords`, `alternative_spellings` and `vendor_items.master_product_id` columns from earlier catalogue work are already present.
+- Remaining limitation: this is not yet a full legal/product-wide translation certification. Older admin, vendor, partner, wallet and legal screens still contain hard-coded English strings and need phased localization review before claiming complete app-wide Hindi/Kannada coverage.
+- Validation pending: rebuild/export web bundle, restart EC2 backend, and test customer category/location/product searches using English, Hindi and Kannada product terms against real catalogue data.
+
 ## 2026-08-17 - Final Vendor Pricing, GST, Security Deposit and Optional Monthly Plans
 
 - Updated backend-resolved category Pay As You Go pricing to base platform fee plus GST:

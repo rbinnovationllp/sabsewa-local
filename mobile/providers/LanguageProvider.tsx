@@ -1,6 +1,6 @@
 import * as SecureStore from "expo-secure-store";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { Platform } from "react-native";
 import {
   DEFAULT_LANGUAGE,
@@ -13,6 +13,7 @@ import { knCommon } from "@/locales/kn/common";
 
 type LanguageContextType = {
   language: SabSewaLanguageCode;
+  lang: SabSewaLanguageCode;
   setLanguage: (language: SabSewaLanguageCode) => void;
   isLanguageAvailable: (language: SabSewaLanguageCode) => boolean;
   t: (key: CommonTranslationKey | string, replacements?: Record<string, string | number>) => string;
@@ -30,6 +31,7 @@ const BUNDLED_TRANSLATIONS: Partial<Record<SabSewaLanguageCode, Record<string, s
 
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
   const [language, setLanguageState] = useState<SabSewaLanguageCode>(DEFAULT_LANGUAGE);
+  const missingKeysRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     restoreLanguage();
@@ -93,11 +95,16 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo(
     () => ({
       language,
+      lang: language,
       setLanguage: persistLanguage,
       isLanguageAvailable: (code: SabSewaLanguageCode) => FUNCTIONAL_LANGUAGES.includes(code),
       t: (key: CommonTranslationKey | string, replacements?: Record<string, string | number>) => {
         const dictionary = BUNDLED_TRANSLATIONS[language] || enCommon;
         let translated = dictionary[key] || enCommon[key as CommonTranslationKey] || key;
+        if (translated === key && !missingKeysRef.current.has(`${language}:${key}`)) {
+          missingKeysRef.current.add(`${language}:${key}`);
+          console.warn("Missing SabSewa translation key", { language, key });
+        }
         Object.entries(replacements || {}).forEach(([name, value]) => {
           translated = translated.replace(new RegExp(`{${name}}`, "g"), String(value));
         });

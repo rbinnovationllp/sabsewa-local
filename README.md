@@ -254,6 +254,12 @@ Required setup after pulling this code:
 
 Partner activation flow: Application Submitted -> Partner KYC Uploaded/Submitted -> Partner KYC Verified -> Payment Details Verified -> Master Admin Approval -> Active Partner. Commission statements are accounting records only and do not automatically transfer funds.
 
+### Partner KYC CRM Review Monitor
+
+Company CRM now separates Partner KYC and Vendor KYC monitoring. Partner KYC counters are loaded from the secured backend endpoint `GET /api/partner/admin/kyc/summary`, while vendor counters continue to use `GET /api/company/kyc/summary`. Partner KYC submission writes the application to `under_review`, records an admin-audit review-queue event, and returns a database-confirmed reference-number message to the applicant. The Partner Applications page supports direct filtered opening, for example `/company/PartnerApplications?filter=kyc_pending`.
+
+This is a manual-review queue and counter integration. Advanced AI document classification, malware scanning, reviewer assignment restrictions and second-level high-risk approval remain compliance workstream items unless separately implemented and tested.
+
 
 ### 2026-08-10 language selection functionality
 - Connected language selection to the shared LanguageProvider persistence path for English, Hindi and Kannada.

@@ -21,6 +21,8 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 *
 
 const DEFAULT_BENEFIT_PERCENT = 10;
 const PARTNER_TERMS_VERSION = "partner-program-local-2026-08-10";
+const PARTNER_KYC_REVIEW_WINDOW_MS = 48 * 60 * 60 * 1000;
+const PARTNER_KYC_APPROACHING_WINDOW_MS = 12 * 60 * 60 * 1000;
 const PAYMENT_METHODS = new Set(["bank_account", "upi"]);
 const KYC_SECTIONS = {
   identity_proof: ["aadhaar", "pan_card", "voter_id", "driving_licence", "passport", "other_identity_proof"],
@@ -149,6 +151,56 @@ function publicApplication(application, paymentDetail = null) {
     active_at: application.active_at || null,
     approved_at: application.approved_at || null,
   };
+}
+
+function partnerKycSubmittedAt(application) {
+  return application?.kyc_submitted_at || application?.submitted_at || application?.created_at || null;
+}
+
+function partnerKycDeadline(application) {
+  const submittedAt = partnerKycSubmittedAt(application);
+  const submittedMs = submittedAt ? new Date(submittedAt).getTime() : NaN;
+  if (!Number.isFinite(submittedMs)) return null;
+  return new Date(submittedMs + PARTNER_KYC_REVIEW_WINDOW_MS).toISOString();
+}
+
+function isPartnerKycPending(application) {
+  return ["documents_submitted", "under_review"].includes(String(application?.kyc_status || ""));
+}
+
+function summarizePartnerKyc(applications = []) {
+  const now = Date.now();
+  const summary = {
+    partner_kyc_pending: 0,
+    partner_kyc_documents_submitted: 0,
+    partner_kyc_under_review: 0,
+    partner_kyc_approaching_deadline: 0,
+    partner_kyc_overdue: 0,
+    partner_kyc_resubmission_required: 0,
+    partner_kyc_approved: 0,
+    partner_kyc_rejected: 0,
+    partner_kyc_suspicious_review: 0,
+    total_partner_applications: applications.length,
+  };
+
+  for (const application of applications) {
+    const status = String(application?.kyc_status || "not_submitted");
+    if (status === "documents_submitted") summary.partner_kyc_documents_submitted += 1;
+    if (status === "under_review") summary.partner_kyc_under_review += 1;
+    if (status === "additional_information_required") summary.partner_kyc_resubmission_required += 1;
+    if (status === "verified") summary.partner_kyc_approved += 1;
+    if (status === "rejected") summary.partner_kyc_rejected += 1;
+
+    if (!isPartnerKycPending(application)) continue;
+    summary.partner_kyc_pending += 1;
+    const deadlineAt = partnerKycDeadline(application);
+    const deadlineMs = deadlineAt ? new Date(deadlineAt).getTime() : NaN;
+    if (!Number.isFinite(deadlineMs)) continue;
+    if (deadlineMs <= now) summary.partner_kyc_overdue += 1;
+    else if (deadlineMs - now <= PARTNER_KYC_APPROACHING_WINDOW_MS) summary.partner_kyc_approaching_deadline += 1;
+  }
+
+  return summary;
 }
 
 async function currentPaymentDetail(applicationId) {
@@ -634,9 +686,73 @@ router.post("/applications/:application_id/submit-kyc", async (req, res) => {
       .select("*")
       .single();
     if (error) throw error;
-    return res.json({ success: true, application: publicApplication(data, await currentPaymentDetail(data.id)) });
+
+    await supabaseAdmin.from("partner_admin_audit_logs").insert({
+      partner_application_id: application.id,
+      action: "partner_kyc_submitted_for_manual_review",
+      previous_status: "Partner KYC documents uploaded",
+      new_status: "KYC: under_review",
+      reason: "Partner submitted mandatory KYC package",
+      metadata: {
+        review_task_created: true,
+        preliminary_screening_status: "PRELIMINARY_SCREENING_PENDING",
+        manual_review_status: "READY_FOR_MANUAL_REVIEW",
+        kyc_submitted_at: now,
+        kyc_review_deadline_at: partnerKycDeadline(data),
+      },
+    });
+
+    return res.json({
+      success: true,
+      message: `Your partner application and KYC documents have been submitted successfully. Your application reference number is ${data.application_id || data.partner_id || data.id}. The documents will now undergo preliminary screening followed by manual verification.`,
+      review_task_created: true,
+      preliminary_screening_status: "PRELIMINARY_SCREENING_PENDING",
+      manual_review_status: "READY_FOR_MANUAL_REVIEW",
+      application: publicApplication(data, await currentPaymentDetail(data.id)),
+    });
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message || "Unable to submit Partner KYC for review." });
+  }
+});
+
+router.get("/admin/kyc/summary", ...requireAdmin, async (req, res) => {
+  try {
+    const { data: applications, error } = await supabaseAdmin
+      .from("partner_applications")
+      .select("id, application_id, partner_id, applicant_name, phone, status, kyc_status, payment_details_status, created_at, kyc_submitted_at")
+      .order("kyc_submitted_at", { ascending: true, nullsFirst: false })
+      .limit(1000);
+    if (error) throw error;
+
+    const summary = summarizePartnerKyc(applications || []);
+    const pendingCases = (applications || [])
+      .filter(isPartnerKycPending)
+      .map((application) => ({
+        id: application.id,
+        application_id: application.application_id || application.partner_id || application.id,
+        partner_id: application.partner_id || null,
+        applicant_name: application.applicant_name || null,
+        phone: application.phone || null,
+        status: application.status || "pending",
+        kyc_status: application.kyc_status || "not_submitted",
+        payment_details_status: application.payment_details_status || "pending_verification",
+        submitted_at: partnerKycSubmittedAt(application),
+        deadline_at: partnerKycDeadline(application),
+      }));
+
+    return res.json({
+      success: true,
+      summary,
+      pending_cases: pendingCases,
+      generated_at: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error("Partner KYC summary load failed", {
+      message: error?.message,
+      code: error?.code || null,
+      details: error?.details || null,
+    });
+    return res.status(500).json({ success: false, error: error.message || "Unable to load Partner KYC summary." });
   }
 });
 

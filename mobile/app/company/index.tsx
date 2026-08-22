@@ -15,12 +15,25 @@ type KycSummary = {
   resubmission_required: number;
 };
 
+type PartnerKycSummary = {
+  partner_kyc_pending: number;
+  partner_kyc_documents_submitted: number;
+  partner_kyc_under_review: number;
+  partner_kyc_approaching_deadline: number;
+  partner_kyc_overdue: number;
+  partner_kyc_resubmission_required: number;
+  partner_kyc_approved: number;
+  partner_kyc_rejected: number;
+  partner_kyc_suspicious_review: number;
+  total_partner_applications: number;
+};
+
 export default function CompanyCrmHome() {
   const router = useRouter();
   const [paymentEnvironment, setPaymentEnvironment] = useState<any>(null);
   const [kycSummary, setKycSummary] = useState<KycSummary | null>(null);
+  const [partnerKycSummary, setPartnerKycSummary] = useState<PartnerKycSummary | null>(null);
   const [loadingKyc, setLoadingKyc] = useState(false);
-  const [partnerKycPending, setPartnerKycPending] = useState(0);
 
   useEffect(() => {
     fetch(apiUrl("/api/admin/payment-environment"))
@@ -48,17 +61,18 @@ export default function CompanyCrmHome() {
     router.push({ pathname: "/company/KycReviewQueue", params: { filter } } as any);
   }
 
+  function openPartnerQueue(filter: string) {
+    router.push({ pathname: "/company/PartnerApplications", params: { filter } } as any);
+  }
+
   async function loadPartnerKycSummary() {
     try {
-      const response = await authenticatedFetch("/api/partner/admin/applications");
+      const response = await authenticatedFetch("/api/partner/admin/kyc/summary");
       const json = await response.json();
-      if (!response.ok || !json.success) return;
-      const pending = (json.applications || []).filter((application: any) =>
-        ["documents_submitted", "under_review"].includes(String(application.kyc_status || ""))
-      ).length;
-      setPartnerKycPending(pending);
+      if (!response.ok || !json.success) throw new Error(json.error || "Unable to load Partner KYC summary.");
+      setPartnerKycSummary(json.summary);
     } catch {
-      setPartnerKycPending(0);
+      setPartnerKycSummary(null);
     }
   }
 
@@ -78,21 +92,52 @@ export default function CompanyCrmHome() {
       ) : null}
 
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>KYC Review Monitor</Text>
+        <Text style={styles.sectionTitle}>Partner KYC Review Monitor</Text>
+        {loadingKyc ? <ActivityIndicator /> : null}
+      </View>
+      <View style={styles.metricGrid}>
+        <TouchableOpacity style={styles.metricCard} onPress={() => openPartnerQueue("kyc_pending")}>
+          <Text style={styles.metricValue}>{partnerKycSummary?.partner_kyc_pending || 0}</Text>
+          <Text style={styles.metricLabel}>Partner KYC Pending</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.metricCard, styles.warnCard]} onPress={() => openPartnerQueue("approaching_deadline")}>
+          <Text style={styles.metricValue}>{partnerKycSummary?.partner_kyc_approaching_deadline || 0}</Text>
+          <Text style={styles.metricLabel}>Partner Approaching 48h</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.metricCard, styles.dangerCard]} onPress={() => openPartnerQueue("overdue")}>
+          <Text style={styles.metricValue}>{partnerKycSummary?.partner_kyc_overdue || 0}</Text>
+          <Text style={styles.metricLabel}>Partner KYC Overdue</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.metricCard} onPress={() => openPartnerQueue("additional_information_required")}>
+          <Text style={styles.metricValue}>{partnerKycSummary?.partner_kyc_resubmission_required || 0}</Text>
+          <Text style={styles.metricLabel}>Partner Resubmission Required</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.metricCard} onPress={() => openPartnerQueue("verified")}>
+          <Text style={styles.metricValue}>{partnerKycSummary?.partner_kyc_approved || 0}</Text>
+          <Text style={styles.metricLabel}>Partner KYC Approved</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.metricCard} onPress={() => openPartnerQueue("rejected")}>
+          <Text style={styles.metricValue}>{partnerKycSummary?.partner_kyc_rejected || 0}</Text>
+          <Text style={styles.metricLabel}>Partner KYC Rejected</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>Vendor KYC Review Monitor</Text>
         {loadingKyc ? <ActivityIndicator /> : null}
       </View>
       <View style={styles.metricGrid}>
         <TouchableOpacity style={styles.metricCard} onPress={() => openQueue("pending_review")}>
           <Text style={styles.metricValue}>{(kycSummary?.new_submitted || 0) + (kycSummary?.pending_review || 0)}</Text>
-          <Text style={styles.metricLabel}>KYC Pending Review</Text>
+          <Text style={styles.metricLabel}>Vendor KYC Pending</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.metricCard, styles.warnCard]} onPress={() => openQueue("pending_review")}>
           <Text style={styles.metricValue}>{kycSummary?.approaching_deadline || 0}</Text>
-          <Text style={styles.metricLabel}>Approaching 48h Deadline</Text>
+          <Text style={styles.metricLabel}>Vendor Approaching 48h</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.metricCard, styles.dangerCard]} onPress={() => openQueue("pending_review")}>
           <Text style={styles.metricValue}>{kycSummary?.overdue || 0}</Text>
-          <Text style={styles.metricLabel}>Overdue</Text>
+          <Text style={styles.metricLabel}>Vendor KYC Overdue</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.metricCard} onPress={() => openQueue("provisionally_cleared")}>
           <Text style={styles.metricValue}>{kycSummary?.provisionally_cleared || 0}</Text>
@@ -133,8 +178,8 @@ export default function CompanyCrmHome() {
       <TouchableOpacity style={styles.button} onPress={() => router.push("/company/PartnerApplications" as any)}>
         <Text style={styles.buttonText}>Partner Applications</Text>
       </TouchableOpacity>
-      <TouchableOpacity style={[styles.button, styles.warnCard]} onPress={() => router.push("/company/PartnerApplications" as any)}>
-        <Text style={styles.buttonText}>Partner KYC Pending Review: {partnerKycPending}</Text>
+      <TouchableOpacity style={[styles.button, styles.warnButton]} onPress={() => openPartnerQueue("kyc_pending")}>
+        <Text style={styles.warnButtonText}>Partner KYC Pending Review: {partnerKycSummary?.partner_kyc_pending || 0}</Text>
       </TouchableOpacity>
       <TouchableOpacity style={styles.button} onPress={() => router.push("/company/PartnerPayoutManagement" as any)}>
         <Text style={styles.buttonText}>Partner Payout Management</Text>
@@ -167,4 +212,6 @@ const styles = StyleSheet.create({
   metricLabel: { color: "#334155", fontWeight: "800", marginTop: 4 },
   button: { backgroundColor: "#1166ff", borderRadius: 8, padding: 15, marginBottom: 12 },
   buttonText: { color: "#fff", fontWeight: "900", textAlign: "center" },
+  warnButton: { backgroundColor: "#fff7ed", borderWidth: 1, borderColor: "#fdba74" },
+  warnButtonText: { color: "#9a3412", fontWeight: "900", textAlign: "center" },
 });

@@ -400,8 +400,12 @@ export default function PartnerWithUsScreen() {
         return;
       }
 
-      setConfirmation({ ...confirmation, ...(json.application || {}), kyc_status: "under_review" });
-      setKycSuccessMessage("🎉 Partner KYC Package Submitted Successfully! Status updated to Under Review.");
+      const updatedApplication = { ...confirmation, ...(json.application || {}), kyc_status: "under_review" };
+      setConfirmation(updatedApplication);
+      setKycSuccessMessage(
+        json.message ||
+          `🎉 Your partner application and KYC documents have been submitted successfully. Your application reference number is ${updatedApplication.application_id || updatedApplication.partner_id || updatedApplication.id}. The documents will now undergo preliminary screening followed by manual verification.`
+      );
       setTimeout(() => scrollRef.current?.scrollTo({ y: 0, animated: true }), 100);
     } catch (err: any) {
       Alert.alert("Submission Error", err?.message || "Network error submitting KYC.");

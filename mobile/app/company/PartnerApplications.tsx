@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Alert, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { useLocalSearchParams } from "expo-router";
 import BrandHeader from "@/components/BrandHeader";
 import { authenticatedFetch } from "@/lib/backend";
 
@@ -55,9 +56,12 @@ function latestReviewHistory(application: any) {
 
 
 export default function PartnerApplicationsScreen() {
-    const [applications, setApplications] = useState<any[]>([]);
+  const params = useLocalSearchParams<{ filter?: string }>();
+  const initialFilter = typeof params.filter === "string" ? params.filter : "all";
+  const [applications, setApplications] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
+  const [activeFilter, setActiveFilter] = useState(initialFilter || "all");
 
   async function loadApplications() {
     setLoading(true);
@@ -148,8 +152,22 @@ export default function PartnerApplicationsScreen() {
 
   const filtered = useMemo(() => {
     const needle = search.trim().toLowerCase();
-    if (!needle) return applications;
     return applications.filter((application) => {
+      const kycStatus = String(application.kyc_status || "not_submitted");
+      const appStatus = String(application.status || "pending");
+      const submittedAt = application.raw?.kyc_submitted_at || application.submitted_at || application.raw?.created_at;
+      const submittedMs = submittedAt ? new Date(submittedAt).getTime() : NaN;
+      const deadlineMs = Number.isFinite(submittedMs) ? submittedMs + 48 * 60 * 60 * 1000 : NaN;
+      const pendingKyc = ["documents_submitted", "under_review"].includes(kycStatus);
+      const filterMatches =
+        activeFilter === "all" ||
+        (activeFilter === "kyc_pending" && pendingKyc) ||
+        (activeFilter === "approaching_deadline" && pendingKyc && Number.isFinite(deadlineMs) && deadlineMs > Date.now() && deadlineMs - Date.now() <= 12 * 60 * 60 * 1000) ||
+        (activeFilter === "overdue" && pendingKyc && Number.isFinite(deadlineMs) && deadlineMs <= Date.now()) ||
+        kycStatus === activeFilter ||
+        appStatus === activeFilter;
+      if (!filterMatches) return false;
+      if (!needle) return true;
       const haystack = [
         application.applicant_name,
         application.partner_id,
@@ -160,10 +178,11 @@ export default function PartnerApplicationsScreen() {
         application.district,
         application.state,
         application.status,
+        application.kyc_status,
       ].join(" ").toLowerCase();
       return haystack.includes(needle);
     });
-  }, [applications, search]);
+  }, [activeFilter, applications, search]);
 
   const counts = useMemo(() => {
     return statuses.reduce((acc: Record<string, number>, status) => {
@@ -188,13 +207,23 @@ export default function PartnerApplicationsScreen() {
       </Text>
 
       <View style={styles.counterGrid}>
+        <TouchableOpacity style={[styles.counterCard, activeFilter === "all" && styles.counterActive]} onPress={() => setActiveFilter("all")}>
+          <Text style={styles.counterValue}>{applications.length}</Text>
+          <Text style={styles.counterLabel}>all</Text>
+        </TouchableOpacity>
         {statuses.map((status) => (
-          <View key={status} style={styles.counterCard}>
+          <TouchableOpacity key={status} style={[styles.counterCard, activeFilter === status && styles.counterActive]} onPress={() => setActiveFilter(status)}>
             <Text style={styles.counterValue}>{counts[status] || 0}</Text>
             <Text style={styles.counterLabel}>{status.replace(/_/g, " ")}</Text>
-          </View>
+          </TouchableOpacity>
         ))}
       </View>
+
+      {activeFilter !== "all" ? (
+        <TouchableOpacity style={styles.clearFilterButton} onPress={() => setActiveFilter("all")}>
+          <Text style={styles.clearFilterText}>Showing: {activeFilter.replace(/_/g, " ")} - Tap to clear filter</Text>
+        </TouchableOpacity>
+      ) : null}
 
       <TextInput
         style={styles.searchInput}
@@ -322,8 +351,11 @@ const styles = StyleSheet.create({
   alertTitle: { color: "#9a3412", backgroundColor: "#fff7ed", borderWidth: 1, borderColor: "#fdba74", borderRadius: 8, padding: 10, fontWeight: "900", marginBottom: 12 },
   counterGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 12 },
   counterCard: { minWidth: 120, flexGrow: 1, borderWidth: 1, borderColor: "#dbeafe", borderRadius: 8, padding: 10, backgroundColor: "#f8fbff" },
+  counterActive: { borderColor: "#1166ff", backgroundColor: "#eff6ff" },
   counterValue: { color: "#1166ff", fontSize: 22, fontWeight: "900" },
   counterLabel: { color: "#334155", fontWeight: "800", textTransform: "capitalize" },
+  clearFilterButton: { borderWidth: 1, borderColor: "#fdba74", backgroundColor: "#fff7ed", borderRadius: 8, padding: 10, marginBottom: 12 },
+  clearFilterText: { color: "#9a3412", fontWeight: "900", textAlign: "center", textTransform: "capitalize" },
   searchInput: { borderWidth: 1, borderColor: "#cbd5e1", borderRadius: 8, padding: 12, marginBottom: 12, backgroundColor: "#fff" },
   refreshButton: { backgroundColor: "#1166ff", borderRadius: 8, padding: 12, alignItems: "center", marginBottom: 12 },
   refreshText: { color: "#fff", fontWeight: "900" },

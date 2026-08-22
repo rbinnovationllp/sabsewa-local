@@ -1490,3 +1490,11 @@ Remaining production validation: test real vendor device behavior for PWA open/b
 - Added visible Master Admin controls inside Company CRM Admin Directory to lookup an existing Supabase Auth user by phone/email, assign a scoped admin role, authorize the admin profile and suspend/reactivate/revoke admin access.
 - Backend admin appointment now uses explicit admin-view/admin-management guards instead of relying on manual SQL. Only Master Admin/Super Admin style roles with all permissions can create or revoke admins.
 - Remaining manual rule: the proposed admin must already have a Supabase Auth user account before appointment; the CRM lookup finds that account and fills the internal Auth User ID.\n
+
+## 2026-08-23 - Partner KYC CRM Review Visibility
+
+- Added secured backend summary endpoint `GET /api/partner/admin/kyc/summary` so Partner KYC counters come from Supabase through the server rather than a browser-local list calculation.
+- Company CRM now displays separate Partner KYC and Vendor KYC review monitor sections with pending, approaching-deadline, overdue, approved/rejected and resubmission counters.
+- Partner KYC submission now returns a reference-number confirmation message and writes a partner admin audit event marking the case ready for manual review.
+- Partner Applications now accepts direct filters such as `filter=kyc_pending`, `filter=approaching_deadline`, `filter=overdue`, `filter=verified` and `filter=rejected`.
+- Current scope: reliable Partner KYC queue visibility and manual-review tracking. Full AI-assisted document screening, malware scanning, reviewer assignment restrictions and second-level high-risk approval are not marked complete until separately implemented and end-to-end tested.

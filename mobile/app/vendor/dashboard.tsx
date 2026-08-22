@@ -1,7 +1,7 @@
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from "react-native";
 import { useUser } from "@/contexts/UserContext";
 import { useAuth } from "@/providers/AuthProvider";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import BrandHeader from "@/components/BrandHeader";
@@ -11,6 +11,7 @@ export default function VendorDashboard() {
   const legacyUser = useUser().user;
   const { user } = useAuth();
   const router = useRouter();
+  const params: any = useLocalSearchParams();
 
   const [vendor, setVendor] = useState<any>(null);
   const [terminals, setTerminals] = useState<any[]>([]);
@@ -25,11 +26,16 @@ export default function VendorDashboard() {
     const userId = user?.id || legacyUser?.id;
     if (!userId) return;
 
-    const { data: vendorData } = await supabase
+    let query = supabase
       .from("vendors")
       .select("*")
-      .eq("owner_user_id", userId)
-      .single();
+      .eq("owner_user_id", userId);
+
+    if (params.vendor) {
+      query = query.eq("id", String(params.vendor));
+    }
+
+    const { data: vendorData } = await query.order("created_at", { ascending: false }).limit(1).maybeSingle();
 
     if (!vendorData) return;
     setVendor(vendorData);

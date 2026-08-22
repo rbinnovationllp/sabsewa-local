@@ -24,7 +24,7 @@ export function isAdminRole(role?: string | null) {
 
 function lastModuleAllowedForRole(normalizedRole: string, lastModule: string) {
   if (!lastModule || !lastModule.startsWith("/") || lastModule.startsWith("//")) return false;
-  if (lastModule.startsWith("/company") || lastModule.startsWith("/admin")) return isAdminRole(normalizedRole);
+  if (lastModule.startsWith("/company") || lastModule.startsWith("/admin")) return normalizedRole === "master_admin";
   if (lastModule.startsWith("/vendor")) return normalizedRole === "vendor";
   if (lastModule.startsWith("/partner")) return normalizedRole === "partner";
   if (lastModule.startsWith("/rider")) return normalizedRole === "rider";
@@ -43,7 +43,8 @@ export function routeForRole(role?: string | null, module?: string | null) {
   if (normalized === "vendor") return "/vendor/dashboard";
   if (normalized === "rider") return "/rider";
   if (normalized === "partner") return "/partner-dashboard";
-  if (isAdminRole(normalized)) return "/company";
+  if (normalized === "master_admin") return "/company";
+  if (isAdminRole(normalized)) return "/auth/unauthorized";
   if (normalized === "customer") return "/customer/dashboard";
   return "/hlm";
 }

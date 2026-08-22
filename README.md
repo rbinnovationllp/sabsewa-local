@@ -231,6 +231,10 @@ The Company CRM at `/company` is a Master Admin-only control area. Access requir
 
 Direct aliases such as `/admin/crm`, `/master-admin/crm` and `/company-crm` are routed through the same `/company` guard. Vendor, partner, customer and non-master admin routes must never redirect into the Master Admin verification page. Run `cd mobile/server && npm run validate:master-admin-security` after auth/routing changes.
 
+### Vendor OTP Login Routing
+
+Vendor login URLs such as `/auth/Login?role=vendor&intent=vendor_login` use a vendor-scoped post-OTP resolver. After OTP verification the app confirms the authenticated user owns a `vendors.owner_user_id` row, clears stale Master Admin redirect/session state, and routes by vendor onboarding status: KYC upload/status, onboarding payment/status, activation status, suspension view or active Vendor Dashboard. If multiple vendor businesses are linked, `/vendor/SelectBusiness` lets the user choose the correct shop/branch. Run `cd mobile/server && npm run validate:vendor-login-routing` after login or role-routing changes.
+
 ## Partner Program
 
 SabSewa Local includes a Partner With Us program for eligible customers, vendors, independent individuals, local promoters and organizations who can help build active hyperlocal marketplaces. Partners are expected to help onboard suitable local vendors and also create customer awareness around those vendors so nearby people know they can order through SabSewa Local.

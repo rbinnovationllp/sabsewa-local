@@ -1538,3 +1538,12 @@ Remaining production validation: test real vendor device behavior for PWA open/b
 - Vendor login/register routing remains isolated from the Master Admin route; signed-in non-vendor sessions are blocked from using the vendor login flow until the user signs out or switches account.
 - Added `mobile/server/scripts/validate-master-admin-security.mjs` and `npm run validate:master-admin-security` to detect regressions in this security boundary.
 - No new Supabase SQL is required for this code patch, but production must already have the Master Admin profile/assignment and backend-only Master Admin secret hash/signing environment variables configured.
+
+## 2026-08-23 - Vendor OTP Login Routing Repair
+
+- Fixed the post-OTP vendor-login bug where a multi-role Auth user could resolve `user_profiles.role = master_admin` and be sent to `/company` even though the login was started with `role=vendor&intent=vendor_login`.
+- Vendor-intent OTP completion now verifies the authenticated user owns at least one `vendors.owner_user_id` row, clears stale Master Admin/session redirect state, establishes a vendor-scoped browser context, and routes by authoritative vendor KYC/payment/lifecycle status.
+- Active vendors go to the Vendor Dashboard; KYC pending/under-review/resubmission statuses go to Vendor KYC; KYC-approved/payment-pending vendors go to Vendor Onboarding/payment; suspended vendors go to Vendor status/onboarding view; missing vendor relationship shows a support/resume-registration message instead of falling back to Company CRM.
+- Added `/vendor/SelectBusiness` for accounts that own multiple vendor businesses or branches, and updated Vendor Dashboard/Onboarding to respect the selected `vendor` query parameter.
+- OTP inputs are masked to avoid exposing live OTP values in screenshots/support recordings.
+- Added `mobile/server/scripts/validate-vendor-login-routing.mjs` and `npm run validate:vendor-login-routing` to prevent this regression.

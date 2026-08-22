@@ -20,6 +20,7 @@ import { getDeviceMetadata } from "@/lib/deviceIdentity";
 import { useLanguage } from "@/providers/LanguageProvider";
 import { completeRegistrationProfile } from "@/lib/registrationCompletion";
 import { authErrorKey, maskPhone, normalizeIndianPhone, validateIndianMobile } from "@/lib/phone";
+import { setVendorSessionContext, vendorDestinationForStatus } from "@/lib/vendorLoginRouting";
 
 const PHONE_AUTH_ENABLED = process.env.EXPO_PUBLIC_PHONE_AUTH_ENABLED === "true";
 const EMAIL_OTP_ENABLED = process.env.EXPO_PUBLIC_EMAIL_OTP_ENABLED === "true";
@@ -51,6 +52,7 @@ export default function LoginScreen() {
   const [token, setToken] = useState("");
   const [trustDevice, setTrustDevice] = useState(true);
   const [technicalError, setTechnicalError] = useState<string | null>(null);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
   const [submitLoading, setSubmitLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -97,9 +99,36 @@ export default function LoginScreen() {
     }
   };
 
+  async function openVerifiedVendorAccount(authUserId: string) {
+    const { data: vendors, error } = await supabase
+      .from("vendors")
+      .select("id, shop_name, vendor_name, owner_name, phone_number, phone, locality, city, category, kyc_status, onboarding_payment_status, lifecycle_status, status, created_at")
+      .eq("owner_user_id", authUserId)
+      .order("created_at", { ascending: false })
+      .limit(25);
+
+    if (error) throw error;
+
+    if (!vendors?.length) {
+      setError("Your mobile number was verified, but we could not securely locate your vendor profile. Please contact support or resume registration.");
+      return;
+    }
+
+    setVendorSessionContext();
+    setStatusMessage("Vendor login successful. We are opening your vendor account.");
+
+    if (vendors.length > 1) {
+      navigateTo("/vendor/SelectBusiness");
+      return;
+    }
+
+    navigateTo(vendorDestinationForStatus(vendors[0]));
+  }
+
   async function handleSendOTP() {
     setError(null);
     setTechnicalError(null);
+    setStatusMessage(null);
     setSubmitLoading(true);
 
     try {
@@ -156,6 +185,7 @@ export default function LoginScreen() {
   async function handleVerifyOTP() {
     setError(null);
     setTechnicalError(null);
+    setStatusMessage(null);
     setSubmitLoading(true);
 
     try {
@@ -251,6 +281,12 @@ export default function LoginScreen() {
         }
       }
 
+      if (isVendorLoginIntent && params.registering !== "1") {
+        if (!data.user?.id) throw new Error("Authenticated vendor user was not returned after OTP verification.");
+        await openVerifiedVendorAccount(data.user.id);
+        return;
+      }
+
       if (params.registering === "1" && role === "customer") {
         if (Platform.OS === "web") {
           navigateTo("/customer/discover");
@@ -332,6 +368,7 @@ export default function LoginScreen() {
       <Text style={styles.title}>{t("auth.loginTitle")}</Text>
 
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
+      {statusMessage ? <Text style={styles.statusText}>{statusMessage}</Text> : null}
       {technicalError ? <Text style={styles.technicalError}>{t("auth.diagnosticReference", { reference: technicalError })}</Text> : null}
 
       {!otpSent ? (
@@ -435,6 +472,7 @@ export default function LoginScreen() {
             style={styles.input}
             placeholder={t("auth.otpPlaceholder")}
             keyboardType="number-pad"
+            secureTextEntry
             value={token}
             onChangeText={setToken}
           />
@@ -551,6 +589,7 @@ const styles = StyleSheet.create({
   modeText: { color: "#334155", fontWeight: "800", textAlign: "center" },
   modeTextSelected: { color: "#fff" },
   errorText: { color: "red", marginBottom: 10, textAlign: "center" },
+  statusText: { color: "#166534", backgroundColor: "#dcfce7", borderRadius: 8, padding: 8, marginBottom: 10, textAlign: "center", fontWeight: "800" },
   technicalError: { color: "#7f1d1d", backgroundColor: "#fef2f2", borderRadius: 8, padding: 8, marginBottom: 12, fontSize: 11 },
   warningBox: { borderWidth: 1, borderColor: "#f59e0b", backgroundColor: "#fff7ed", borderRadius: 12, padding: 14, marginBottom: 14 },
   warningTitle: { color: "#9a3412", fontWeight: "900", marginBottom: 6 },

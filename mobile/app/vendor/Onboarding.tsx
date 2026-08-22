@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { ActivityIndicator, Alert, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import BrandHeader from "@/components/BrandHeader";
 import { apiUrl, authenticatedFetch } from "@/lib/backend";
@@ -25,6 +25,7 @@ function isPositiveAmount(value: unknown) {
 
 export default function VendorOnboardingScreen() {
   const router = useRouter();
+  const params: any = useLocalSearchParams();
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -47,11 +48,16 @@ export default function VendorOnboardingScreen() {
 
     setLoading(true);
     try {
-      const { data: vendorData, error } = await supabase
-        .from("vendors")
-        .select("*")
-        .eq("owner_user_id", user.id)
-        .single();
+    let query = supabase
+      .from("vendors")
+      .select("*")
+      .eq("owner_user_id", user.id);
+
+    if (params.vendor) {
+      query = query.eq("id", String(params.vendor));
+    }
+
+    const { data: vendorData, error } = await query.order("created_at", { ascending: false }).limit(1).maybeSingle();
       if (error || !vendorData) throw new Error("Vendor profile was not found.");
       setVendor(vendorData);
 

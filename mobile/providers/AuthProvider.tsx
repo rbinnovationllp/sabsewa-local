@@ -3,6 +3,7 @@ import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 import { usePathname, useRouter, useSegments } from "expo-router";
 import { apiUrl, authenticatedApiHeaders, MASTER_ADMIN_SESSION_STORAGE_KEY } from "@/lib/backend";
+import { clearRoleSessionContext, getRoleSessionContext } from "@/lib/vendorLoginRouting";
 
 type AppRole = "customer" | "vendor" | "rider" | "admin" | "company_admin" | "super_admin" | string;
 
@@ -181,6 +182,8 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
     const isPublicVendorRegistrationRoute = pathname === "/vendor/register" || pathname === "/vendor-registration";
     const search = typeof window !== "undefined" ? window.location.search : "";
     const authParams = new URLSearchParams(search);
+    const activeRoleContext = getRoleSessionContext();
+    const inVendorContext = activeRoleContext === "vendor";
     const isVendorAuthIntent =
       inAuthGroup &&
       (authParams.get("role") === "vendor" || authParams.get("intent") === "vendor_login");
@@ -194,6 +197,25 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
         window.sessionStorage.removeItem(MASTER_ADMIN_SESSION_STORAGE_KEY);
       }
       return;
+    }
+
+    if (inVendorContext && inVendorArea) {
+      if (typeof window !== "undefined") {
+        window.sessionStorage.removeItem(MASTER_ADMIN_SESSION_STORAGE_KEY);
+      }
+      return;
+    }
+
+    if (inVendorContext && inCompanyArea) {
+      if (typeof window !== "undefined") {
+        window.sessionStorage.removeItem(MASTER_ADMIN_SESSION_STORAGE_KEY);
+      }
+      router.replace("/auth/unauthorized" as any);
+      return;
+    }
+
+    if (!inVendorArea && !isVendorAuthIntent && activeRoleContext) {
+      clearRoleSessionContext();
     }
 
     if (!adminRoles.has(normalizedRole) && typeof window !== "undefined") {
@@ -247,6 +269,7 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
     if (typeof window !== "undefined") {
       window.sessionStorage.removeItem(MASTER_ADMIN_SESSION_STORAGE_KEY);
     }
+    clearRoleSessionContext();
     setUser(null);
     setSession(null);
     setRole(null);

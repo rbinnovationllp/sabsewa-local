@@ -74,6 +74,8 @@ SabSewa Local will launch first in Bengaluru, Karnataka with functional support 
 - Provide clear vendor actions: Register Your Shop, Vendor Login, Open Vendor Dashboard, Manage Today's Items, View Orders and Wallet Balance where applicable.
 - Register Your Shop must route to the dedicated public `/vendor/register` flow and must not be intercepted by Master Admin/Admin route guards.
 - After successful vendor OTP/profile completion, the next permitted destination is the linked Vendor KYC upload/status workflow. It must not route to Company CRM, Master Admin verification, Partner KYC, direct Razorpay payment or the active Vendor Dashboard before the authoritative onboarding status permits those screens.
+- Vendor Login with `role=vendor&intent=vendor_login` must resolve a vendor-scoped session after OTP. If the same authenticated person also has Master Admin/Admin authority, vendor intent must still route only to vendor-authorized pages after verifying the authenticated user owns the selected vendor row; administrative context requires a separate explicit Company CRM entry and fresh Master Admin secret verification.
+- Vendor login routing matrix: registration/missing vendor relationship -> support or resume registration; KYC missing/pending/resubmission -> Vendor KYC; KYC under review -> Vendor KYC status; KYC approved with payment pending/processing -> Vendor Onboarding/payment; payment complete with activation pending -> Vendor Onboarding/activation status; active -> Vendor Dashboard; suspended/terminated -> Vendor status view.
 - Existing-device vendor-registration notices must mask stored contact details and must not use device recognition alone as dashboard authorization.
 - Do not display raw Vendor IDs or Terminal IDs to customers.
 

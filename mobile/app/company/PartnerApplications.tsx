@@ -18,6 +18,13 @@ function latestKycDoc(application: any, section: string) {
     .sort((a: any, b: any) => String(b.created_at || "").localeCompare(String(a.created_at || "")))[0] || null;
 }
 
+function latestAnyKycDoc(application: any) {
+  const docs = application.kyc_documents || application.raw?.partner_kyc_documents || [];
+  return docs
+    .filter((doc: any) => doc.status !== "deleted")
+    .sort((a: any, b: any) => String(b.created_at || "").localeCompare(String(a.created_at || "")))[0] || null;
+}
+
 function kycStatusText(doc: any) {
   if (!doc) return "Missing";
   return `${String(doc.status || "uploaded").replace(/_/g, " ")}${doc.document_label ? ` - ${doc.document_label}` : ""}`;
@@ -245,7 +252,10 @@ export default function PartnerApplicationsScreen() {
           + commissions.reduce((sum: number, item: any) => sum + Number(item.commission_amount || 0), 0);
         const paid = commissions.filter((item: any) => item.status === "paid").reduce((sum: number, item: any) => sum + Number(item.commission_amount || 0), 0);
         const identityDoc = latestKycDoc(application, "identity_proof");
+        const addressDoc = latestKycDoc(application, "address_proof");
         const photoDoc = latestKycDoc(application, "partner_photo");
+        const organizationDoc = latestKycDoc(application, "organization_document");
+        const latestDoc = latestAnyKycDoc(application);
 
         return (
           <View key={application.id} style={styles.card}>
@@ -270,7 +280,9 @@ export default function PartnerApplicationsScreen() {
               <Text style={styles.identityText}>Application Date: {application.submitted_at || application.raw?.created_at || "-"}</Text>
               <Text style={styles.identityText}>Identity Document Type: {identityDoc?.document_label || identityDoc?.document_type || "-"}</Text>
               <Text style={styles.identityText}>Identity Proof Status: {kycStatusText(identityDoc)}</Text>
+              <Text style={styles.identityText}>Address Proof Status: {kycStatusText(addressDoc)}</Text>
               <Text style={styles.identityText}>Photograph Status: {kycStatusText(photoDoc)}</Text>
+              {organizationDoc ? <Text style={styles.identityText}>Organization Document Status: {kycStatusText(organizationDoc)}</Text> : null}
               <Text style={styles.identityText}>KYC Submission Date: {application.raw?.kyc_submitted_at || "-"}</Text>
               <Text style={styles.identityText}>Time Pending: {timePendingText(application.raw?.kyc_submitted_at)}</Text>
               <Text style={styles.identityText}>Payment Details: {String(application.payment_details_status || "pending_verification").replace(/_/g, " ")}</Text>
@@ -300,13 +312,15 @@ export default function PartnerApplicationsScreen() {
             <View style={styles.reviewPanel}>
               <Text style={styles.reviewPanelTitle}>KYC Review Decisions</Text>
               <View style={styles.actions}>
-                {(identityDoc?.id || photoDoc?.id) ? (
-                  <TouchableOpacity style={styles.actionButton} onPress={() => previewKycDocument(identityDoc?.id || photoDoc?.id)}>
+                {latestDoc?.id ? (
+                  <TouchableOpacity style={styles.actionButton} onPress={() => previewKycDocument(latestDoc.id)}>
                     <Text style={styles.actionText}>Open Latest KYC Document</Text>
                   </TouchableOpacity>
                 ) : null}
                 {identityDoc?.id ? <TouchableOpacity style={styles.actionButton} onPress={() => previewKycDocument(identityDoc.id)}><Text style={styles.actionText}>Review Identity Proof</Text></TouchableOpacity> : null}
+                {addressDoc?.id ? <TouchableOpacity style={styles.actionButton} onPress={() => previewKycDocument(addressDoc.id)}><Text style={styles.actionText}>Review Address Proof</Text></TouchableOpacity> : null}
                 {photoDoc?.id ? <TouchableOpacity style={styles.actionButton} onPress={() => previewKycDocument(photoDoc.id)}><Text style={styles.actionText}>Review Photograph</Text></TouchableOpacity> : null}
+                {organizationDoc?.id ? <TouchableOpacity style={styles.actionButton} onPress={() => previewKycDocument(organizationDoc.id)}><Text style={styles.actionText}>Review Organization Document</Text></TouchableOpacity> : null}
                 <TouchableOpacity style={[styles.actionButton, styles.approveButton]} onPress={() => reviewPartner(application.id, "approve_kyc", { remarks: true, confirm: "Approve this Partner KYC?" })}><Text style={styles.approveText}>Verify / Approve KYC</Text></TouchableOpacity>
                 <TouchableOpacity style={[styles.actionButton, styles.holdButton]} onPress={() => reviewPartner(application.id, "request_further_information", { reasonRequired: true, requestInfo: true, followUp: true, confirm: "Request additional KYC information from this Partner?" })}><Text style={styles.holdText}>Further Enquiry Required</Text></TouchableOpacity>
                 <TouchableOpacity style={[styles.actionButton, styles.rejectButton]} onPress={() => reviewPartner(application.id, "reject_kyc", { reasonRequired: true, remarks: true, confirm: "Reject this Partner KYC?" })}><Text style={styles.rejectText}>Reject KYC</Text></TouchableOpacity>

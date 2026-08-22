@@ -1497,4 +1497,13 @@ Remaining production validation: test real vendor device behavior for PWA open/b
 - Company CRM now displays separate Partner KYC and Vendor KYC review monitor sections with pending, approaching-deadline, overdue, approved/rejected and resubmission counters.
 - Partner KYC submission now returns a reference-number confirmation message and writes a partner admin audit event marking the case ready for manual review.
 - Partner Applications now accepts direct filters such as `filter=kyc_pending`, `filter=approaching_deadline`, `filter=overdue`, `filter=verified` and `filter=rejected`.
+- Partner Applications review panel now displays Address Proof status and provides dedicated secure preview buttons for Address Proof and Organization Document when uploaded.
 - Current scope: reliable Partner KYC queue visibility and manual-review tracking. Full AI-assisted document screening, malware scanning, reviewer assignment restrictions and second-level high-risk approval are not marked complete until separately implemented and end-to-end tested.
+
+## 2026-08-23 - Vendor Business Establishment Address Proof
+
+- Added mandatory Vendor KYC section `Business Establishment Address Proof` for the declared shop/business premises, including rented/leased, vendor-owned, family-owned, shared/licensed and other lawful occupancy categories.
+- Vendor KYC upload now records `occupancy_type` metadata and keeps using the existing private `vendor-kyc-private` upload, signed preview and review flow.
+- Backend KYC submission now blocks until Identity Proof, Address/Business Proof, Business Establishment Address Proof and Owner + Shop Photograph are uploaded, with regulated licence remaining conditional.
+- Added Supabase migration `supabase/RUN_FIX_VENDOR_BUSINESS_ESTABLISHMENT_ADDRESS_PROOF_2026_08_23.sql` to extend the `vendor_kyc_documents_document_type_check` constraint without weakening validation.
+- Manual action required: run the new SQL in Supabase, rebuild `mobile/dist`, deploy the frontend, then update/restart the EC2 backend before production KYC testing.

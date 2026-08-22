@@ -2,12 +2,14 @@
 import { useRouter } from "expo-router";
 import React from "react";
 import {
+    Alert,
     ScrollView,
     StyleSheet,
     Text,
     TouchableOpacity,
     View
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import BrandHeader from "@/components/BrandHeader";
 
 export default function SabSewaHLM() {
@@ -15,6 +17,22 @@ export default function SabSewaHLM() {
 
   const goHome = () => router.push("/");
   const goAuth = () => router.push("/auth");
+  const goVendorRegistration = async () => {
+    const registeredPhone = await AsyncStorage.getItem("registered_vendor_phone");
+    if (registeredPhone) {
+      Alert.alert(
+        "Vendor already registered",
+        `This device was already used for vendor registration with mobile ${registeredPhone}. Open the vendor dashboard to continue, or use another device/account for a new vendor registration.`,
+        [
+          { text: "Open Vendor Dashboard", onPress: () => router.push("/vendor" as any) },
+          { text: "Cancel", style: "cancel" },
+        ]
+      );
+      return;
+    }
+
+    router.push({ pathname: "/auth/Register", params: { role: "vendor" } });
+  };
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -106,7 +124,7 @@ export default function SabSewaHLM() {
           <Text style={styles.cardText}>
             I want to list my store on SabSewa and get more local customers.
           </Text>
-          <TouchableOpacity style={styles.secondaryBtn} onPress={goAuth}>
+          <TouchableOpacity style={styles.secondaryBtn} onPress={goVendorRegistration}>
             <Text style={styles.secondaryBtnText}>Register as Vendor</Text>
           </TouchableOpacity>
         </View>

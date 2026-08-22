@@ -69,6 +69,12 @@ Official support contact: `support@sabsewa.in`, `+91 8450092846`, `+91 817811344
   - `npm run deploy:validate` passed.
   - Local `npm run typecheck` could not run because `tsc` is not installed in the current `mobile\node_modules`; install dev dependencies before rerunning TypeScript locally.
 
+## 2026-08-22 - HLM Vendor Registration Routing Fix
+
+- Fixed the public `/hlm` "Register as Vendor" action so it opens `/auth/Register?role=vendor` directly instead of entering the generic `/auth` router. This prevents an already signed-in Master Admin from being redirected to `/company` when trying to inspect or start vendor registration.
+- Added a same-device check for the locally stored `registered_vendor_phone`. If this device was already used for vendor registration, the page warns that the vendor is already registered and offers the vendor dashboard instead of silently starting a duplicate profile.
+- Confirmed the Partner Referral row is in the vendor registration form under `Partner Referral Details`, after the shop/trade name and service-type fields.
+
 ## 2026-08-22 - Vendor Delivery Model Simplification
 
 - Added terminal-level delivery operating models so small shops are not forced to create a delivery team:

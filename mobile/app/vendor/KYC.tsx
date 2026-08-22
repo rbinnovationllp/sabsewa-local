@@ -495,10 +495,20 @@ export default function VendorKycScreen() {
       <Text style={styles.heading}>KYC Verification</Text>
       <Text style={styles.subtle}>Upload clear legal/business documents. Images are compressed only to reduce storage use; document content is not altered.</Text>
 
+      {params.registrationSubmitted === "1" ? (
+        <View style={styles.successPanel}>
+          <Text style={styles.successTitle}>Congratulations! Your vendor registration has been submitted successfully.</Text>
+          <Text style={styles.successBody}>
+            Your application reference number is {String(params.reference || "generated")}. Please upload the required KYC documents to continue.
+          </Text>
+        </View>
+      ) : null}
+
       <View style={styles.panel}>
         <Text style={styles.section}>Current Status</Text>
         <Text style={styles.status}>{statusLabel(vendor?.kyc_status)}</Text>
         <Text style={styles.muted}>Payment unlocks only after KYC is approved by SabSewa. Uploaded documents must be submitted and reviewed before approval.</Text>
+        <Text style={styles.paymentLockedText}>Onboarding payment will be enabled only after your KYC documents have been verified and approved.</Text>
         {vendor?.kyc_review_notes ? (
           <View style={styles.reviewNoteBox}>
             <Text style={styles.reviewNoteTitle}>Admin Review Notes</Text>
@@ -621,10 +631,14 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 8 },
   heading: { fontSize: 28, fontWeight: "900", color: "#111827", marginBottom: 8 },
   subtle: { color: "#475569", lineHeight: 20, marginBottom: 14 },
+  successPanel: { borderWidth: 1, borderColor: "#86efac", backgroundColor: "#f0fdf4", borderRadius: 8, padding: 12, marginBottom: 14 },
+  successTitle: { color: "#166534", fontWeight: "900", marginBottom: 6 },
+  successBody: { color: "#14532d", fontWeight: "700", lineHeight: 19 },
   panel: { borderWidth: 1, borderColor: "#e5e7eb", borderRadius: 8, padding: 14, marginBottom: 14, backgroundColor: "#fff" },
   section: { fontSize: 18, fontWeight: "900", color: "#111827", marginBottom: 10 },
   status: { fontSize: 18, fontWeight: "900", color: "#1166ff", marginBottom: 6 },
   muted: { color: "#6b7280", fontSize: 12, lineHeight: 18 },
+  paymentLockedText: { color: "#9a3412", backgroundColor: "#fff7ed", borderWidth: 1, borderColor: "#fed7aa", borderRadius: 8, padding: 10, marginTop: 10, fontWeight: "800", lineHeight: 18 },
   reviewNoteBox: { borderWidth: 1, borderColor: "#fdba74", backgroundColor: "#fff7ed", borderRadius: 8, padding: 10, marginTop: 10 },
   reviewNoteTitle: { color: "#9a3412", fontWeight: "900", marginBottom: 4 },
   reviewNoteText: { color: "#7c2d12", fontWeight: "700", lineHeight: 18 },

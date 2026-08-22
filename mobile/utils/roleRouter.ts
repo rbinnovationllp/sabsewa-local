@@ -22,11 +22,21 @@ export function isAdminRole(role?: string | null) {
   return ADMIN_ROLES.has(normalizeRole(role));
 }
 
+function lastModuleAllowedForRole(normalizedRole: string, lastModule: string) {
+  if (!lastModule || !lastModule.startsWith("/") || lastModule.startsWith("//")) return false;
+  if (lastModule.startsWith("/company") || lastModule.startsWith("/admin")) return isAdminRole(normalizedRole);
+  if (lastModule.startsWith("/vendor")) return normalizedRole === "vendor";
+  if (lastModule.startsWith("/partner")) return normalizedRole === "partner";
+  if (lastModule.startsWith("/rider")) return normalizedRole === "rider";
+  if (lastModule.startsWith("/customer") || lastModule.startsWith("/hyperlocal")) return normalizedRole === "customer";
+  return ["/", "/hlm"].includes(lastModule);
+}
+
 export function routeForRole(role?: string | null, module?: string | null) {
   const normalized = normalizeRole(role);
   const lastModule = String(module || "").trim();
 
-  if (lastModule && lastModule.startsWith("/") && !lastModule.startsWith("//")) {
+  if (lastModuleAllowedForRole(normalized, lastModule)) {
     return lastModule;
   }
 

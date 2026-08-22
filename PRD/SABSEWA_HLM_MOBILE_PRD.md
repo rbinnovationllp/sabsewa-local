@@ -59,6 +59,7 @@ SabSewa Local will launch first in Bengaluru, Karnataka with functional support 
 - Verifies vendors and terminals.
 - Monitors orders, vendor activity, and exceptions.
 - Reviews Gemini audit logs for AI actions.
+- Company CRM access must be isolated from customer, vendor, partner and rider accounts. Administrative authority must be resolved from trusted backend/database records, not from user-editable client metadata, hidden URLs, stale browser routes or cached sessions.
 
 ## 4. Core Mobile Modules
 
@@ -69,6 +70,7 @@ SabSewa Local will launch first in Bengaluru, Karnataka with functional support 
 - Provide clear customer actions: Shop from Nearby Stores, Register as Customer, Continue Shopping, Order Again, Recent Shops and My Orders where applicable.
 - Provide clear vendor actions: Register Your Shop, Vendor Login, Open Vendor Dashboard, Manage Today's Items, View Orders and Wallet Balance where applicable.
 - Register Your Shop must route to the dedicated public `/vendor/register` flow and must not be intercepted by Master Admin/Admin route guards.
+- After successful vendor OTP/profile completion, the next permitted destination is the linked Vendor KYC upload/status workflow. It must not route to Company CRM, Master Admin verification, Partner KYC, direct Razorpay payment or the active Vendor Dashboard before the authoritative onboarding status permits those screens.
 - Existing-device vendor-registration notices must mask stored contact details and must not use device recognition alone as dashboard authorization.
 - Do not display raw Vendor IDs or Terminal IDs to customers.
 

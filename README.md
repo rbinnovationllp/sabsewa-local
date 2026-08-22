@@ -156,6 +156,8 @@ The public Home "Register Your Shop" and `/hlm` "Register as Vendor" actions nav
 
 Run `supabase/RUN_ONLY_VENDOR_PARTNER_REFERRAL_HARDENING_2026_08_22.sql` before deploying this flow because the vendor registration profile writes the hardened referral status columns.
 
+After OTP verification, a newly registered vendor is routed to the linked Vendor KYC upload page, not the Company CRM or vendor dashboard. Vendor onboarding payment remains disabled until KYC approval/provisional clearance. Master Admin/Admin accounts should not be reused as vendor test accounts; if a Master/Admin auth account attempts vendor registration, the app blocks the registration rather than mixing admin and vendor roles.
+
 ---
 
 ## Authentication & OTP Architecture
@@ -163,7 +165,7 @@ Run `supabase/RUN_ONLY_VENDOR_PARTNER_REFERRAL_HARDENING_2026_08_22.sql` before 
 * **Phone Auth:** Integrates Supabase Phone Auth. For MSG91 integration, Supabase acts as the OTP authority using a Supabase Edge Function SMS Hook (`supabase/functions/send-sms-msg91`).
 * **Environment Safeguard:** Controlled via `EXPO_PUBLIC_PHONE_AUTH_ENABLED`. All secrets (`MSG91_AUTH_KEY`, `RAZORPAY_KEY_SECRET`, `GEMINI_API_KEY`) are stored strictly in server-side secret stores or Edge Functions, never in client bundles.
 * **Web Fallback:** Clean navigation logic in `app/auth/login.tsx` ensures instant redirection to `/customer/discover` or `/vendor/dashboard` post-verification without getting stuck on the OTP screen.
-* **Admin Routing Safety:** Public pages, language selection and the global top Home button do not auto-open the Company CRM merely because an admin session exists. `/company` requires an authenticated admin role plus backend Master Admin session/secret verification; Master Admin secrets must remain server-side only.
+* **Admin Routing Safety:** Public pages, language selection and the global top Home button do not auto-open the Company CRM merely because an admin session exists. `/company` requires an authenticated admin role plus backend Master Admin session/secret verification; Master Admin secrets must remain server-side only. Backend CRM APIs resolve admin authority from server-side profile/assignment records, ignore administrative roles supplied through user-editable auth metadata, and reject suspended or revoked admin profiles.
 
 ---
 

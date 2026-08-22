@@ -48,6 +48,10 @@ export function requireCompanyAdmin(permission = "kyc.review") {
 
       const profile = await getAdminProfile(req.auth.user_id);
       const hasActiveProfile = profile && profile.account_status === "active";
+      if (profile && profile.account_status !== "active") {
+        return res.status(403).json({ success: false, error: "This admin account is not active." });
+      }
+
       const assigned = await supabase
         .from("admin_role_assignments")
         .select("role, permissions, is_active")
@@ -55,14 +59,17 @@ export function requireCompanyAdmin(permission = "kyc.review") {
         .eq("is_active", true);
       if (assigned.error) throw assigned.error;
 
-      const roles = new Set([role, profile?.role, ...(assigned.data || []).map((row) => row.role)].filter(Boolean).map((value) => String(value).toLowerCase()));
+      const roles = new Set([
+        hasActiveProfile ? profile?.role : null,
+        ...(assigned.data || []).map((row) => row.role),
+      ].filter(Boolean).map((value) => String(value).toLowerCase()));
       const customPermission = (assigned.data || []).some((row) => {
         const permissions = row.permissions || {};
         return permissions.all === true || permissions[permission] === true;
       });
 
       const allowedByRole = Array.from(roles).some((nextRole) => adminRoleAllows(nextRole, permission));
-      if (!hasActiveProfile && !customPermission && !allowedByRole) {
+      if (!customPermission && !allowedByRole) {
         return res.status(403).json({ success: false, error: "You are not allowed to access Company CRM." });
       }
 

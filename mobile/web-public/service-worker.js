@@ -2,7 +2,10 @@ const CACHE_NAME = "sabsewa-local-shell-__BUILD_ID__";
 const APP_SHELL = ["/", "/index.html", "/metadata.json", "/favicon.ico", "/offline.html", "/manifest.webmanifest"];
 const PRIVATE_PATTERNS = [
   "/api/",
+  "/admin",
+  "/company",
   "/auth/",
+  "/vendor/kyc",
   "/rest/v1/",
   "/storage/v1/",
   "/functions/v1/",

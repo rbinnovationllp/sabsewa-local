@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from "react";
 import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 import { usePathname, useRouter, useSegments } from "expo-router";
+import { MASTER_ADMIN_SESSION_STORAGE_KEY } from "@/lib/backend";
 
 type AppRole = "customer" | "vendor" | "rider" | "admin" | "company_admin" | "super_admin" | string;
 
@@ -34,11 +35,24 @@ function roleHome(role: AppRole | null) {
   return "/customer/dashboard";
 }
 
+function isAdminRoleValue(value: unknown) {
+  return [
+    "admin",
+    "company_admin",
+    "super_admin",
+    "master_admin",
+    "national_admin",
+    "state_admin",
+    "district_admin",
+    "city_admin",
+    "kyc_reviewer",
+    "finance_admin",
+    "support_admin",
+  ].includes(String(value || "").trim().toLowerCase());
+}
+
 async function resolveUserRole(user: User | null): Promise<AppRole | null> {
   if (!user?.id) return null;
-
-  const metadataRole = cleanRole(user.user_metadata?.role || user.app_metadata?.role);
-  if (metadataRole) return metadataRole;
 
   try {
     const { data: profile } = await supabase
@@ -62,6 +76,12 @@ async function resolveUserRole(user: User | null): Promise<AppRole | null> {
   } catch (error) {
     console.warn("Vendor role lookup skipped", error);
   }
+
+  const appMetadataRole = cleanRole(user.app_metadata?.role);
+  if (appMetadataRole) return appMetadataRole;
+
+  const metadataRole = cleanRole(user.user_metadata?.role);
+  if (metadataRole && !isAdminRoleValue(metadataRole)) return metadataRole;
 
   return null;
 }
@@ -113,7 +133,8 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
     let active = true;
 
     async function loadRole() {
-      if (!user?.id) {
+    if (!user?.id) {
+        if (typeof window !== "undefined") window.sessionStorage.removeItem(MASTER_ADMIN_SESSION_STORAGE_KEY);
         setRole(null);
         setRoleLoading(false);
         return;
@@ -162,6 +183,10 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
       return;
     }
 
+    if (!adminRoles.has(normalizedRole) && typeof window !== "undefined") {
+      window.sessionStorage.removeItem(MASTER_ADMIN_SESSION_STORAGE_KEY);
+    }
+
     if (adminRoles.has(normalizedRole) && !inCompanyArea && inAuthGroup) {
       router.replace("/company" as any);
       return;
@@ -189,6 +214,9 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
 
   const signOut = async () => {
     await supabase.auth.signOut();
+    if (typeof window !== "undefined") {
+      window.sessionStorage.removeItem(MASTER_ADMIN_SESSION_STORAGE_KEY);
+    }
     setUser(null);
     setSession(null);
     setRole(null);

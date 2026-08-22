@@ -13,6 +13,8 @@ import {
 export type RegistrationCompletionResult = {
   role: string;
   profileSaved: boolean;
+  vendorId?: string | null;
+  applicationReference?: string | null;
 };
 
 function clean(value: unknown) {
@@ -44,6 +46,19 @@ export async function completeRegistrationProfile(
 ): Promise<RegistrationCompletionResult> {
   const metadata = { ...(user.user_metadata || {}), ...(metadataOverride || {}) };
   const role = clean(metadata.role) || "customer";
+  const existingMetadataRole = clean(user.user_metadata?.role || user.app_metadata?.role).toLowerCase();
+  if (role === "vendor" && ["admin", "company_admin", "super_admin", "master_admin", "national_admin", "state_admin", "district_admin", "city_admin", "kyc_reviewer", "finance_admin", "support_admin"].includes(existingMetadataRole)) {
+    throw new Error("This mobile/email is already linked to an administrative account. Please use a separate vendor account for shop registration.");
+  }
+  const { data: existingProfile } = await supabase
+    .from("user_profiles")
+    .select("role")
+    .eq("user_id", user.id)
+    .maybeSingle();
+  const existingProfileRole = clean(existingProfile?.role).toLowerCase();
+  if (role === "vendor" && ["admin", "company_admin", "super_admin", "master_admin", "national_admin", "state_admin", "district_admin", "city_admin", "kyc_reviewer", "finance_admin", "support_admin"].includes(existingProfileRole)) {
+    throw new Error("This mobile/email is already linked to an administrative account. Please use a separate vendor account for shop registration.");
+  }
   const language = clean(metadata.preferred_language) || "en";
   const phone = clean(user.phone || metadata.phone);
   const email = clean(user.email || metadata.email).toLowerCase();
@@ -109,7 +124,7 @@ export async function completeRegistrationProfile(
     const referral = referralMetadata(metadata);
     const { data: existingVendor, error: existingError } = await supabase
       .from("vendors")
-      .select("id")
+      .select("id, public_vendor_id")
       .eq("owner_user_id", user.id)
       .maybeSingle();
     if (existingError) throw existingError;
@@ -132,14 +147,17 @@ export async function completeRegistrationProfile(
     };
 
     let vendorId = existingVendor?.id || null;
+    let applicationReference = existingVendor?.public_vendor_id || null;
     if (existingVendor?.id) {
-      const { data: updatedVendor, error: updateError } = await supabase.from("vendors").update(vendorPayload).eq("id", existingVendor.id).select("id").single();
+      const { data: updatedVendor, error: updateError } = await supabase.from("vendors").update(vendorPayload).eq("id", existingVendor.id).select("id, public_vendor_id").single();
       if (updateError) throw updateError;
       vendorId = updatedVendor?.id || existingVendor.id;
+      applicationReference = updatedVendor?.public_vendor_id || applicationReference || vendorId;
     } else {
-      const { data: createdVendor, error: vendorError } = await supabase.from("vendors").insert(vendorPayload).select("id").single();
+      const { data: createdVendor, error: vendorError } = await supabase.from("vendors").insert(vendorPayload).select("id, public_vendor_id").single();
       if (vendorError) throw vendorError;
       vendorId = createdVendor?.id || null;
+      applicationReference = createdVendor?.public_vendor_id || vendorId;
     }
 
     if (referral.isPartnerReferral && vendorId) {
@@ -163,6 +181,8 @@ export async function completeRegistrationProfile(
         throw new Error(result.error || "Partner referral could not be verified and saved.");
       }
     }
+
+    return { role, profileSaved: true, vendorId, applicationReference };
   }
 
   return { role, profileSaved: true };

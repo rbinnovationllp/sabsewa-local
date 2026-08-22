@@ -12,6 +12,69 @@ function bearerToken(req) {
   return match ? match[1] : null;
 }
 
+const ADMIN_ROLES = new Set([
+  "admin",
+  "company_admin",
+  "super_admin",
+  "master_admin",
+  "national_admin",
+  "state_admin",
+  "district_admin",
+  "city_admin",
+  "kyc_reviewer",
+  "finance_admin",
+  "support_admin",
+]);
+
+function cleanRole(value) {
+  const role = String(value || "").trim().toLowerCase();
+  return role || null;
+}
+
+async function resolveTrustedRole(supabase, user) {
+  if (!user?.id) return null;
+
+  const { data: adminProfile, error: adminError } = await supabase
+    .from("admin_profiles")
+    .select("role, account_status")
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (!adminError && adminProfile?.account_status === "active" && cleanRole(adminProfile.role)) return cleanRole(adminProfile.role);
+
+  const { data: assignments, error: assignmentError } = await supabase
+    .from("admin_role_assignments")
+    .select("role, is_active")
+    .eq("user_id", user.id)
+    .eq("is_active", true)
+    .limit(10);
+  if (!assignmentError) {
+    const assignedRole = (assignments || []).map((row) => cleanRole(row.role)).find((role) => ADMIN_ROLES.has(role));
+    if (assignedRole) return assignedRole;
+  }
+
+  const { data: profile, error: profileError } = await supabase
+    .from("user_profiles")
+    .select("role")
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (!profileError && cleanRole(profile?.role)) return cleanRole(profile.role);
+
+  const { data: vendor, error: vendorError } = await supabase
+    .from("vendors")
+    .select("id")
+    .eq("owner_user_id", user.id)
+    .maybeSingle();
+  if (!vendorError && vendor?.id) return "vendor";
+
+  const appRole = cleanRole(user.app_metadata?.role);
+  if (appRole) return appRole;
+
+  const metadataRole = cleanRole(user.user_metadata?.role);
+  if (metadataRole && !ADMIN_ROLES.has(metadataRole)) return metadataRole;
+
+  return null;
+}
+
 export function securityHeaders(_req, res, next) {
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("X-Frame-Options", "DENY");
@@ -71,11 +134,13 @@ export function requireUserJwt(supabase) {
       const { data, error } = await supabase.auth.getUser(token);
       if (error || !data?.user) return res.status(401).json({ success: false, error: "Invalid or expired session." });
 
+      const trustedRole = await resolveTrustedRole(supabase, data.user);
+
       req.auth = {
         token,
         user: data.user,
         user_id: data.user.id,
-        role: data.user.user_metadata?.role || data.user.app_metadata?.role || null,
+        role: trustedRole,
       };
       return next();
     } catch {

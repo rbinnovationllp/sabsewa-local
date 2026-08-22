@@ -191,13 +191,16 @@ export default function LoginScreen() {
       const mergedMetadata = {
         ...pendingMetadata,
         ...metadata,
-        role: metadata.role || pendingMetadata.role || (params.registering === "1" ? String(params.role || "customer") : String(params.role || "")),
+        role: params.registering === "1"
+          ? String(params.role || pendingMetadata.role || "customer")
+          : (metadata.role || pendingMetadata.role || String(params.role || "")),
         phone: metadata.phone || pendingMetadata.phone || normalizedPhone || null,
         email: metadata.email || pendingMetadata.email || normalizedEmail || null,
       };
 
+      let registrationResult: Awaited<ReturnType<typeof completeRegistrationProfile>> | null = null;
       if (user?.id && params.registering === "1") {
-        await completeRegistrationProfile(user, data.session, mergedMetadata);
+        registrationResult = await completeRegistrationProfile(user, data.session, mergedMetadata);
         clearPendingRegistrationDraft(registrationKey);
         clearPendingRegistrationDraft(altKey1);
         clearPendingRegistrationDraft(altKey2);
@@ -258,11 +261,17 @@ export default function LoginScreen() {
       }
 
       if (params.registering === "1" && role === "vendor") {
+        const reference = registrationResult?.applicationReference || "generated";
+        const referenceParam = encodeURIComponent(reference);
+        const kycPath = registrationResult?.vendorId
+          ? `/vendor/KYC?vendor=${registrationResult.vendorId}&registrationSubmitted=1&reference=${referenceParam}`
+          : `/vendor/KYC?registrationSubmitted=1&reference=${referenceParam}`;
+        const message = `Congratulations! Your vendor registration has been submitted successfully. Your application reference number is ${reference}. Please upload the required KYC documents to continue.`;
         if (Platform.OS === "web") {
-          navigateTo("/vendor/dashboard");
+          navigateTo(kycPath);
         } else {
-          Alert.alert("SabSewa Local", t("auth.registrationSuccessVendor"), [
-            { text: "OK", onPress: () => navigateTo("/vendor/dashboard") },
+          Alert.alert("SabSewa Local", message, [
+            { text: "Continue to KYC Document Upload", onPress: () => navigateTo(kycPath) },
           ]);
         }
         return;

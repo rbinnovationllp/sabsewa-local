@@ -24,6 +24,7 @@ import {
 } from "@/lib/legalVersions";
 import { authErrorKey, maskPhone, normalizeIndianPhone, validateIndianMobile } from "@/lib/phone";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { savePendingRegistrationDraft } from "@/lib/pendingRegistration";
 
 type RegistrationMethod = "phone" | "email_password" | "email_otp" | "google";
 const PHONE_AUTH_ENABLED = process.env.EXPO_PUBLIC_PHONE_AUTH_ENABLED === "true";
@@ -282,6 +283,7 @@ export default function RegisterScreen() {
       };
 
       if (method === "phone") {
+        savePendingRegistrationDraft(formattedPhone, authMetadata);
         const { error: otpError } = await signInWithOtp(formattedPhone, authMetadata);
         if (otpError) throw otpError;
 
@@ -293,6 +295,7 @@ export default function RegisterScreen() {
       }
 
       if (method === "email_otp") {
+        savePendingRegistrationDraft(email.trim().toLowerCase(), authMetadata);
         const { error: otpError } = await signInWithEmailOtp(email, authMetadata);
         if (otpError) throw otpError;
 

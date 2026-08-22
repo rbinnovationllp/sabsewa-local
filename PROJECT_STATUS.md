@@ -1,6 +1,6 @@
 # SabSewa Local Project Status
 
-Updated: 2026-08-22
+Updated: 2026-08-23
 
 Scope: `C:\Users\HP\SabSewa-Local`
 
@@ -11,6 +11,25 @@ Production web URL: `https://www.sabsewa.in`
 Production backend API URL: `https://api.sabsewa.in`
 
 Official support contact: `support@sabsewa.in`, `+91 8450092846`, `+91 8178113449`
+
+## 2026-08-23 - Vendor Registration to Company CRM Routing and Role-Isolation Fix
+
+- Investigated the critical case where vendor registration could open the Company Master CRM. The root causes were a combination of stale/auth metadata role handling, `last_module` routing that could honor a previous `/company` destination, and vendor post-registration routing that went to the vendor dashboard instead of the KYC upload stage.
+- Fixed vendor registration completion so a successful vendor registration now returns the created/matched internal vendor id plus application reference and routes to `/vendor/KYC?...registrationSubmitted=1`, where the vendor sees the required success message and the KYC upload continuation.
+- Added a same-account safety guard: if the authenticated account is already an administrative account, vendor registration is blocked with a clear error instead of reusing that Master/Admin account for shop onboarding. Master Admin/vendor testing should use separate auth accounts.
+- Hardened frontend role resolution so admin roles in user-editable `user_metadata` are ignored; trusted role is resolved from `user_profiles`/vendor records and app metadata only where appropriate.
+- Hardened backend `requireUserJwt` so Company CRM APIs resolve role from server-side records (`admin_profiles`, active role assignments, `user_profiles`, vendor ownership) and do not trust admin roles supplied through `user_metadata`.
+- Tightened the Company CRM guard so suspended/revoked admin profiles are denied and CRM permissions must come from an active admin profile or active role assignment, not from the request role alone.
+- Restricted remembered `last_module` routing so `/company` and `/admin` destinations are honored only for admin roles; vendor, partner, customer and rider routes cannot cross into Company CRM through stale browser state.
+- Cleared cached Master Admin session tokens on logout and when a non-admin role is loaded.
+- Marked `/company`, `/admin`, `/api`, Supabase, payment, wallet, profile and vendor KYC requests as service-worker private/network-only routes.
+- Extended `npm run validate:vendor-entity-branch-onboarding` to assert the corrected vendor KYC redirect, admin metadata rejection, backend trusted-role middleware and private service-worker routing.
+- Validation passed:
+  - `node --check mobile/server/security/apiSecurity.js`
+  - `node --check mobile/server/company/adminProfileService.js`
+  - `npm run validate:vendor-entity-branch-onboarding`
+  - `npm run validate:onboarding`
+- No Supabase SQL migration is required for this routing/security patch. Production still requires deployment of the latest frontend `dist` and backend code before retesting.
 
 ## 2026-08-22 - Existing Vendor, Additional Branch/Entity and Onboarding Payment Split Foundation
 

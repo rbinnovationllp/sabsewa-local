@@ -129,7 +129,7 @@ Vendor registration includes an optional Partner Referral section. If a vendor w
 
 If no Partner is involved, the vendor chooses direct/company onboarding. If a Partner is provided, the app stores the vendor's confirmation and the backend endpoint `POST /api/partner/referrals/attribute` performs the final active-Partner validation, prevents self-referral and duplicate non-admin attribution, writes `partner_referred_vendors`, and locks the attribution. Partner commission is still generated only later when eligible company revenue is recorded for the referred vendor.
 
-The public `/hlm` "Register as Vendor" action opens `/auth/Register?role=vendor` directly so an already signed-in admin/master-admin session cannot accidentally redirect the user to the Company CRM while inspecting vendor onboarding. If the same browser/device has already stored a registered vendor mobile number, the page warns that the device was already used for vendor registration and offers the vendor dashboard instead of silently starting a duplicate profile.
+The public Home "Register Your Shop" and `/hlm` "Register as Vendor" actions open `/auth/Register?role=vendor` directly so an already signed-in admin/master-admin session cannot accidentally redirect the user to the Company CRM while inspecting vendor onboarding. If the same browser/device has already stored a registered vendor mobile number, the page warns that the device was already used for vendor registration and offers the vendor dashboard instead of silently starting a duplicate profile.
 
 Run `supabase/RUN_ONLY_VENDOR_PARTNER_REFERRAL_HARDENING_2026_08_22.sql` before deploying this flow because the vendor registration profile writes the hardened referral status columns.
 

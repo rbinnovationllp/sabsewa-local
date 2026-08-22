@@ -1,7 +1,8 @@
 import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
-import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, Image } from "react-native";
+import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, Image } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import BrandHeader from "@/components/BrandHeader";
 import LanguageSelector from "@/components/LanguageSelector";
@@ -91,6 +92,23 @@ export default function HomeScreen() {
   async function handleSwitchAccount() {
     await signOut();
     router.push("/auth/Login" as any);
+  }
+
+  async function handleVendorRegistration() {
+    const registeredPhone = await AsyncStorage.getItem("registered_vendor_phone");
+    if (registeredPhone) {
+      Alert.alert(
+        "Vendor already registered",
+        `This device was already used for vendor registration with mobile ${registeredPhone}. Open the vendor dashboard to continue, or use another device/account for a new vendor registration.`,
+        [
+          { text: "Open Vendor Dashboard", onPress: () => router.push("/vendor" as any) },
+          { text: "Cancel", style: "cancel" },
+        ]
+      );
+      return;
+    }
+
+    router.push({ pathname: "/auth/Register", params: { role: "vendor" } } as any);
   }
 
   return (
@@ -237,7 +255,7 @@ export default function HomeScreen() {
           </>
         ) : (
           <>
-            <TouchableOpacity style={styles.primaryButton} onPress={() => router.push({ pathname: "/auth/Register", params: { role: "vendor" } } as any)}>
+            <TouchableOpacity style={styles.primaryButton} onPress={handleVendorRegistration}>
               <Text style={styles.primaryText}>{t("home.registerShop")}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.secondaryButton} onPress={() => router.push("/auth/Login" as any)}>

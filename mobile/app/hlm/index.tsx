@@ -17,10 +17,10 @@ export default function SabSewaHLM() {
   const goAuth = () => router.push("/auth");
   const goVendorRegistration = () => {
     if (typeof window !== "undefined" && window.location) {
-      window.location.href = "/auth/Register?role=vendor";
+      window.location.href = "/vendor/register";
       return;
     }
-    router.push({ pathname: "/auth/Register", params: { role: "vendor" } });
+    router.push("/vendor/register" as any);
   };
 
   return (

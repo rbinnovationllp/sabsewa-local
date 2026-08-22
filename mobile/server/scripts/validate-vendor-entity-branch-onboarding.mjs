@@ -10,6 +10,12 @@ function read(relativePath) {
 
 const onboardingRoutes = read("mobile/server/vendor/onboardingRoutes.js");
 const registerScreen = read("mobile/app/auth/Register.tsx");
+const authEntry = read("mobile/app/auth/index.tsx");
+const publicHome = read("mobile/app/index.tsx");
+const hlmLanding = read("mobile/app/hlm/index.tsx");
+const authProvider = read("mobile/providers/AuthProvider.tsx");
+const legacyVendorRegistrationRoute = read("mobile/app/vendor-registration.tsx");
+const publicVendorRegistrationRoute = read("mobile/app/vendor/register.tsx");
 const walletScreen = read("mobile/app/vendor/SecurityWallet.tsx");
 const sql = read("supabase/RUN_ONLY_VENDOR_ENTITY_BRANCH_ONBOARDING_FOUNDATION_2026_08_22.sql");
 
@@ -22,6 +28,14 @@ assert.match(registerScreen, /You are already registered with SabSewa Local/, "r
 assert.match(registerScreen, /Register Another Branch of Existing Business/, "additional branch choice must be visible");
 assert.match(registerScreen, /Register Another Business \/ Legal Entity/, "additional legal entity choice must be visible");
 assert.match(registerScreen, /Add Another Authorized Terminal \/ Device/, "additional terminal choice must be visible");
+assert.match(registerScreen, /pathname === "\/vendor\/register"/, "shared registration screen must infer vendor role on public vendor route");
+assert.match(publicHome, /window\.location\.href = "\/vendor\/register"/, "Home Register Your Shop must use public vendor route");
+assert.match(hlmLanding, /window\.location\.href = "\/vendor\/register"/, "HLM Register as Vendor must use public vendor route");
+assert.match(authEntry, /role === "vendor"[\s\S]*router\.push\("\/vendor\/register"/, "Auth role chooser must route vendors to public vendor route");
+assert.match(authProvider, /isPublicVendorRegistrationRoute/, "auth guard must allow public vendor registration route");
+assert.match(authProvider, /pathname === "\/vendor\/register"/, "auth guard must explicitly allow /vendor/register");
+assert.match(legacyVendorRegistrationRoute, /href="\/vendor\/register"/, "legacy vendor-registration route must forward to canonical vendor route");
+assert.match(publicVendorRegistrationRoute, /export \{ default \} from "\.\.\/auth\/Register"/, "canonical public vendor route must reuse working registration form");
 
 assert.match(walletScreen, /Plan 1 total: Rs 5,590/, "plan 1 total must be shown");
 assert.match(walletScreen, /Plan 2 total: Rs 6,180/, "plan 2 total must be shown");

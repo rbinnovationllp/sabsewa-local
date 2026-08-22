@@ -156,6 +156,11 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
     const inCustomerArea = firstSegment === "customer" || firstSegment === "hlm" || firstSegment === "hyperlocal";
     const inVendorArea = firstSegment === "vendor";
     const inCompanyArea = firstSegment === "company";
+    const isPublicVendorRegistrationRoute = pathname === "/vendor/register" || pathname === "/vendor-registration";
+
+    if (isPublicVendorRegistrationRoute) {
+      return;
+    }
 
     if (adminRoles.has(normalizedRole) && !inCompanyArea && inAuthGroup) {
       router.replace("/company" as any);

@@ -95,10 +95,10 @@ export default function HomeScreen() {
 
   function openVendorRegistration() {
     if (typeof window !== "undefined" && window.location) {
-      window.location.href = "/auth/Register?role=vendor";
+      window.location.href = "/vendor/register";
       return;
     }
-    router.push({ pathname: "/auth/Register", params: { role: "vendor" } } as any);
+    router.push("/vendor/register" as any);
   }
 
   return (

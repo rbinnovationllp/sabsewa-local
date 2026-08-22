@@ -102,9 +102,14 @@ Official support contact: `support@sabsewa.in`, `+91 8450092846`, `+91 817811344
 
 ## 2026-08-22 - Public Vendor Registration Routing Fix
 
-- Fixed the public Home "Register Your Shop" and `/hlm` "Register as Vendor" actions so they perform a direct web navigation to `/auth/Register?role=vendor` instead of entering the generic `/auth` router. This prevents an already signed-in Master Admin from being redirected to `/company` when trying to inspect or start vendor registration.
-- Moved the same-device check for locally stored `registered_vendor_phone` into the vendor registration page itself. If this device was already used for vendor registration, `/auth/Register?role=vendor` now shows a visible "Vendor already registered" notice and offers the vendor dashboard while still allowing the registration form to be inspected below.
+- Fixed the public Home "Register Your Shop" and `/hlm` "Register as Vendor" actions so they navigate to the dedicated public route `/vendor/register`, not `/auth/Register?role=vendor`.
+- Added `mobile/app/vendor/register.tsx` as the canonical public vendor-registration route. It reuses the working `mobile/app/auth/Register.tsx` form and infers `vendor` role from the route.
+- Updated `mobile/providers/AuthProvider.tsx` so `/vendor/register` and legacy `/vendor-registration` are allowed public/vendor-intent routes and are not intercepted by Admin/Master Admin role redirects.
+- Kept the same-device check for locally stored `registered_vendor_phone` inside the vendor registration page itself. If this device was already used for vendor registration, `/vendor/register` shows a visible "Vendor already registered" notice and offers the vendor dashboard while still allowing the registration form to be inspected below.
 - Confirmed the Partner Referral row is in the vendor registration form under `Partner Referral Details`, after the shop/trade name and service-type fields.
+- Extended `npm run validate:vendor-entity-branch-onboarding` to assert the public vendor route, Home/HLM CTA targets and auth-guard exception.
+- Validation passed: `npm run deploy:validate`, `npm run validate:onboarding`, `npm run validate:billing`, `npm run validate:vendor-entity-branch-onboarding`, `node --check mobile/server/vendor/onboardingRoutes.js`, and `git diff --check`.
+- Local `npm run typecheck` is still blocked in this checkout because `tsc` is not installed in `mobile\node_modules`; install dev dependencies before rerunning TypeScript typecheck.
 
 ## 2026-08-22 - Vendor Delivery Model Simplification
 

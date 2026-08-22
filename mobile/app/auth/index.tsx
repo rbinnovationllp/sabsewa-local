@@ -32,11 +32,17 @@ useEffect(() => {
 
   const goLogin = () => router.push("/auth/Login");
 
-  const goRegister = (role: string) =>
+  const goRegister = (role: string) => {
+    if (role === "vendor") {
+      router.push("/vendor/register" as any);
+      return;
+    }
+
     router.push({
       pathname: "/auth/Register",
       params: { role },
     });
+  };
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.wrapper}>

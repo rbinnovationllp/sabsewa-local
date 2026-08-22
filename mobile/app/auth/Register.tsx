@@ -1,5 +1,5 @@
 // app/auth/Register.tsx
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams, usePathname, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
   ScrollView,
@@ -32,7 +32,10 @@ const makeDiagnosticId = () => `SSL-AUTH-${Date.now().toString(36).toUpperCase()
 
 export default function RegisterScreen() {
   const router = useRouter();
+  const pathname = usePathname();
   const { role, method: methodParam } = useLocalSearchParams();
+  const requestedRole = Array.isArray(role) ? role[0] : role;
+  const effectiveRole = requestedRole || (pathname === "/vendor/register" || pathname === "/vendor-registration" ? "vendor" : undefined);
   const { session, signInWithOtp, signUpWithEmailPassword, signInWithEmailOtp, signInWithGoogle } = useAuth();
   const requestedMethod =
     methodParam === "phone" || methodParam === "email_otp" || methodParam === "email_password" || methodParam === "google"
@@ -78,16 +81,16 @@ export default function RegisterScreen() {
   const [verificationError, setVerificationError] = useState<string>("");
 
   const roleTitle =
-    role === "customer"
+    effectiveRole === "customer"
       ? t("common.customer")
-      : role === "vendor"
+      : effectiveRole === "vendor"
       ? t("common.vendor")
       : t("common.rider");
 
   useEffect(() => {
     let active = true;
     async function loadRegisteredVendorPhone() {
-      if (role !== "vendor") {
+      if (effectiveRole !== "vendor") {
         if (active) setRegisteredVendorPhone("");
         return;
       }
@@ -99,7 +102,7 @@ export default function RegisterScreen() {
     return () => {
       active = false;
     };
-  }, [role]);
+  }, [effectiveRole]);
 
   async function handleVerifyPartner() {
     if (!partnerSearch.phone.trim() && !partnerSearch.partnerId.trim()) {
@@ -184,15 +187,15 @@ export default function RegisterScreen() {
     }
     if (!city) return setError(t("auth.errorCity"));
     const address = buildAddress();
-    if (role === "customer" && !address.trim()) return setError(t("auth.errorCustomerAddress"));
-    if (role === "vendor" && !shopName.trim()) return setError(t("auth.errorVendorShop"));
-    if (role === "vendor" && !address.trim()) return setError(t("auth.errorVendorAddress"));
-    if (role === "vendor" && referredByPartner && !verifiedPartner) {
+    if (effectiveRole === "customer" && !address.trim()) return setError(t("auth.errorCustomerAddress"));
+    if (effectiveRole === "vendor" && !shopName.trim()) return setError(t("auth.errorVendorShop"));
+    if (effectiveRole === "vendor" && !address.trim()) return setError(t("auth.errorVendorAddress"));
+    if (effectiveRole === "vendor" && referredByPartner && !verifiedPartner) {
       return setError("Please verify Partner details before proceeding or select 'No' for Partner referral.");
     }
     if (!acceptedPolicies) return setError(t("auth.errorPolicies"));
 
-    if ((role === "vendor" || role === "rider") && !extra)
+    if ((effectiveRole === "vendor" || effectiveRole === "rider") && !extra)
       return setError(t("auth.errorRequiredFields"));
 
     setError("");
@@ -203,7 +206,7 @@ export default function RegisterScreen() {
       const formattedPhone = phone ? normalizeIndianPhone(phone) : "";
       const deviceMetadata = await getDeviceMetadata();
       const authMetadata = {
-        role,
+        role: effectiveRole,
         full_name: fullname,
         phone: formattedPhone || null,
         email: email.trim().toLowerCase() || null,
@@ -261,7 +264,7 @@ export default function RegisterScreen() {
 
         router.push({
           pathname: "/auth/Login",
-          params: { phone: formattedPhone, method: "phone", registering: "1", otpSent: "1", role: String(role || "customer"), maskedPhone: maskPhone(formattedPhone) },
+          params: { phone: formattedPhone, method: "phone", registering: "1", otpSent: "1", role: String(effectiveRole || "customer"), maskedPhone: maskPhone(formattedPhone) },
         });
         return;
       }
@@ -272,7 +275,7 @@ export default function RegisterScreen() {
 
         router.push({
           pathname: "/auth/Login",
-          params: { email: email.trim().toLowerCase(), method: "email_otp", registering: "1", otpSent: "1", role: String(role || "customer") },
+          params: { email: email.trim().toLowerCase(), method: "email_otp", registering: "1", otpSent: "1", role: String(effectiveRole || "customer") },
         });
         return;
       }
@@ -328,7 +331,7 @@ export default function RegisterScreen() {
       <Text style={styles.heading}>{t("auth.registerTitle", { role: roleTitle })}</Text>
       <Text style={styles.subheading}>{t("auth.registerSubtitle")}</Text>
 
-      {role === "vendor" && registeredVendorPhone ? (
+      {effectiveRole === "vendor" && registeredVendorPhone ? (
         <View style={styles.alreadyRegisteredBox}>
           <Text style={styles.alreadyRegisteredTitle}>You are already registered with SabSewa Local</Text>
           <Text style={styles.alreadyRegisteredText}>
@@ -472,12 +475,12 @@ export default function RegisterScreen() {
         />
       </View>
 
-      {(role === "customer" || role === "vendor") && (
+      {(effectiveRole === "customer" || effectiveRole === "vendor") && (
         <View style={styles.inputBlock}>
-          <Text style={styles.label}>{role === "vendor" ? t("auth.shopAddress") : t("auth.customerAddress")}</Text>
+          <Text style={styles.label}>{effectiveRole === "vendor" ? t("auth.shopAddress") : t("auth.customerAddress")}</Text>
           <TextInput
             style={styles.input}
-            placeholder={role === "vendor" ? t("auth.flatHouseVendor") : t("auth.flatHouseCustomer")}
+            placeholder={effectiveRole === "vendor" ? t("auth.flatHouseVendor") : t("auth.flatHouseCustomer")}
             value={flatHouse}
             onChangeText={setFlatHouse}
           />
@@ -530,7 +533,7 @@ export default function RegisterScreen() {
       </View>
 
       {/* ROLE-SPECIFIC EXTRA FIELD */}
-      {role === "vendor" && (
+      {effectiveRole === "vendor" && (
         <View style={styles.inputBlock}>
           <Text style={styles.label}>{t("auth.shopTradeName")}</Text>
           <TextInput
@@ -629,7 +632,7 @@ export default function RegisterScreen() {
         </View>
       )}
 
-      {role === "rider" && (
+      {effectiveRole === "rider" && (
         <View style={styles.inputBlock}>
           <Text style={styles.label}>{t("auth.deliveryArea")}</Text>
           <TextInput

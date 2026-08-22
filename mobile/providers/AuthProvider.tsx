@@ -31,7 +31,7 @@ function cleanRole(value: unknown): AppRole | null {
 function roleHome(role: AppRole | null) {
   if (role === "vendor") return "/vendor/dashboard";
   if (role === "rider") return "/rider";
-  if (role === "admin" || role === "company_admin" || role === "super_admin" || role === "master_admin") return "/company";
+  if (isAdminRoleValue(role)) return "/company";
   return "/customer/dashboard";
 }
 
@@ -178,8 +178,20 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
     const inVendorArea = firstSegment === "vendor";
     const inCompanyArea = firstSegment === "company";
     const isPublicVendorRegistrationRoute = pathname === "/vendor/register" || pathname === "/vendor-registration";
+    const search = typeof window !== "undefined" ? window.location.search : "";
+    const authParams = new URLSearchParams(search);
+    const isVendorAuthIntent =
+      inAuthGroup &&
+      (authParams.get("role") === "vendor" || authParams.get("intent") === "vendor_login");
 
     if (isPublicVendorRegistrationRoute) {
+      return;
+    }
+
+    if (isVendorAuthIntent && normalizedRole !== "vendor") {
+      if (typeof window !== "undefined") {
+        window.sessionStorage.removeItem(MASTER_ADMIN_SESSION_STORAGE_KEY);
+      }
       return;
     }
 

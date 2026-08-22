@@ -23,12 +23,12 @@ function sanitizeGreetingName(value?: string | null) {
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { user, loading, signOut } = useAuth();
+  const { user, loading, role, signOut } = useAuth();
   const { language, t, setLanguage, isLanguageAvailable } = useLanguage();
   const [profileName, setProfileName] = useState("");
-  const role = user?.user_metadata?.role;
-  const isCustomer = role === "customer";
-  const isVendor = role === "vendor";
+  const normalizedRole = String(role || "").toLowerCase();
+  const isCustomer = normalizedRole === "customer";
+  const isVendor = normalizedRole === "vendor";
 
   const categoryKeys = [
     "category.grocery",
@@ -99,6 +99,14 @@ export default function HomeScreen() {
       return;
     }
     router.push("/vendor/register" as any);
+  }
+
+  function openVendorLogin() {
+    if (typeof window !== "undefined" && window.location) {
+      window.location.href = "/auth/Login?role=vendor&intent=vendor_login";
+      return;
+    }
+    router.push({ pathname: "/auth/Login", params: { role: "vendor", intent: "vendor_login" } } as any);
   }
 
   return (
@@ -248,7 +256,7 @@ export default function HomeScreen() {
             <TouchableOpacity style={styles.primaryButton} onPress={openVendorRegistration}>
               <Text style={styles.primaryText}>{t("home.registerShop")}</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.secondaryButton} onPress={() => router.push("/auth/Login" as any)}>
+            <TouchableOpacity style={styles.secondaryButton} onPress={openVendorLogin}>
               <Text style={styles.secondaryText}>{t("home.vendorLogin")}</Text>
             </TouchableOpacity>
           </>

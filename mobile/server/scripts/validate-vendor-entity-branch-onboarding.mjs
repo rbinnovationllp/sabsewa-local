@@ -48,6 +48,8 @@ assert.doesNotMatch(registerScreen, /with mobile \{registeredVendorPhone\}/, "ex
 assert.match(registerScreen, /savePendingRegistrationDraft\(formattedPhone, authMetadata\)/, "vendor phone registration must save the pending registration draft before OTP");
 assert.match(registerScreen, /savePendingRegistrationDraft\(email\.trim\(\)\.toLowerCase\(\), authMetadata\)/, "vendor email registration must save the pending registration draft before OTP");
 assert.match(publicHome, /window\.location\.href = "\/vendor\/register"/, "Home Register Your Shop must use public vendor route");
+assert.match(publicHome, /role,\s*signOut/, "Home screen must use the resolved auth role rather than raw user metadata");
+assert.match(publicHome, /\/auth\/Login\?role=vendor&intent=vendor_login/, "Home Vendor Login must use vendor-intent login route");
 assert.match(hlmLanding, /window\.location\.href = "\/vendor\/register"/, "HLM Register as Vendor must use public vendor route");
 assert.match(authEntry, /role === "vendor"[\s\S]*router\.push\("\/vendor\/register"/, "Auth role chooser must route vendors to public vendor route");
 assert.match(rootLayout, /const handleGoHome = \(\) => \{[\s\S]*router\.replace\("\/" as any\);[\s\S]*\};/, "root Home button must always route to public Home");
@@ -56,6 +58,8 @@ assert.doesNotMatch(companyLayout, /\{renderHeader\(\)\}/, "Company verification
 assert.match(authProvider, /isPublicVendorRegistrationRoute/, "auth guard must allow public vendor registration route");
 assert.match(authProvider, /pathname === "\/vendor\/register"/, "auth guard must explicitly allow /vendor/register");
 assert.match(loginScreen, /params\.registering === "1"[\s\S]*String\(params\.role \|\| pendingMetadata\.role \|\| "customer"\)/, "registration login must prefer intended registration role over stale user metadata");
+assert.match(loginScreen, /signedInNonVendor/, "vendor-intent login must block already signed-in non-vendor sessions");
+assert.match(loginScreen, /Sign out and continue as Vendor/, "vendor-intent login must offer explicit account switch instead of opening CRM");
 assert.match(loginScreen, /\/vendor\/KYC\?vendor=\$\{registrationResult\.vendorId\}/, "vendor registration success must route to linked vendor KYC upload");
 assert.doesNotMatch(loginScreen, /params\.registering === "1" && role === "vendor"[\s\S]*navigateTo\("\/vendor\/dashboard"\)/, "vendor registration must not route directly to vendor dashboard");
 assert.match(registrationCompletion, /already linked to an administrative account/, "vendor registration must block reuse of an administrative account");
@@ -65,6 +69,7 @@ assert.match(roleRouter, /lastModuleAllowedForRole/, "role router must validate 
 assert.match(roleRouter, /lastModule\.startsWith\("\/company"\)[\s\S]*isAdminRole/, "role router must allow /company only for admin roles");
 assert.match(authProvider, /metadataRole && !isAdminRoleValue\(metadataRole\)/, "frontend role resolver must ignore admin roles from user_metadata");
 assert.match(authProvider, /removeItem\(MASTER_ADMIN_SESSION_STORAGE_KEY\)/, "auth provider must clear cached master admin sessions on logout or non-admin role");
+assert.match(authProvider, /isVendorAuthIntent[\s\S]*return;/, "auth guard must not auto-open Company CRM on vendor-intent login");
 assert.match(apiSecurity, /resolveTrustedRole/, "backend JWT middleware must resolve roles from trusted server-side records");
 assert.match(apiSecurity, /admin_profiles/, "backend JWT middleware must check admin profiles for CRM authorization");
 assert.match(apiSecurity, /metadataRole && !ADMIN_ROLES\.has\(metadataRole\)/, "backend must ignore admin roles supplied by user_metadata");

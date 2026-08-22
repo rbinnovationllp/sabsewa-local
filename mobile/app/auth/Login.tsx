@@ -33,8 +33,10 @@ function otpVerifyErrorKey(error: unknown) {
 export default function LoginScreen() {
   const router = useRouter();
   const params: any = useLocalSearchParams();
-  const { signInWithOtp, signInWithEmailOtp, verifyEmailOtp, verifyOtp } = useAuth();
+  const { user, role, signOut, signInWithOtp, signInWithEmailOtp, verifyEmailOtp, verifyOtp } = useAuth();
   const { t } = useLanguage();
+  const isVendorLoginIntent = String(params.role || "").toLowerCase() === "vendor" || String(params.intent || "").toLowerCase() === "vendor_login";
+  const signedInNonVendor = Boolean(user?.id && isVendorLoginIntent && String(role || "").toLowerCase() !== "vendor");
 
   const [phone, setPhone] = useState(params.phone ? String(params.phone) : "");
   const [email, setEmail] = useState(params.email ? String(params.email) : "");
@@ -295,6 +297,36 @@ export default function LoginScreen() {
     setOtpSent(false);
   }
 
+  async function switchToVendorLogin() {
+    await signOut();
+    if (Platform.OS === "web") {
+      window.location.href = "/auth/Login?role=vendor&intent=vendor_login";
+      return;
+    }
+    router.replace({ pathname: "/auth/Login", params: { role: "vendor", intent: "vendor_login" } } as any);
+  }
+
+  if (signedInNonVendor) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.title}>Vendor Login</Text>
+        <View style={styles.warningBox}>
+          <Text style={styles.warningTitle}>You are currently signed in with a non-vendor account.</Text>
+          <Text style={styles.warningText}>
+            For security, SabSewa Local will not open Company CRM or mix Master Admin/Admin and Vendor sessions.
+            Please sign out first, then login with the registered vendor mobile number.
+          </Text>
+        </View>
+        <TouchableOpacity style={styles.button} onPress={switchToVendorLogin}>
+          <Text style={styles.buttonText}>Sign out and continue as Vendor</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.resendBtn} onPress={() => router.replace("/" as any)}>
+          <Text style={styles.resendText}>Back to Home</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>{t("auth.loginTitle")}</Text>
@@ -520,6 +552,9 @@ const styles = StyleSheet.create({
   modeTextSelected: { color: "#fff" },
   errorText: { color: "red", marginBottom: 10, textAlign: "center" },
   technicalError: { color: "#7f1d1d", backgroundColor: "#fef2f2", borderRadius: 8, padding: 8, marginBottom: 12, fontSize: 11 },
+  warningBox: { borderWidth: 1, borderColor: "#f59e0b", backgroundColor: "#fff7ed", borderRadius: 12, padding: 14, marginBottom: 14 },
+  warningTitle: { color: "#9a3412", fontWeight: "900", marginBottom: 6 },
+  warningText: { color: "#7c2d12", lineHeight: 20 },
   otpDestination: { color: "#64748b", marginBottom: 10, fontSize: 12 },
   trustRow: { flexDirection: "row", gap: 10, alignItems: "flex-start", marginBottom: 12 },
   checkbox: { width: 24, height: 24, borderWidth: 1, borderColor: "#777", borderRadius: 6, alignItems: "center", justifyContent: "center", marginTop: 2 },

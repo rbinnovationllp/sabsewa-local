@@ -156,7 +156,7 @@ The public Home "Register Your Shop" and `/hlm` "Register as Vendor" actions nav
 
 Run `supabase/RUN_ONLY_VENDOR_PARTNER_REFERRAL_HARDENING_2026_08_22.sql` before deploying this flow because the vendor registration profile writes the hardened referral status columns.
 
-After OTP verification, a newly registered vendor is routed to the linked Vendor KYC upload page, not the Company CRM or vendor dashboard. Vendor onboarding payment remains disabled until KYC approval/provisional clearance. Master Admin/Admin accounts should not be reused as vendor test accounts; if a Master/Admin auth account attempts vendor registration, the app blocks the registration rather than mixing admin and vendor roles.
+After OTP verification, a newly registered vendor is routed to the linked Vendor KYC upload page, not the Company CRM or vendor dashboard. Vendor onboarding payment remains disabled until KYC approval/provisional clearance. Vendor Login uses an explicit vendor-intent URL; if a Master Admin/Admin/customer/partner session is already active, the login screen asks the user to sign out and continue as Vendor instead of opening Company CRM. Master Admin/Admin accounts should not be reused as vendor test accounts; if a Master/Admin auth account attempts vendor registration, the app blocks the registration rather than mixing admin and vendor roles.
 
 ---
 

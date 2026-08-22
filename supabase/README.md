@@ -205,6 +205,8 @@ Run `RUN_ONLY_PARTNER_COMMISSION_PAYMENT_KYC_AND_COMPLIANCE_2026_08_10.sql` afte
 ### Vendor KYC Review Policy Controls
 Vendor KYC decisions use existing vendors, vendor_kyc_documents, vendor_status_history, and vendor_notifications tables. No additional public storage access is required.
 
+Run `RUN_FIX_VENDOR_BUSINESS_ESTABLISHMENT_ADDRESS_PROOF_2026_08_23.sql` before testing the mandatory Business Establishment Address Proof section. It preserves the `vendor_kyc_documents_document_type_check` validation and adds establishment/occupancy proof document types for rented/leased, vendor-owned, family-owned, shared/licensed and other lawful premises. The private `vendor-kyc-private` bucket remains unchanged.
+
 ### Partner/Vendor KYC review controls
 
 The Partner and Vendor KYC review UI depends on the existing partner_applications, partner_kyc_documents, partner_admin_audit_logs, vendors, vendor_kyc_documents, vendor_status_history and vendor_notifications structures. Apply the latest dated RUN_ONLY/RUN_FIX SQL files before production use.

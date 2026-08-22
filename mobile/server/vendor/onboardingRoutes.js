@@ -462,6 +462,34 @@ function requiredKycDocumentsForCategory(category) {
       ],
     },
     {
+      id: "business_establishment_address_proof",
+      title: "Business Establishment Address Proof",
+      required: true,
+      note: "Upload proof that the vendor is legally entitled to operate from the declared shop/business address. The proof must match the declared business address; recent utility bills should preferably be not older than 3 months. If the bill/property document is not in the vendor's name, upload a consent/NOC, tenancy, relationship or authorization proof as applicable.",
+      occupancyTypes: [
+        { type: "rented_leased", label: "Rented / leased premises" },
+        { type: "vendor_owned", label: "Vendor-owned premises" },
+        { type: "family_owned", label: "Family-owned premises" },
+        { type: "shared_licensed", label: "Shared / licensed business premises" },
+        { type: "other_legal_occupancy", label: "Other legally permitted occupancy" },
+      ],
+      options: [
+        { type: "establishment_rent_agreement", label: "Rented/leased - Valid rent agreement" },
+        { type: "registered_lease_deed", label: "Rented/leased - Registered lease deed" },
+        { type: "leave_license_agreement", label: "Rented/leased - Leave-and-licence agreement" },
+        { type: "establishment_shop_registration", label: "Shop & Establishment certificate showing business address" },
+        { type: "establishment_recent_utility_bill", label: "Recent electricity/water/utility bill for premises" },
+        { type: "owner_consent_noc", label: "Owner consent / NOC / authorization" },
+        { type: "property_tax_receipt", label: "Owned premises - Property-tax receipt" },
+        { type: "municipal_ownership_record", label: "Owned premises - Municipal ownership record" },
+        { type: "registered_sale_deed", label: "Owned premises - Registered sale deed / ownership document" },
+        { type: "family_ownership_consent", label: "Family-owned premises - ownership proof + consent" },
+        { type: "relationship_authority_proof", label: "Family-owned premises - relationship/legal authority proof" },
+        { type: "shared_premises_license", label: "Shared/licensed premises agreement" },
+        { type: "other_occupancy_proof", label: "Other legally permitted occupancy proof" },
+      ],
+    },
+    {
       id: "owner_photo",
       title: "Owner / Authorized Person Photograph with Shop View",
       required: true,
@@ -583,6 +611,7 @@ router.post("/:vendor_id/kyc-documents", requireAuth, runKycMulter, async (req, 
     const documentType = String(req.body?.document_type || "").trim();
     const documentSection = String(req.body?.document_section || "").trim();
     const documentLabel = String(req.body?.document_label || documentType).trim();
+    const occupancyType = String(req.body?.occupancy_type || "").trim();
     const section = requirements.find((item) => item.id === documentSection);
     const allowedTypes = flattenKycDocumentTypes(requirements);
 
@@ -591,6 +620,12 @@ router.post("/:vendor_id/kyc-documents", requireAuth, runKycMulter, async (req, 
     }
     if (!req.file?.buffer) {
       return res.status(400).json({ success: false, error: "Please choose a document file before uploading." });
+    }
+    if (documentSection === "business_establishment_address_proof") {
+      const allowedOccupancyTypes = new Set((section.occupancyTypes || []).map((option) => option.type));
+      if (!occupancyType || !allowedOccupancyTypes.has(occupancyType)) {
+        return res.status(400).json({ success: false, error: "Please select the shop occupancy type before uploading establishment address proof." });
+      }
     }
     if (documentSection === "owner_photo") {
       const ownerPhotoMime = String(req.file.mimetype || "").toLowerCase();
@@ -623,8 +658,12 @@ router.post("/:vendor_id/kyc-documents", requireAuth, runKycMulter, async (req, 
         metadata: {
           document_section: documentSection,
           document_label: documentLabel || documentType,
+          occupancy_type: occupancyType || null,
           original_file_name: req.file.originalname || `${documentType}`,
           optimized_for_storage: req.file.mimetype?.startsWith("image/") || false,
+          preliminary_screening: documentSection === "business_establishment_address_proof"
+            ? "AI/manual screening should check address match, document freshness and occupancy authority; final decision remains with SabSewa Admin."
+            : null,
           note: "Image compression only; legal document content is not altered or fabricated.",
         },
       })

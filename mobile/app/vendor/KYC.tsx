@@ -15,6 +15,7 @@ type KycSection = {
   required: boolean;
   conditional?: boolean;
   note: string;
+  occupancyTypes?: KycOption[];
   options: KycOption[];
 };
 type PickedFile = { uri: string; fileName?: string; mimeType?: string; nativeFile?: any };
@@ -114,6 +115,34 @@ function buildKycSections(category: unknown, serverSections: any[] = []): KycSec
       ],
     },
     {
+      id: "business_establishment_address_proof",
+      title: "Business Establishment Address Proof",
+      required: true,
+      note: "Upload proof that you are legally entitled to operate from the declared shop/business address. The address should match the registration address. Recent utility bills should preferably be not older than 3 months; if the document is in another person's name, add consent/NOC, tenancy, relationship or authority proof.",
+      occupancyTypes: [
+        { type: "rented_leased", label: "Rented / leased premises" },
+        { type: "vendor_owned", label: "Vendor-owned premises" },
+        { type: "family_owned", label: "Family-owned premises" },
+        { type: "shared_licensed", label: "Shared / licensed business premises" },
+        { type: "other_legal_occupancy", label: "Other legally permitted occupancy" },
+      ],
+      options: [
+        { type: "establishment_rent_agreement", label: "Rented/leased - Valid rent agreement" },
+        { type: "registered_lease_deed", label: "Rented/leased - Registered lease deed" },
+        { type: "leave_license_agreement", label: "Rented/leased - Leave-and-licence agreement" },
+        { type: "establishment_shop_registration", label: "Shop & Establishment certificate showing business address" },
+        { type: "establishment_recent_utility_bill", label: "Recent electricity/water/utility bill for premises" },
+        { type: "owner_consent_noc", label: "Owner consent / NOC / authorization" },
+        { type: "property_tax_receipt", label: "Owned premises - Property-tax receipt" },
+        { type: "municipal_ownership_record", label: "Owned premises - Municipal ownership record" },
+        { type: "registered_sale_deed", label: "Owned premises - Registered sale deed / ownership document" },
+        { type: "family_ownership_consent", label: "Family-owned premises - ownership proof + consent" },
+        { type: "relationship_authority_proof", label: "Family-owned premises - relationship/legal authority proof" },
+        { type: "shared_premises_license", label: "Shared/licensed premises agreement" },
+        { type: "other_occupancy_proof", label: "Other legally permitted occupancy proof" },
+      ],
+    },
+    {
       id: "owner_photo",
       title: "Owner / Authorized Person Photograph with Shop View",
       required: true,
@@ -181,6 +210,7 @@ export default function VendorKycScreen() {
   const [requiredDocs, setRequiredDocs] = useState<any[]>([]);
   const [documents, setDocuments] = useState<KycDocument[]>([]);
   const [selectedTypes, setSelectedTypes] = useState<Record<string, string>>({});
+  const [selectedOccupancyTypes, setSelectedOccupancyTypes] = useState<Record<string, string>>({});
   const [pickedFiles, setPickedFiles] = useState<Record<string, PickedFile | null>>({});
   const [uploadErrors, setUploadErrors] = useState<Record<string, string | null>>({});
 
@@ -202,11 +232,16 @@ export default function VendorKycScreen() {
 
   function primeSelectedTypes(nextSections: KycSection[], nextDocuments: KycDocument[]) {
     const nextSelected: Record<string, string> = {};
+    const nextOccupancySelected: Record<string, string> = {};
     for (const section of nextSections) {
       const latest = latestDocumentForSection(section, nextDocuments);
       nextSelected[section.id] = latest?.document_type || selectedTypes[section.id] || section.options[0]?.type || "";
+      if (section.occupancyTypes?.length) {
+        nextOccupancySelected[section.id] = latest?.metadata?.occupancy_type || selectedOccupancyTypes[section.id] || section.occupancyTypes[0]?.type || "";
+      }
     }
     setSelectedTypes(nextSelected);
+    setSelectedOccupancyTypes(nextOccupancySelected);
   }
 
   async function loadKyc() {
@@ -234,6 +269,16 @@ export default function VendorKycScreen() {
   function chooseOption(section: KycSection, option: KycOption) {
     setSelectedTypes((current) => ({ ...current, [section.id]: option.type }));
     setPickedFiles((current) => ({ ...current, [section.id]: null }));
+  }
+
+  function chooseOccupancyType(section: KycSection, option: KycOption) {
+    setSelectedOccupancyTypes((current) => ({ ...current, [section.id]: option.type }));
+    setUploadErrors((current) => ({ ...current, [section.id]: null }));
+  }
+
+  function selectedOccupancyFor(section: KycSection) {
+    if (!section.occupancyTypes?.length) return null;
+    return section.occupancyTypes.find((option) => option.type === selectedOccupancyTypes[section.id]) || section.occupancyTypes[0];
   }
 
   function setSectionFile(sectionId: string, file: PickedFile) {
@@ -314,14 +359,17 @@ export default function VendorKycScreen() {
 
   async function uploadSectionDocument(section: KycSection, explicitFile?: PickedFile) {
     const option = selectedOptionFor(section, selectedTypes);
+    const occupancyOption = selectedOccupancyFor(section);
     const pickedFile = explicitFile || pickedFiles[section.id];
     if (uploadingSectionId === section.id) return;
     const uploadVendorId = vendor?.id || resolvedVendorId || await resolveVendorId();
     if (!uploadVendorId && pickedFile) {
       setResolvedVendorId("");
     }
-    if (!uploadVendorId || !option?.type || !pickedFile) {
-      const message = !pickedFile
+    if (!uploadVendorId || !option?.type || !pickedFile || (section.occupancyTypes?.length && !occupancyOption?.type)) {
+      const message = section.occupancyTypes?.length && !occupancyOption?.type
+        ? "Please select the shop occupancy type before uploading establishment address proof."
+        : !pickedFile
         ? `Choose ${section.title} and select/take a document photo. Upload starts automatically after selection.`
         : "Vendor profile was not ready for upload. Please refresh the page and try again.";
       setUploadErrors((current) => ({ ...current, [section.id]: message }));
@@ -344,6 +392,7 @@ export default function VendorKycScreen() {
       formData.append("document_type", option.type);
       formData.append("document_section", section.id);
       formData.append("document_label", option.label);
+      if (occupancyOption?.type) formData.append("occupancy_type", occupancyOption.type);
       await appendPickedFile(formData, pickedFile, option.type);
 
       const response = await authenticatedFetch(`/api/vendor/onboarding/${uploadVendorId}/kyc-documents`, { method: "POST", body: formData });
@@ -465,6 +514,7 @@ export default function VendorKycScreen() {
           const uploaded = isUploaded(latest);
           const optionalAndNotRequired = !section.required && section.conditional && !uploaded;
           const option = selectedOptionFor(section, selectedTypes);
+          const occupancyOption = selectedOccupancyFor(section);
           const pickedFile = pickedFiles[section.id];
           const uploading = uploadingSectionId === section.id;
           const uploadError = uploadErrors[section.id];
@@ -482,6 +532,19 @@ export default function VendorKycScreen() {
               </View>
               <Text style={styles.docNote}>{section.note}</Text>
 
+              {section.occupancyTypes?.length ? (
+                <View style={styles.occupancyBox}>
+                  <Text style={styles.fieldLabel}>Shop occupancy type</Text>
+                  <View style={styles.optionList}>
+                    {section.occupancyTypes.map((candidate) => (
+                      <TouchableOpacity key={candidate.type} style={[styles.optionChip, occupancyOption?.type === candidate.type && styles.optionChipSelected]} onPress={() => chooseOccupancyType(section, candidate)}>
+                        <Text style={[styles.optionText, occupancyOption?.type === candidate.type && styles.optionTextSelected]}>{candidate.label}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+              ) : null}
+
               <View style={styles.optionList}>
                 {section.options.map((candidate) => (
                   <TouchableOpacity key={candidate.type} style={[styles.optionChip, option?.type === candidate.type && styles.optionChipSelected]} onPress={() => chooseOption(section, candidate)}>
@@ -492,9 +555,11 @@ export default function VendorKycScreen() {
 
               <View style={styles.sectionUploadPanel}>
                 <Text style={styles.selectedLine}>Selected: {option?.label || "None"}</Text>
+                {occupancyOption ? <Text style={styles.selectedLine}>Occupancy: {occupancyOption.label}</Text> : null}
                 {uploaded ? (
                   <View style={styles.uploadedBox}>
                     <Text style={styles.successText}>{section.id === "owner_photo" ? "Owner + Shop Photograph" : uploadedLabel} - Uploaded Successfully</Text>
+                    {latest?.metadata?.occupancy_type ? <Text style={styles.fileName}>Occupancy type: {section.occupancyTypes?.find((item) => item.type === latest.metadata?.occupancy_type)?.label || latest.metadata?.occupancy_type}</Text> : null}
                     <Text style={styles.fileName}>{latest?.file_name || "Uploaded document"} {fileSizeLabel(latest?.file_size_bytes)}</Text>
                     <View style={styles.actions}>
                       <TouchableOpacity style={styles.secondaryBtn} onPress={() => latest && previewDocument(latest)}>
@@ -576,6 +641,8 @@ const styles = StyleSheet.create({
   optionChipSelected: { borderColor: "#1166ff", backgroundColor: "#1166ff" },
   optionText: { color: "#334155", fontWeight: "800" },
   optionTextSelected: { color: "#fff" },
+  occupancyBox: { borderWidth: 1, borderColor: "#bfdbfe", borderRadius: 8, padding: 10, marginTop: 10, backgroundColor: "#eff6ff" },
+  fieldLabel: { color: "#1e3a8a", fontWeight: "900", marginBottom: 8 },
   sectionUploadPanel: { borderTopWidth: 1, borderTopColor: "#e5e7eb", marginTop: 12, paddingTop: 12 },
   selectedLine: { color: "#111827", fontWeight: "900", marginBottom: 6 },
   uploadedBox: { borderWidth: 1, borderColor: "#bbf7d0", backgroundColor: "#f0fdf4", borderRadius: 8, padding: 10, marginTop: 8 },

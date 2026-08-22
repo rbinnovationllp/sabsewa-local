@@ -22,7 +22,7 @@ export default function PrivacyScreen() {
         },
         {
           title: "Vendor verification privacy",
-          body: "Vendor verification may collect lawful business details such as legal proprietor or entity name, public shop or trade name, business address, verified business phone number, authorised representative, category, PAN or GSTIN where applicable, category-specific licences, shop photographs, location verification and accuracy declarations. Customer-facing profiles may show verified business information where legally appropriate and consented to, but private residential addresses, private numbers and unnecessary identity documents must not be displayed publicly.",
+          body: "Vendor verification may collect lawful business details such as legal proprietor or entity name, public shop or trade name, business address, business-establishment or occupancy address proof for the declared shop/branch premises, verified business phone number, authorised representative, category, PAN or GSTIN where applicable, category-specific licences, shop photographs, location verification and accuracy declarations. Customer-facing profiles may show verified business information where legally appropriate and consented to, but private residential addresses, private numbers and unnecessary identity documents must not be displayed publicly.",
         },
         {
           title: "No religion-based verification",

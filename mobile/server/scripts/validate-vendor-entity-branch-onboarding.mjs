@@ -25,6 +25,8 @@ assert.match(onboardingRoutes, /router\.post\("\/detect-existing-registration"/,
 assert.match(onboardingRoutes, /register_additional_branch/, "additional branch action must be handled by backend");
 assert.match(onboardingRoutes, /register_additional_legal_entity/, "additional legal entity action must be handled by backend");
 assert.match(onboardingRoutes, /add_authorized_terminal/, "additional terminal action must be handled by backend");
+assert.match(onboardingRoutes, /business_establishment_address_proof/, "vendor/branch KYC must require business-establishment address proof");
+assert.match(onboardingRoutes, /occupancyTypes/, "vendor/branch KYC must capture premises occupancy type");
 
 assert.match(registerScreen, /You are already registered with SabSewa Local/, "repeat vendor registration message must be visible");
 assert.match(registerScreen, /Register Another Branch of Existing Business/, "additional branch choice must be visible");

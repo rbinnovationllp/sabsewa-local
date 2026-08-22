@@ -198,14 +198,15 @@ SabSewa-Local/
 ## 2026-08-08 Vendor Onboarding, KYC Upload and Payment Readiness
 
 - Vendor onboarding now follows the mandatory sequence: registration, KYC document upload, KYC verification, payment unlock, Razorpay payment verification, and final activation.
-- Vendor KYC document sections are flexible: Identity Proof and Address/Business Proof are mandatory; Restricted/Regulated Business Licence is conditional and optional for ordinary Vegetable Shops.
+- Vendor KYC document sections are flexible: Identity Proof, Address/Business Proof, Business Establishment Address Proof, and Owner + Shop Photograph are mandatory; Restricted/Regulated Business Licence is conditional and optional for ordinary Vegetable Shops.
+- Business Establishment Address Proof captures whether the premises are rented/leased, vendor-owned, family-owned, shared/licensed or another lawful occupancy model. Uploaded proof must support the declared shop address; recent utility bills should preferably be within 3 months, and documents in another person's name should be supported by tenancy, consent/NOC, relationship or authorization proof as applicable.
 - KYC upload now starts from Take Photo, Gallery or Files selection. The separate manual upload button was removed from the final workflow.
 - Upload status is backend-driven: Missing changes to Uploaded only after Supabase Storage succeeds and a `vendor_kyc_documents` row is created.
 - KYC uploads use the private Supabase bucket `vendor-kyc-private`, with signed preview and delete/re-upload support.
 - Backend KYC upload diagnostics now report the failing stage, including bucket lookup/creation, MIME validation, image compression, storage upload and metadata insert.
 - Browser/file-picker uploads infer MIME from filename when the picker reports `application/octet-stream`, so JPG/JPEG/PNG/WEBP/PDF documents are handled correctly.
 - Vendor payment configuration is category-aware through `vendor_fee_rules`; `Vegetable Shops` maps to the vegetables fee rule after running `supabase/RUN_FIX_VENDOR_ONBOARDING_PRICING_AND_ACTIVATION_2026_08_08.sql`.
-- Required manual Supabase SQL before production KYC/payment testing: `supabase/RUN_FIX_VENDOR_KYC_PRIVATE_BUCKET_2026_08_08.sql`, `supabase/RUN_FIX_VENDOR_KYC_DOCUMENT_FLEXIBLE_TYPES_2026_08_08.sql`, and `supabase/RUN_FIX_VENDOR_ONBOARDING_PRICING_AND_ACTIVATION_2026_08_08.sql`.
+- Required manual Supabase SQL before production KYC/payment testing: `supabase/RUN_FIX_VENDOR_KYC_PRIVATE_BUCKET_2026_08_08.sql`, `supabase/RUN_FIX_VENDOR_KYC_DOCUMENT_FLEXIBLE_TYPES_2026_08_08.sql`, `supabase/RUN_FIX_VENDOR_ONBOARDING_PRICING_AND_ACTIVATION_2026_08_08.sql`, and `supabase/RUN_FIX_VENDOR_BUSINESS_ESTABLISHMENT_ADDRESS_PROOF_2026_08_23.sql`.
 ## 2026-08-09 - Master Admin Secret-Code CRM Security
 
 - Added a Master Admin CRM gate requiring both authenticated `master_admin` role and backend-verified Master Admin Secret Code.

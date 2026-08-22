@@ -57,5 +57,9 @@ assert.match(onboardingRoutes, /verifyRazorpaySignature/, "onboarding payments v
 assert.match(onboardingRoutes, /kyc_provisionally_cleared/, "onboarding payment routes allow approved or SLA-provisional KYC clearance");
 assert.match(onboardingRoutes, /getRazorpayMode\(\) === "live"/, "live onboarding payments require gateway signature");
 assert.match(onboardingRoutes, /requireRole\(\[[^\]]*"admin"[^\]]*"company_admin"[^\]]*"super_admin"[^\]]*"master_admin"[^\]]*"kyc_reviewer"[^\]]*\]\)/, "onboarding admin operations require expanded company admin roles");
+assert.match(onboardingRoutes, /business_establishment_address_proof/, "vendor KYC requires business-establishment address proof");
+assert.match(onboardingRoutes, /occupancyTypes/, "vendor KYC captures establishment occupancy type");
+assert.match(onboardingRoutes, /establishment_recent_utility_bill/, "vendor KYC accepts recent utility bill as establishment proof");
+assert.match(onboardingRoutes, /owner_consent_noc/, "vendor KYC accepts owner consent/NOC where premises document is not in vendor name");
 
 console.log("Onboarding production validation passed.");

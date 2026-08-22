@@ -1,8 +1,8 @@
-export const SABSEWA_POLICY_BUNDLE_VERSION = "legal-bundle-local-2026-08-17";
-export const SABSEWA_TERMS_VERSION = "terms-local-2026-08-17";
-export const SABSEWA_PRIVACY_VERSION = "privacy-local-2026-07-27";
+export const SABSEWA_POLICY_BUNDLE_VERSION = "legal-bundle-local-2026-08-22";
+export const SABSEWA_TERMS_VERSION = "terms-local-2026-08-22";
+export const SABSEWA_PRIVACY_VERSION = "privacy-local-2026-08-22";
 export const SABSEWA_CUSTOMER_TERMS_VERSION = "customer-terms-local-2026-07-27";
-export const SABSEWA_VENDOR_TERMS_VERSION = "vendor-terms-local-2026-08-09";
+export const SABSEWA_VENDOR_TERMS_VERSION = "vendor-terms-local-2026-08-22";
 export const SABSEWA_CREDIT_DISCLAIMER_VERSION = "credit-disclaimer-local-2026-07-27";
 export const SABSEWA_REFUND_POLICY_VERSION = "refund-policy-local-2026-07-27";
 export const SABSEWA_GRIEVANCE_POLICY_VERSION = "grievance-policy-local-2026-07-27";

@@ -252,12 +252,20 @@ When vendor rejects an order:
 - Current monthly plans are Standard, Plus and Pro, with accepted-order allowances of 300, 750 and 1,500 respectively. Plan pricing must remain configurable through backend/database configuration.
 - Monthly plan upgrades may take effect after payment. Downgrades or switching back to category pay-per-order pricing should normally take effect after the current paid billing period unless Master Admin authorizes a documented exception. No retrospective refund should be automatically created for past accepted orders.
 - When a monthly allowance is exhausted, future eligible orders must use the selected plan's configurable overage base fee plus GST, not the vendor-category Pay As You Go rate.
-- When the required refundable/adjustable advance balance is below the plan minimum, the vendor must be notified of the exact top-up amount; shortfalls against platform charges must be recorded as liabilities and require recharge.
-- A wallet-exhaustion or shortfall billing hold must apply at shop/terminal level. It must not be treated as an administrative suspension of the full vendor owner account.
+- When the required refundable/adjustable advance balance is below the plan minimum or the backend-resolved GST-inclusive acceptance charge, the vendor must be notified of the exact top-up amount before final acceptance.
+- Final vendor acceptance must be blocked unless the complete GST-inclusive platform fee is deducted or the order is recorded as covered by an active monthly plan. Customer contact and complete delivery details must remain hidden until that backend operation succeeds.
 - Once the vendor formally accepts an order and the applicable pricing charge or monthly-plan usage record is created, the company will not refund, reverse or adjust it merely because the vendor later claims that the order was cancelled, not completed, settled privately or handled outside the platform.
 - Reversal or correction may be considered only for a company-confirmed duplicate deduction, technical error, unauthorised transaction or correction required under applicable law.
 - New orders automatically stop when the available advance balance falls below the required operational minimum or applicable backend-resolved category fee. Existing accepted orders must still be completed and applicable charges must still be recorded.
 - If a vendor voluntarily closes the account, the refund preview must show current balance, the Rs 500 activation/service charge already collected and not deducted again, unpaid completed-order fees, authorised adjustments, and estimated eligible refund before submission.
+
+### 4.12A Secure Order Conversation Before Acceptance
+- Before final acceptance, vendors and customers may communicate only through a secure order-specific SabSewa Local conversation.
+- The vendor must not see the customer's phone number, full address, personal email or external contact details before final backend acceptance.
+- Messaging, clarification questions, partial-availability responses and alternative-product proposals must not trigger any platform fee or GST.
+- Backend validation must block or mask attempts to share phone numbers, email addresses, WhatsApp links, UPI IDs, external payment links, QR/payment bypass language and other direct-contact details.
+- Alternative proposals must remain structured, linked to the order, auditable and free until the customer approves the modified order and the vendor finally accepts it.
+- Notification payloads for conversation messages must avoid sensitive previews such as medicine names, address details, phone numbers or personal identifiers.
 
 ### 4.13 Vendor Delivery Settings
 - Vendors or terminal operators may configure minimum order value for free delivery, delivery fee below that value, service radius, estimated delivery window, delivery availability and optional pickup facility.
@@ -383,6 +391,8 @@ The HLM MVP is acceptable for hackathon demo when:
 - Partner KYC is mandatory before Partner activation and payout eligibility. Required sections are Identity Proof, Address Proof where needed, Partner Photograph/Selfie, and organization documents for organization applicants.
 - Master Admin/authorized staff can verify Partner KYC, verify payment details, activate, suspend, reinstate or terminate Partners with audit trails and reasons.
 - Monthly Partner commission statements track eligible revenue, configurable percentage, deductions/TDS, net payable, payout status, date and reference number without automatic fund transfer.
+- Partner commission statements must support a 15-calendar-day post-payment review period. After successful payment/reconciliation and expiry of that period, statements may move from active transaction-detail display to protected financial archive, but payment proof, attribution evidence, GST/TDS/accounting data, approval/dispute history and audit records must be retained for the statutory period.
+- Legal hold blocks every automatic archive/minimization/deletion job. The system must support at least 96 months of retention unless a Chartered Accountant/legal adviser configures a longer period.
 - Partner conduct/confidentiality and protective suspension rules are part of Partner workflow and documentation.
 ### Vendor Identity Display Rule
 Vendor ID is an internal administrative and backend reference. Customer, vendor and partner-facing identification should prioritize owner/vendor name, registered mobile number, shop name and locality/area. Partner attribution must continue to link to the internal Vendor ID in the backend for commission and audit integrity.

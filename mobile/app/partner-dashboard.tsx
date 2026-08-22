@@ -37,7 +37,20 @@ export default function PartnerDashboardScreen() {
       <TextInput style={styles.input} value={phone} onChangeText={setPhone} placeholder="Registered mobile number" keyboardType="phone-pad" />
       <TouchableOpacity style={styles.button} onPress={load}><Text style={styles.buttonText}>{loading ? "Loading..." : "Load Partner Dashboard"}</Text></TouchableOpacity>
       {partner ? <View style={styles.card}><Text style={styles.name}>{partner.applicant_name}</Text><Text>Status: {partner.status}</Text><Text>Partner ID: {partner.partner_id || "-"}</Text><Text>Referral Code: {partner.referral_code || "-"}</Text></View> : null}
-      {statements.map((row) => <View key={row.id} style={styles.card}><Text style={styles.name}>{row.period_month}</Text><Text>Eligible Revenue: {money(row.eligible_revenue)}</Text><Text>Commission Earned: {money(row.gross_commission)}</Text><Text>Net Payable: {money(row.net_payable)}</Text><Text>Status: {String(row.payment_status || "pending").replace(/_/g, " ")}</Text><Text>Payment Date: {row.payment_date || "-"}</Text><Text>Reference: {row.reference_number || "-"}</Text></View>)}
+      {statements.map((row) => (
+        <View key={row.id} style={styles.card}>
+          <Text style={styles.name}>{row.period_month}</Text>
+          <Text>Eligible Revenue: {money(row.eligible_revenue)}</Text>
+          <Text>Commission Earned: {money(row.gross_commission)}</Text>
+          <Text>Net Payable: {money(row.net_payable)}</Text>
+          <Text>Status: {String(row.payment_status || "pending").replace(/_/g, " ")}</Text>
+          <Text>Review Status: {String(row.review_status || "not_started").replace(/_/g, " ")}</Text>
+          <Text>Archive Status: {String(row.archive_status || "active").replace(/_/g, " ")}</Text>
+          <Text>Payment Date: {row.payment_date || "-"}</Text>
+          <Text>Reference: {row.reference_number || "-"}</Text>
+          {row.transaction_detail_archived ? <Text style={styles.notice}>{row.partner_archive_message}</Text> : null}
+        </View>
+      ))}
     </ScrollView>
   );
 }
@@ -51,4 +64,5 @@ const styles = StyleSheet.create({
   buttonText: { color: "#fff", fontWeight: "900" },
   card: { borderWidth: 1, borderColor: "#e5e7eb", borderRadius: 8, padding: 14, marginBottom: 12, backgroundColor: "#fff" },
   name: { fontWeight: "900", fontSize: 18, marginBottom: 6 },
+  notice: { marginTop: 8, color: "#92400e", backgroundColor: "#fff7ed", borderWidth: 1, borderColor: "#fed7aa", borderRadius: 8, padding: 10 },
 });

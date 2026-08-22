@@ -13,6 +13,7 @@ import creditNotificationsRouter from "./hyperwallet/creditNotifications.js";
 import placeOrderRoutes from "./hyperlocal/placeOrder.js";
 import orderHistoryRoutes from "./hyperlocal/orderHistory.js";
 import vendorOrderActions from "./hyperlocal/vendorOrderActions.js";
+import orderConversationRoutes from "./hyperlocal/orderConversationRoutes.js";
 import discoveryRoutes from "./hyperlocal/discoveryRoutes.js";
 import pricingRoutes from "./hyperlocal/pricingRoutes.js";
 import availabilityRoutes from "./hyperlocal/availabilityRoutes.js";
@@ -71,6 +72,7 @@ app.use("/api/inventory", inventoryRoutes);
 
 app.use("/api/order", placeOrderRoutes);
 app.use("/api/order", orderHistoryRoutes);
+app.use("/api/order", orderConversationRoutes);
 app.use("/api/vendor/orders", vendorOrderActions);
 app.use("/api/discovery", discoveryRoutes);
 app.use("/api/vendor/pricing", pricingRoutes);

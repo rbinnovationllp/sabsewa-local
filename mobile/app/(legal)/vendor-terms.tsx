@@ -18,11 +18,11 @@ export default function VendorTermsScreen() {
         },
         {
           title: "Order-fee deductions",
-          body: "SabSewa Local deducts Rs 15 as a platform facilitation fee for each successfully accepted and confirmed real-world order. The deduction is linked to the order ID, acceptance event, timestamp and wallet balance before and after deduction, and is shown in the vendor wallet history and downloadable statements.",
+          body: "Platform fees and monthly terminal-subscription charges are exclusive of statutory taxes. Applicable GST will be charged additionally at the prevailing rate. SabSewa Local deducts the backend-resolved category platform base fee plus GST only when the vendor finally accepts an original order or customer-approved modified order, unless that order is covered by an active monthly accepted-order plan. Current category base fees are Rs 15 for fruits/vegetables, Rs 20 for kirana/general stores and Rs 25 for restaurants/pharmacies/other default categories, plus applicable GST. The deduction is linked to the order ID, acceptance event, timestamp, pricing snapshot, GST snapshot and wallet balance before and after deduction, and is shown in the vendor wallet history and downloadable statements.",
         },
         {
           title: "No reversal after vendor acceptance",
-          body: "Once the vendor formally accepts an order through SabSewa Local and the Rs 15 platform facilitation fee is deducted, the company will not refund, reverse or adjust this Rs 15 charge merely because the vendor later claims that the order was cancelled, not completed, settled privately or handled outside the platform. Reversal may be considered only for a company-confirmed duplicate deduction, technical error, unauthorised transaction or any correction required by applicable law.",
+          body: "Once the vendor formally accepts an order through SabSewa Local and the applicable category base fee plus GST or monthly-plan usage record is created, the company will not refund, reverse or adjust the charge merely because the vendor later claims that the order was cancelled, not completed, settled privately or handled outside the platform. Reversal may be considered only for a company-confirmed duplicate deduction, technical error, unauthorised transaction or any correction required by applicable law.",
         },
         {
           title: "Delivery estimates and safe fulfilment",
@@ -30,7 +30,7 @@ export default function VendorTermsScreen() {
         },
         {
           title: "Customer data protection",
-          body: "Customer phone number, complete address and invoice details remain hidden before formal order acceptance. After acceptance, the vendor may use customer information only for fulfilment, complaint resolution and lawful business purposes connected with that order.",
+          body: "Customer phone number, complete address and invoice details remain hidden before formal order acceptance. Before acceptance, any clarification, availability response or alternative-product proposal must use the SabSewa Local order conversation. Vendors and customers must not share phone numbers, email addresses, WhatsApp links, UPI IDs, external payment links or other direct-contact details to bypass the platform's privacy controls. After acceptance, the vendor may use customer information only for fulfilment, complaint resolution and lawful business purposes connected with that order.",
         },
         {
           title: "Exit and suspension",

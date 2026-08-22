@@ -26,6 +26,25 @@ export default function PartnerPayoutManagementScreen() {
     }
   }
 
+  async function runArchiveCheck() {
+    setLoading(true);
+    try {
+      const response = await authenticatedFetch("/api/partner/admin/commission-archive/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ job_id: `crm-${Date.now()}` }),
+      });
+      const json = await response.json();
+      if (!response.ok || !json.success) throw new Error(json.error || "Unable to run archive check.");
+      Alert.alert("Archive check complete", `Archived: ${json.result?.archived_count || 0}, skipped: ${json.result?.skipped_count || 0}`);
+      await load();
+    } catch (error: any) {
+      Alert.alert("Archive check", error?.message || "Unable to run archive check.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   useEffect(() => { load(); }, []);
   const filtered = useMemo(() => {
     const needle = search.trim().toLowerCase();
@@ -40,6 +59,7 @@ export default function PartnerPayoutManagementScreen() {
       <Text style={styles.subheading}>Review calculated commission statements, masked payment details and payout status. This ledger does not transfer money automatically.</Text>
       <TextInput style={styles.search} value={search} onChangeText={setSearch} placeholder="Search by partner, phone, city, state or payment status" />
       <TouchableOpacity style={styles.refresh} onPress={load}><Text style={styles.refreshText}>{loading ? "Loading..." : "Refresh Payout Ledger"}</Text></TouchableOpacity>
+      <TouchableOpacity style={styles.secondary} onPress={runArchiveCheck}><Text style={styles.secondaryText}>Run 15-Day Archive Eligibility Check</Text></TouchableOpacity>
       {filtered.map((row) => (
         <View key={row.id} style={styles.card}>
           <View style={styles.header}>
@@ -62,7 +82,12 @@ export default function PartnerPayoutManagementScreen() {
             <Metric label="Net Payable" value={money(row.net_payable)} />
             <Metric label="Payment Date" value={row.payment_date || "-"} />
             <Metric label="Reference" value={row.reference_number || "-"} />
+            <Metric label="Review Status" value={String(row.review_status || "not_started").replace(/_/g, " ")} />
+            <Metric label="Review Ends" value={row.review_period_ends_at || "-"} />
+            <Metric label="Archive Status" value={String(row.archive_status || "active").replace(/_/g, " ")} />
+            <Metric label="Legal Hold" value={row.legal_hold ? "Yes" : "No"} />
           </View>
+          {row.partner_archive_message ? <Text style={styles.notice}>{row.partner_archive_message}</Text> : null}
         </View>
       ))}
       {!filtered.length && !loading ? <Text style={styles.empty}>No Partner payout statements found.</Text> : null}
@@ -81,6 +106,8 @@ const styles = StyleSheet.create({
   search: { borderWidth: 1, borderColor: "#cbd5e1", borderRadius: 8, padding: 12, marginBottom: 12, backgroundColor: "#fff" },
   refresh: { backgroundColor: "#1166ff", borderRadius: 8, padding: 12, alignItems: "center", marginBottom: 12 },
   refreshText: { color: "#fff", fontWeight: "900" },
+  secondary: { borderWidth: 1, borderColor: "#1166ff", borderRadius: 8, padding: 12, alignItems: "center", marginBottom: 12, backgroundColor: "#eff6ff" },
+  secondaryText: { color: "#1166ff", fontWeight: "900" },
   card: { borderWidth: 1, borderColor: "#e5e7eb", borderRadius: 8, padding: 14, marginBottom: 12, backgroundColor: "#fff" },
   header: { flexDirection: "row", justifyContent: "space-between", gap: 10 },
   name: { fontSize: 18, fontWeight: "900", color: "#0f172a" },
@@ -90,5 +117,6 @@ const styles = StyleSheet.create({
   metric: { minWidth: 150, flexGrow: 1, borderWidth: 1, borderColor: "#e5e7eb", borderRadius: 8, padding: 10, backgroundColor: "#f8fafc" },
   metricLabel: { color: "#64748b", marginBottom: 4 },
   metricValue: { color: "#111827", fontWeight: "900" },
+  notice: { marginTop: 10, color: "#92400e", backgroundColor: "#fff7ed", borderWidth: 1, borderColor: "#fed7aa", borderRadius: 8, padding: 10 },
   empty: { color: "#64748b", marginTop: 20 },
 });

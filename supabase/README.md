@@ -133,7 +133,33 @@ It adds:
 - `vendor_pricing_change_audit`
 - `vendor_pricing_notifications`
 
-The Pay As You Go model is category-based and charged as base fee plus GST: Rs 15 + GST for fruits/vegetables, Rs 20 + GST for kirana/general stores, and Rs 25 + GST for restaurants/pharmacies/other default categories. The SQL also replaces `accept_order_with_wallet_fee` so accepted-order wallet transactions store base fee, GST amount, CGST/SGST/IGST fields, total platform charge, pricing version, liability shortfall if any, and idempotency details. If a vendor has an active monthly order plan, accepted orders covered by that plan are written to `vendor_order_plan_usage_events`; orders above the allowance use the plan-specific overage fee plus GST from `vendor_monthly_order_plans`. A shortfall creates `vendor_platform_liabilities` and marks only the affected `vendor_terminals` row as `billing_hold`.
+The Pay As You Go model is category-based and charged as base fee plus GST: Rs 15 + GST for fruits/vegetables, Rs 20 + GST for kirana/general stores, and Rs 25 + GST for restaurants/pharmacies/other default categories. The SQL also replaces `accept_order_with_wallet_fee` so accepted-order wallet transactions store base fee, GST amount, CGST/SGST/IGST fields, total platform charge, pricing version and idempotency details. If a vendor has an active monthly order plan, accepted orders covered by that plan are written to `vendor_order_plan_usage_events`; orders above the allowance use the plan-specific overage fee plus GST from `vendor_monthly_order_plans`.
+
+To enforce the stricter final-acceptance rule that customer details must not unlock unless the complete GST-inclusive deduction succeeds or the monthly plan covers the order, also run:
+
+```text
+C:\Users\HP\SabSewa-Local\supabase\RUN_ONLY_STRICT_ORDER_ACCEPTANCE_FULL_GST_WALLET_2026_08_22.sql
+```
+
+## Order Conversation Privacy - 2026-08-22
+
+Run this SQL before enabling the customer/vendor order-conversation UI:
+
+```text
+C:\Users\HP\SabSewa-Local\supabase\RUN_ONLY_ORDER_CONVERSATIONS_PRIVACY_2026_08_22.sql
+```
+
+It adds `order_conversations`, `order_messages`, `message_participants`, `alternative_proposals`, `alternative_proposal_items`, `message_delivery_status`, `blocked_contact_sharing_events`, and `conversation_audit_log`. RLS allows only the order customer, owning vendor or company admin to read conversation records. Backend validation still remains required and is implemented in `mobile/server/hyperlocal/orderConversationRoutes.js`.
+
+## Partner Commission Retention Archive - 2026-08-22
+
+Run this SQL after the Partner commission/payment SQL:
+
+```text
+C:\Users\HP\SabSewa-Local\supabase\RUN_ONLY_PARTNER_COMMISSION_RETENTION_ARCHIVE_2026_08_22.sql
+```
+
+It adds Partner commission review-window fields, legal hold, protected archive tables, archive-job logs and archive RPCs. It does not permanently delete Partner commission/payment evidence after the 15-day review period; it preserves statutory financial evidence with a default 96-month retention support pending final Chartered Accountant/legal approval.
 
 ## After Applying
 

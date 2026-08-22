@@ -1070,6 +1070,13 @@ router.post("/admin/generate-monthly-ledger", ...requireAdmin, async (req, res) 
             tds_tax: tdsTax,
             net_payable: netPayable,
             payment_status: netPayable > 0 ? "processing" : "no_payable_revenue",
+            review_status: "not_started",
+            archive_status: "active",
+            retention_period_months: 96,
+            statutory_retention_until: new Date(`${period_month}-01T00:00:00.000Z`).getTime()
+              ? new Date(Date.UTC(Number(period_month.slice(0, 4)) + 8, Number(period_month.slice(5, 7)) - 1, 1)).toISOString().slice(0, 10)
+              : null,
+            partner_archive_message: "This commission settlement has been completed and archived. The summary and payment evidence remain available according to the company statutory record-retention policy.",
             updated_at: new Date().toISOString(),
           },
           { onConflict: "partner_application_id, period_month" }
@@ -1134,11 +1141,80 @@ router.get("/admin/payouts", ...requireAdmin, async (_req, res) => {
         payment_status: item.payment_status,
         payment_date: item.payment_date,
         reference_number: item.reference_number,
+        review_status: item.review_status || "not_started",
+        review_period_starts_at: item.review_period_starts_at || null,
+        review_period_ends_at: item.review_period_ends_at || null,
+        archive_status: item.archive_status || "active",
+        archived_at: item.archived_at || null,
+        legal_hold: Boolean(item.legal_hold),
+        partner_archive_message: item.partner_archive_message || null,
       };
     });
     return res.json({ success: true, payouts });
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message || "Unable to load Partner payouts." });
+  }
+});
+
+router.post("/admin/commission-archive/run", ...requireAdmin, async (req, res) => {
+  try {
+    const jobId = clean(req.body?.job_id) || `manual-${Date.now()}`;
+    const { data, error } = await supabase.rpc("run_partner_commission_archive_job", { p_job_id: jobId });
+    if (error) throw error;
+    await writeAdminAudit({
+      req,
+      action: "partner.commission_archive_job_run",
+      entityType: "partner_commission_archive_job",
+      entityId: null,
+      metadata: { job_id: jobId, result: data },
+    });
+    return res.json({ success: true, result: data });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: error.message || "Unable to run Partner commission archive job." });
+  }
+});
+
+router.post("/admin/commission-statements/:statement_id/legal-hold", ...requireAdmin, async (req, res) => {
+  try {
+    const enabled = req.body?.legal_hold !== false;
+    const reason = clean(req.body?.reason);
+    if (enabled && !reason) {
+      return res.status(400).json({ success: false, error: "Legal hold reason is required." });
+    }
+
+    const { data: previous, error: previousError } = await supabase
+      .from("partner_monthly_commission_statements")
+      .select("id, legal_hold, legal_hold_reason, archive_status, review_status")
+      .eq("id", req.params.statement_id)
+      .maybeSingle();
+    if (previousError) throw previousError;
+    if (!previous) return res.status(404).json({ success: false, error: "Partner commission statement not found." });
+
+    const { data, error } = await supabase
+      .from("partner_monthly_commission_statements")
+      .update({
+        legal_hold: enabled,
+        legal_hold_reason: enabled ? reason : null,
+        legal_hold_until: enabled && req.body?.legal_hold_until ? req.body.legal_hold_until : null,
+        archive_status: enabled ? "legal_hold" : "active",
+        review_status: enabled ? "legal_hold" : "not_started",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", req.params.statement_id)
+      .select()
+      .single();
+    if (error) throw error;
+
+    await writeAdminAudit({
+      req,
+      action: enabled ? "partner.commission_statement_legal_hold_added" : "partner.commission_statement_legal_hold_removed",
+      entityType: "partner_monthly_commission_statement",
+      entityId: req.params.statement_id,
+      metadata: { previous, reason: enabled ? reason : "legal hold removed" },
+    });
+    return res.json({ success: true, statement: data });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: error.message || "Unable to update Partner statement legal hold." });
   }
 });
 
@@ -1151,7 +1227,14 @@ router.get("/applications/:application_id/commission-statements", async (req, re
     if (!application || normalizePhone(application.phone) !== normalizePhone(phone)) return res.status(404).json({ success: false, error: "Partner record not found." });
     const { data, error } = await supabase.from("partner_monthly_commission_statements").select("*").eq("partner_application_id", applicationId).order("period_month", { ascending: false }).limit(60);
     if (error) throw error;
-    return res.json({ success: true, partner: publicApplication(application), statements: data || [] });
+    const statements = (data || []).map((item) => ({
+      ...item,
+      transaction_detail_archived: item.archive_status === "verified_archived",
+      partner_archive_message: item.archive_status === "verified_archived"
+        ? (item.partner_archive_message || "This commission settlement has been completed and archived. The summary and payment evidence remain available according to the company statutory record-retention policy.")
+        : item.partner_archive_message,
+    }));
+    return res.json({ success: true, partner: publicApplication(application), statements });
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message || "Unable to load Partner commission dashboard." });
   }

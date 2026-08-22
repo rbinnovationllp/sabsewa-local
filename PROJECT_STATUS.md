@@ -12,6 +12,38 @@ Production backend API URL: `https://api.sabsewa.in`
 
 Official support contact: `support@sabsewa.in`, `+91 8450092846`, `+91 8178113449`
 
+## 2026-08-22 - Partner Commission Retention, GST Wallet Guard and Order Conversation Privacy
+
+- Added protected Partner commission retention/archive foundation:
+  - New SQL: `supabase/RUN_ONLY_PARTNER_COMMISSION_RETENTION_ARCHIVE_2026_08_22.sql`
+  - Adds 15-calendar-day Partner review-window fields, legal-hold flags, 96-month default statutory retention support, protected archive tables, archive job log table, and RPCs `archive_partner_commission_statement(...)` and `run_partner_commission_archive_job(...)`.
+  - The archive policy does not permanently delete commission/payment/accounting/GST/TDS/audit evidence after 15 days. It marks paid/reconciled statements as archived only after the review window and preserves protected summary/evidence records.
+  - Added Partner admin API endpoints to run the archive job and add/remove legal hold:
+    - `POST /api/partner/admin/commission-archive/run`
+    - `POST /api/partner/admin/commission-statements/:statement_id/legal-hold`
+- Added strict GST-inclusive wallet guard:
+  - New SQL: `supabase/RUN_ONLY_STRICT_ORDER_ACCEPTANCE_FULL_GST_WALLET_2026_08_22.sql`
+  - Adds trigger `trg_enforce_order_acceptance_full_wallet_charge` so final order acceptance is blocked unless the complete platform fee plus GST is deducted or an active monthly plan covers the order.
+  - This supersedes the earlier shortfall-liability acceptance behaviour for final acceptance; no customer contact/address unlock should occur if the full deduction/coverage fails.
+- Added secure order-specific conversation backend foundation:
+  - New SQL: `supabase/RUN_ONLY_ORDER_CONVERSATIONS_PRIVACY_2026_08_22.sql`
+  - New backend route: `mobile/server/hyperlocal/orderConversationRoutes.js`
+  - Mounted under `/api/order/orders/:order_id/conversation`.
+  - Supports privacy-safe customer/vendor messages and alternative proposals without platform-fee deduction.
+  - Backend blocks and audits attempts to share phone numbers, emails, WhatsApp/external links, UPI/payment links or QR/payment bypass language before final acceptance.
+- Updated legal text:
+  - `mobile/app/(legal)/terms.tsx`
+  - `mobile/app/(legal)/vendor-terms.tsx`
+  - `mobile/app/(legal)/privacy.tsx`
+  - `mobile/lib/legalVersions.ts`
+- Added validation:
+  - `npm run validate:retention-pricing-conversation`
+- Required manual SQL before production testing:
+  - Run the three new SQL files listed above in Supabase SQL Editor after the earlier referral/pricing SQL files.
+- Remaining work:
+  - Customer/vendor conversation UI buttons and notification deep links still need full end-to-end mobile/browser testing after SQL deployment.
+  - CA/legal review is still required for final GST/TDS invoice language, retention duration and exceptional deletion/dual-approval policy.
+
 ## 2026-08-22 - Vendor Onboarding Partner Referral Hardening
 
 - Audited the current vendor registration flow and confirmed Partner Referral support already existed, but it was partial:
@@ -142,12 +174,12 @@ Official support contact: `support@sabsewa.in`, `+91 8450092846`, `+91 817811344
   - Standard: 300 accepted orders, Rs 3,000 base + Rs 540 GST = Rs 3,540/month, Rs 3,750 required refundable/adjustable advance balance.
   - Plus: 750 accepted orders, Rs 7,000 base + Rs 1,260 GST = Rs 8,260/month, Rs 8,750 required refundable/adjustable advance balance.
   - Pro: 1,500 accepted orders, Rs 13,500 base + Rs 2,430 GST = Rs 15,930/month, Rs 16,875 required refundable/adjustable advance balance.
-- PAYG vendors require Rs 5,000 advance/security balance, receive a low-balance warning below Rs 500, and any shortfall against the next accepted-order platform charge is recorded as vendor platform liability rather than silently creating a negative ledger balance.
+- PAYG vendors require Rs 5,000 advance/security balance and receive a low-balance warning below Rs 500. Under the 2026-08-22 strict wallet guard, final order acceptance must be blocked unless the available wallet covers the complete base platform fee plus GST, or the accepted order is covered by an active monthly plan.
 - Monthly plan orders above the included allowance use plan-specific configurable overage pricing instead of category Pay As You Go:
   - Standard overage: Rs 10 base + GST per additional eligible order.
   - Plus overage: Rs 9 base + GST per additional eligible order.
   - Pro overage: Rs 8 base + GST per additional eligible order.
-- When an overage/platform-fee shortfall occurs, the available wallet balance is applied, the unpaid amount is recorded as vendor platform liability, and the affected terminal is marked `billing_hold` without suspending the full vendor account.
+- When an overage/platform-fee shortfall would occur, the vendor must top up before final acceptance; customer contact/address details must remain hidden until a full GST-inclusive deduction or monthly-plan coverage succeeds.
 - Added backend monthly-plan service:
   - `mobile/server/billing/vendorPricingPlanService.js`
   - Connects Razorpay monthly-plan payment activation, active billing periods, usage counting, security-balance requirement, and pricing audit records.
@@ -158,7 +190,7 @@ Official support contact: `support@sabsewa.in`, `+91 8450092846`, `+91 817811344
 - Patched live order-fee flow:
   - `mobile/server/securityWallet/securityWalletService.js`
   - Covered monthly-plan accepted orders are recorded in plan usage and are not also charged the category-based wallet/order fee.
-  - Pay-per-order wallet deductions now store order ID, vendor ID, category pricing rule, base fee, GST amount, total platform charge, CGST/SGST/IGST placeholders, balance before/after, liability shortfall if any, idempotency key and `ORDER_ACCEPTANCE_FEE` reason metadata.
+  - Pay-per-order wallet deductions now store order ID, vendor ID, category pricing rule, base fee, GST amount, total platform charge, CGST/SGST/IGST placeholders, balance before/after, idempotency key and `ORDER_ACCEPTANCE_FEE` reason metadata. Final acceptance is blocked if the deduction is partial.
 - Updated Vendor Billing UI:
   - `mobile/app/vendor/Billing.tsx`
   - Shows My Pricing Model, current monthly-plan usage, security shortfall, monthly plan comparison, GST breakdown, required refundable security balance, and terms confirmation before Razorpay checkout.
@@ -607,7 +639,7 @@ Implemented in this pass:
 - Added PWA export support: `manifest.webmanifest`, service worker, offline shell and PWA icons are generated into `mobile/dist` by `mobile/scripts/copy-hostinger-htaccess.js`.
 - Replaced the remaining customer-facing `Gemini Conversational Ordering` title in the legacy screen with `Place Your Order`.
 - Updated Terms, Customer Terms and Vendor Terms with delivery-estimate, delivery-charge and delivery-safety clauses.
-- Updated Terms and Vendor Terms to state that once a vendor formally accepts an order and the Rs 15 platform facilitation fee is deducted, the company will not refund, reverse or adjust the Rs 15 merely because the vendor later claims cancellation, non-completion, private settlement or outside-platform handling. Corrections remain possible only for company-confirmed duplicate deduction, technical error, unauthorised transaction or legal requirement.
+- Updated Terms and Vendor Terms for the then-current order-fee model. This has since been superseded by the 2026-08-22 category base-fee-plus-GST rule: once a vendor formally accepts an order and the applicable fee-plus-GST or monthly-plan usage record is created, the company will not refund, reverse or adjust the charge merely because the vendor later claims cancellation, non-completion, private settlement or outside-platform handling. Corrections remain possible only for company-confirmed duplicate deduction, technical error, unauthorised transaction or legal requirement.
 
 Database migration added:
 
@@ -898,7 +930,7 @@ Use `RUN_ALL_MIGRATIONS_FOR_SABSEWA_LOCAL.sql` only on a blank/fresh Supabase pr
   - Show-price items display price with unit label.
   - Hidden/market-price items become customer quote-request items.
   - Vendor must submit a quoted price before acceptance.
-  - Customer must approve the quoted price before the vendor can accept the order and trigger the Rs 15 platform fee.
+  - Customer must approve the quoted price before the vendor can accept the order and trigger the backend-resolved category base fee plus GST, unless covered by an active monthly plan.
   - Item price changes are timestamped in `vendor_item_price_history`.
   - Existing order item snapshots keep the price/quote state captured at order placement.
   - Bulk price update backend route added for Vendor CRM/mobile workflows.

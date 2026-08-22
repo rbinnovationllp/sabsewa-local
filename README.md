@@ -58,6 +58,7 @@ SabSewa Local is prepared for participation in the Gemini XPRIZE / AI Hackathon.
 - **Unified Workflows:** Dedicated customer, vendor, rider and Company CRM interfaces.
 - **Catalogue & Inventory:** Vendor catalogue setup after registration with searchable multi-select master catalogue, image pending handling, and daily availability toggles.
 - **Order Fulfilment:** Full/partial order acceptance with customer details hidden until vendor accepts.
+- **Secure Order Conversation:** Before acceptance, customer/vendor clarification and alternative-product proposals stay inside an order-specific SabSewa Local conversation. Direct phone, email, WhatsApp, UPI, external-payment and bypass-link sharing is blocked server-side and logged.
 - **Order Alerts:** New customer orders are submitted to the vendor notification system, shown in the vendor order inbox with a 10-minute response countdown, and keep customer contact/address locked until vendor acceptance. The vendor order screen repeats a three-burst bell/vibration alert while pending orders require action.
 - **Customer Payment Sync:** Customer order payments remain direct between customer and vendor, while the vendor records Fully Paid - Cash, Fully Paid - UPI, Partially Paid, On Credit/Udhaar or Unpaid so the customer order state and vendor-owned credit ledger stay synchronized.
 - **Restricted Delivery Staff Terminal:** Vendors can add delivery staff for a shop terminal, assign accepted/packed orders, revoke staff access, track assigned deliveries, record staff-reported cash collection and reconcile cash handover. Delivery staff cannot accept/reject orders, approve credit, modify catalogue, access KYC, billing or customer databases.
@@ -89,7 +90,24 @@ Monthly plans:
 - Plus: up to 750 accepted orders, Rs 7,000 base + Rs 1,260 GST = Rs 8,260/month, Rs 8,750 required refundable/adjustable advance balance.
 - Pro: up to 1,500 accepted orders, Rs 13,500 base + Rs 2,430 GST = Rs 15,930/month, Rs 16,875 required refundable/adjustable advance balance.
 
-Monthly plan prices are displayed as base fee plus GST, with the advance/security balance shown separately. Plan-specific overage fees are configurable in the backend/database and are currently seeded as Standard Rs 10 + GST/order, Plus Rs 9 + GST/order, and Pro Rs 8 + GST/order after the included allowance is exhausted. If wallet balance is insufficient, the available balance is applied, the shortfall is recorded as vendor platform liability, and only the affected terminal is placed on billing hold until recharge. Vendors choose the model from Vendor Billing, and all selections/changes are recorded in pricing audit tables. Run the revised `supabase/RUN_ONLY_VENDOR_MONTHLY_ORDER_PRICING_2026_08_17.sql` before production use.
+Monthly plan prices are displayed as base fee plus GST, with the advance/security balance shown separately. Plan-specific overage fees are configurable in the backend/database and are currently seeded as Standard Rs 10 + GST/order, Plus Rs 9 + GST/order, and Pro Rs 8 + GST/order after the included allowance is exhausted. Final order acceptance is allowed only when the complete GST-inclusive platform deduction succeeds or an active monthly plan covers the order. If wallet balance is insufficient, the vendor must top up before acceptance and customer contact/address details remain hidden. Vendors choose the model from Vendor Billing, and all selections/changes are recorded in pricing audit tables. Run the revised `supabase/RUN_ONLY_VENDOR_MONTHLY_ORDER_PRICING_2026_08_17.sql` and strict wallet guard `supabase/RUN_ONLY_STRICT_ORDER_ACCEPTANCE_FULL_GST_WALLET_2026_08_22.sql` before production use.
+
+Platform fees and monthly terminal-subscription charges are exclusive of statutory taxes. Applicable GST will be charged additionally at the prevailing rate.
+
+## Order Conversation And Alternative Proposals
+
+Pre-acceptance communication is order-specific and privacy controlled. Vendors may ask availability questions, send structured alternative proposals, price-change notices or partial-availability replies without seeing the customer's phone number, full address or external contact details. Customers may respond inside SabSewa Local. Messaging and alternative proposals do not trigger any platform fee. The applicable base fee plus GST is charged only when the vendor finally accepts the original order or a customer-approved modified order, or the order is recorded as covered by an active monthly plan.
+
+Run `supabase/RUN_ONLY_ORDER_CONVERSATIONS_PRIVACY_2026_08_22.sql` and deploy the backend route mounted at `/api/order/orders/:order_id/conversation` before enabling the UI entry points.
+
+## Partner Commission Retention And Archive
+
+Partner commission statements now support a 15-calendar-day post-payment review period and protected financial archive. Paid/reconciled statements can move out of active transaction-detail view after the review period, but payment proof, eligible revenue evidence, GST/TDS/accounting data, dispute history and audit records remain in the protected archive for statutory retention. The default supported retention period is 96 months, subject to final Chartered Accountant/legal review. Legal hold blocks archival/minimization and exceptional deletion.
+
+Run `supabase/RUN_ONLY_PARTNER_COMMISSION_RETENTION_ARCHIVE_2026_08_22.sql` before using the Partner commission archive endpoints:
+
+- `POST /api/partner/admin/commission-archive/run`
+- `POST /api/partner/admin/commission-statements/:statement_id/legal-hold`
 
 ## Direct Customer Payment Records
 

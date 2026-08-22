@@ -18,7 +18,7 @@ export default function PrivacyScreen() {
         },
         {
           title: "Customer privacy before acceptance",
-          body: "Customer phone number, complete address, invoice and detailed delivery information remain hidden from vendors until the vendor formally accepts the order through the secure backend workflow.",
+          body: "Customer phone number, complete address, invoice and detailed delivery information remain hidden from vendors until the vendor formally accepts the order through the secure backend workflow. Before acceptance, any order-related clarification, availability response or alternative-product proposal must happen only through the SabSewa Local order conversation, where direct phone numbers, email addresses, WhatsApp links, UPI IDs, external payment links and other direct-contact details may be blocked or logged for privacy and fraud-prevention review.",
         },
         {
           title: "Vendor verification privacy",
@@ -38,7 +38,7 @@ export default function PrivacyScreen() {
         },
         {
           title: "Retention and deletion",
-          body: "Users may request correction, account closure or deletion through support or grievance channels. Some records may be retained for accounting, tax, dispute, fraud-prevention, refund, audit or legal compliance.",
+          body: "Users may request correction, account closure or deletion through support or grievance channels. Some records may be retained for accounting, GST, TDS, tax, dispute, fraud-prevention, refund, audit or legal compliance. Partner commission statements may move from active dashboard detail to protected financial archive after the applicable review period, but payment, accounting, tax, dispute and audit evidence is retained for the statutory period or longer where a legal hold applies.",
         },
         {
           title: "User rights and grievance",

@@ -1,6 +1,6 @@
 // app/auth/Register.tsx
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   ScrollView,
   StyleSheet,
@@ -23,6 +23,7 @@ import {
   SABSEWA_TERMS_VERSION,
 } from "@/lib/legalVersions";
 import { authErrorKey, maskPhone, normalizeIndianPhone, validateIndianMobile } from "@/lib/phone";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 type RegistrationMethod = "phone" | "email_password" | "email_otp" | "google";
 const PHONE_AUTH_ENABLED = process.env.EXPO_PUBLIC_PHONE_AUTH_ENABLED === "true";
@@ -32,7 +33,7 @@ const makeDiagnosticId = () => `SSL-AUTH-${Date.now().toString(36).toUpperCase()
 export default function RegisterScreen() {
   const router = useRouter();
   const { role, method: methodParam } = useLocalSearchParams();
-  const { signInWithOtp, signUpWithEmailPassword, signInWithEmailOtp, signInWithGoogle } = useAuth();
+  const { session, signInWithOtp, signUpWithEmailPassword, signInWithEmailOtp, signInWithGoogle } = useAuth();
   const requestedMethod =
     methodParam === "phone" || methodParam === "email_otp" || methodParam === "email_password" || methodParam === "google"
       ? methodParam
@@ -65,6 +66,8 @@ export default function RegisterScreen() {
   const [error, setError] = useState("");
   const [technicalError, setTechnicalError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [registeredVendorPhone, setRegisteredVendorPhone] = useState("");
+  const [vendorDecisionMessage, setVendorDecisionMessage] = useState("");
   const { language, t } = useLanguage();
 
   // Vendor Partner Referral State
@@ -80,6 +83,23 @@ export default function RegisterScreen() {
       : role === "vendor"
       ? t("common.vendor")
       : t("common.rider");
+
+  useEffect(() => {
+    let active = true;
+    async function loadRegisteredVendorPhone() {
+      if (role !== "vendor") {
+        if (active) setRegisteredVendorPhone("");
+        return;
+      }
+      const value = await AsyncStorage.getItem("registered_vendor_phone");
+      if (active) setRegisteredVendorPhone(value || "");
+    }
+
+    loadRegisteredVendorPhone();
+    return () => {
+      active = false;
+    };
+  }, [role]);
 
   async function handleVerifyPartner() {
     if (!partnerSearch.phone.trim() && !partnerSearch.partnerId.trim()) {
@@ -111,6 +131,30 @@ export default function RegisterScreen() {
       setVerificationError("Error verifying Partner details. Please check network.");
     } finally {
       setVerifying(false);
+    }
+  }
+
+  async function recordVendorOnboardingDecision(action: string) {
+    setVendorDecisionMessage("");
+    try {
+      const response = await fetch(apiUrl("/api/vendor/onboarding/onboarding-decision"), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        },
+        body: JSON.stringify({
+          action,
+          details: {
+            source: "vendor_registration_existing_registration_panel",
+            registered_vendor_phone: registeredVendorPhone || null,
+          },
+        }),
+      });
+      const json = await response.json().catch(() => ({}));
+      setVendorDecisionMessage(json.message || "Your selection has been recorded.");
+    } catch {
+      setVendorDecisionMessage("Selection saved locally. Please continue from your Vendor Dashboard or contact support if this registration does not belong to you.");
     }
   }
 
@@ -283,6 +327,37 @@ export default function RegisterScreen() {
       {/* HEADER */}
       <Text style={styles.heading}>{t("auth.registerTitle", { role: roleTitle })}</Text>
       <Text style={styles.subheading}>{t("auth.registerSubtitle")}</Text>
+
+      {role === "vendor" && registeredVendorPhone ? (
+        <View style={styles.alreadyRegisteredBox}>
+          <Text style={styles.alreadyRegisteredTitle}>You are already registered with SabSewa Local</Text>
+          <Text style={styles.alreadyRegisteredText}>
+            This browser/device was already used for vendor registration with mobile {registeredVendorPhone}. What would you like to do?
+          </Text>
+          <TouchableOpacity style={styles.alreadyRegisteredButton} onPress={() => router.push("/vendor" as any)}>
+            <Text style={styles.alreadyRegisteredButtonText}>Open Vendor Dashboard</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.alreadyRegisteredButtonAlt} onPress={() => router.push("/vendor/KYC" as any)}>
+            <Text style={styles.alreadyRegisteredButtonAltText}>Continue Pending KYC</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.alreadyRegisteredButtonAlt} onPress={() => router.push("/vendor/SecurityWallet" as any)}>
+            <Text style={styles.alreadyRegisteredButtonAltText}>Continue Pending Onboarding Payment</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.alreadyRegisteredButtonAlt} onPress={() => recordVendorOnboardingDecision("register_additional_branch")}>
+            <Text style={styles.alreadyRegisteredButtonAltText}>Register Another Branch of Existing Business</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.alreadyRegisteredButtonAlt} onPress={() => recordVendorOnboardingDecision("register_additional_legal_entity")}>
+            <Text style={styles.alreadyRegisteredButtonAltText}>Register Another Business / Legal Entity</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.alreadyRegisteredButtonAlt} onPress={() => recordVendorOnboardingDecision("add_authorized_terminal")}>
+            <Text style={styles.alreadyRegisteredButtonAltText}>Add Another Authorized Terminal / Device</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.supportButton} onPress={() => recordVendorOnboardingDecision("contact_support_wrong_registration")}>
+            <Text style={styles.supportButtonText}>This registration does not belong to me - Contact Support</Text>
+          </TouchableOpacity>
+          {vendorDecisionMessage ? <Text style={styles.alreadyRegisteredNotice}>{vendorDecisionMessage}</Text> : null}
+        </View>
+      ) : null}
 
       <View style={styles.methodBox}>
         <Text style={styles.methodTitle}>{t("auth.methodTitle")}</Text>
@@ -664,6 +739,23 @@ const styles = StyleSheet.create({
     color: "#616161",
     marginBottom: 20,
   },
+  alreadyRegisteredBox: {
+    borderWidth: 1,
+    borderColor: "#fdba74",
+    backgroundColor: "#fff7ed",
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 18,
+  },
+  alreadyRegisteredTitle: { color: "#9a3412", fontWeight: "900", marginBottom: 6 },
+  alreadyRegisteredText: { color: "#7c2d12", lineHeight: 19 },
+  alreadyRegisteredButton: { backgroundColor: "#0f766e", borderRadius: 8, padding: 11, alignItems: "center", marginTop: 10 },
+  alreadyRegisteredButtonText: { color: "#fff", fontWeight: "900" },
+  alreadyRegisteredButtonAlt: { borderWidth: 1, borderColor: "#0f766e", borderRadius: 8, padding: 10, alignItems: "center", marginTop: 8, backgroundColor: "#fff" },
+  alreadyRegisteredButtonAltText: { color: "#0f766e", fontWeight: "900", textAlign: "center" },
+  alreadyRegisteredNotice: { color: "#14532d", backgroundColor: "#f0fdf4", borderRadius: 8, padding: 9, marginTop: 10, lineHeight: 18 },
+  supportButton: { borderWidth: 1, borderColor: "#b91c1c", borderRadius: 8, padding: 10, alignItems: "center", marginTop: 8, backgroundColor: "#fff7f7" },
+  supportButtonText: { color: "#991b1b", fontWeight: "900", textAlign: "center" },
   methodBox: {
     borderWidth: 1,
     borderColor: "#dbeafe",

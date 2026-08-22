@@ -42,6 +42,8 @@ SabSewa Local will launch first in Bengaluru, Karnataka with functional support 
 
 ### Vendor / Shop Owner
 - Registers shop and terminal.
+- If already registered, can open the existing dashboard, continue KYC/payment, request another branch under the same legal entity, register another legal entity, request an additional authorized terminal/device, or contact support where the registration appears incorrect.
+- Supports the hierarchy: owner account -> legal business entity -> branch/shop -> authorized terminal/device. Vendor IDs remain internal administrative identifiers; normal vendor-facing identification should use owner/vendor name, registered mobile number, shop name and locality.
 - Adds items manually or via Gemini photo-to-inventory.
 - Manages item price and availability.
 - Accepts, rejects, packs, and completes orders.
@@ -241,9 +243,10 @@ When vendor rejects an order:
 - Customer order payment is direct between the customer and the concerned vendor.
 - SabSewa Local and Rashi Bhartiya Innovation LLP do not collect, settle, refund, or recover vendor order amounts.
 - Vendor can view completed order totals and payment notes for reporting.
-- Every new vendor must make an initial Rs 5,500 Razorpay payment before becoming eligible to receive orders.
-- The initial payment is split into a one-time non-refundable Rs 500 setup, activation and platform-service charge plus Rs 5,000 credited to the refundable vendor advance wallet.
-- Subsequent standard top-ups are Rs 5,000 and do not include another activation/service charge.
+- Vendor onboarding payment must remain locked until KYC is approved or provisionally cleared according to Company policy.
+- Current onboarding plans are Plan 1 Rs 5,590, Plan 2 Rs 6,180 and Plan 3 Rs 7,360. Each plan includes a Rs 5,000 refundable security deposit plus a non-refundable onboarding/platform fee and 18% GST on that fee only.
+- The refundable security deposit is credited to the vendor advance/security balance. Onboarding/platform fee, output GST, Razorpay charges and reconciliation lines must remain separate accounting ledger records.
+- Subsequent standard top-ups are Rs 5,000 and do not include another onboarding/platform fee unless a separate branch/entity/terminal policy expressly applies after Company review.
 - SabSewa Local supports two vendor pricing models: category-based Pay As You Go platform base fee plus GST per accepted real-world order, or an optional monthly accepted-order plan chosen and paid by the vendor.
 - If a vendor is on the category Pay As You Go model, SabSewa Local deducts the backend-resolved base platform fee plus GST from the vendor advance balance only when the vendor securely confirms and accepts a real-world order, before customer contact and full delivery details are unlocked.
 - Current category Pay As You Go fees are Rs 15 + GST for fruits/vegetables, Rs 20 + GST for kirana/general stores and Rs 25 + GST for restaurants/pharmacies/other default categories. GST must be added on top of the base fee.

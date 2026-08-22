@@ -1,6 +1,6 @@
 // app/hlm/index.tsx
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import React from "react";
 import {
     ScrollView,
     StyleSheet,
@@ -8,25 +8,14 @@ import {
     TouchableOpacity,
     View
 } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import BrandHeader from "@/components/BrandHeader";
 
 export default function SabSewaHLM() {
   const router = useRouter();
-  const [vendorRegistrationNotice, setVendorRegistrationNotice] = useState("");
 
   const goHome = () => router.push("/");
   const goAuth = () => router.push("/auth");
-  const goVendorRegistration = async () => {
-    setVendorRegistrationNotice("");
-    const registeredPhone = await AsyncStorage.getItem("registered_vendor_phone");
-    if (registeredPhone) {
-      setVendorRegistrationNotice(
-        `You are already registered as a vendor on this device with mobile ${registeredPhone}. Open Vendor Dashboard to continue, or use another device/account for a new vendor registration.`
-      );
-      return;
-    }
-
+  const goVendorRegistration = () => {
     if (typeof window !== "undefined" && window.location) {
       window.location.href = "/auth/Register?role=vendor";
       return;
@@ -127,15 +116,6 @@ export default function SabSewaHLM() {
           <TouchableOpacity style={styles.secondaryBtn} onPress={goVendorRegistration}>
             <Text style={styles.secondaryBtnText}>Register as Vendor</Text>
           </TouchableOpacity>
-          {vendorRegistrationNotice ? (
-            <View style={styles.noticeBox}>
-              <Text style={styles.noticeTitle}>Vendor already registered</Text>
-              <Text style={styles.noticeText}>{vendorRegistrationNotice}</Text>
-              <TouchableOpacity style={styles.noticeButton} onPress={() => router.push("/vendor" as any)}>
-                <Text style={styles.noticeButtonText}>Open Vendor Dashboard</Text>
-              </TouchableOpacity>
-            </View>
-          ) : null}
         </View>
       </View>
 
@@ -207,18 +187,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   secondaryBtnText: { color: "#e65100", fontWeight: "700", fontSize: 13 },
-  noticeBox: {
-    borderWidth: 1,
-    borderColor: "#fdba74",
-    backgroundColor: "#fff7ed",
-    borderRadius: 8,
-    padding: 12,
-    marginTop: 10,
-  },
-  noticeTitle: { color: "#9a3412", fontWeight: "900", marginBottom: 4 },
-  noticeText: { color: "#7c2d12", lineHeight: 19 },
-  noticeButton: { backgroundColor: "#0f766e", borderRadius: 8, padding: 11, alignItems: "center", marginTop: 10 },
-  noticeButtonText: { color: "#fff", fontWeight: "900" },
   aiBtn: {
     backgroundColor: "#1166ff",
     paddingVertical: 10,

@@ -73,7 +73,17 @@ If you only need the revised vendor activation payment and wallet accounting upd
 C:\Users\HP\SabSewa-Local\supabase\RUN_ONLY_REVISED_VENDOR_ACTIVATION_WALLET_POLICY.sql
 ```
 
-The `vendor_security_*` table names are legacy internal names. In SabSewa Local product wording, this is the vendor advance balance. The first vendor payment is Rs 5,500, split into a one-time non-refundable Rs 500 activation/service charge and Rs 5,000 refundable advance wallet credit. Later standard top-ups are Rs 5,000. A backend-resolved category base platform fee plus GST is deducted when the vendor securely confirms and accepts a real-world order, and customer order payment remains direct between customer and vendor.
+The `vendor_security_*` table names are legacy internal names. In SabSewa Local product wording, this is the vendor advance/security balance. Vendor onboarding payment is collected only after KYC approval/provisional clearance. Current onboarding plans keep the refundable Rs 5,000 security deposit separate from the non-refundable onboarding/platform fee and GST: Plan 1 Rs 5,590, Plan 2 Rs 6,180 and Plan 3 Rs 7,360. Later standard top-ups are Rs 5,000. A backend-resolved category base platform fee plus GST is deducted when the vendor securely confirms and accepts a real-world order, and customer order payment remains direct between customer and vendor.
+
+## Existing Vendor, Legal Entity and Branch Onboarding - 2026-08-22
+
+Run this SQL before testing additional branch/entity onboarding or the new split onboarding payment ledger:
+
+```text
+C:\Users\HP\SabSewa-Local\supabase\RUN_ONLY_VENDOR_ENTITY_BRANCH_ONBOARDING_FOUNDATION_2026_08_22.sql
+```
+
+It adds `vendor_owner_accounts`, `vendor_legal_entities`, `vendor_branches`, `vendor_onboarding_plans`, `vendor_onboarding_decisions` and `vendor_onboarding_payment_ledger`. It also adds optional hierarchy/pricing columns to `vendors` and a trigger that splits captured onboarding attempts into refundable security deposit, non-refundable platform fee, output GST and reconciliation ledger lines. It does not delete or overwrite existing vendors, KYC documents, orders, Partner referrals or wallet records.
 
 ## Vendor Onboarding Partner Referral Hardening - 2026-08-22
 

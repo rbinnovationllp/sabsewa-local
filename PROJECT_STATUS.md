@@ -12,6 +12,37 @@ Production backend API URL: `https://api.sabsewa.in`
 
 Official support contact: `support@sabsewa.in`, `+91 8450092846`, `+91 8178113449`
 
+## 2026-08-22 - Existing Vendor, Additional Branch/Entity and Onboarding Payment Split Foundation
+
+- Added a safe backend foundation for repeat vendor onboarding decisions:
+  - `GET /api/vendor/onboarding/onboarding-plans`
+  - `POST /api/vendor/onboarding/detect-existing-registration`
+  - `POST /api/vendor/onboarding/onboarding-decision`
+- Updated the vendor registration page so a device/browser that was already used for vendor registration shows the required choices:
+  - Open existing vendor dashboard
+  - Continue pending KYC
+  - Continue pending onboarding payment
+  - Register another branch of an existing business
+  - Register another business/legal entity
+  - Add another authorized terminal/device
+  - Contact support if the registration does not belong to the applicant
+- Added Supabase SQL:
+  - `supabase/RUN_ONLY_VENDOR_ENTITY_BRANCH_ONBOARDING_FOUNDATION_2026_08_22.sql`
+  - Creates the owner account -> legal entity -> branch foundation, central onboarding plan table, onboarding decision audit table and split onboarding payment ledger.
+  - Seeds the three approved onboarding plan totals:
+    - Plan 1: Rs 5,590 = Rs 5,000 refundable security + Rs 500 fee + Rs 90 GST
+    - Plan 2: Rs 6,180 = Rs 5,000 refundable security + Rs 1,000 fee + Rs 180 GST
+    - Plan 3: Rs 7,360 = Rs 5,000 refundable security + Rs 2,000 fee + Rs 360 GST
+  - GST is applied only on the non-refundable onboarding/platform fee; the refundable security deposit is ledgered separately.
+- Updated Vendor Security Wallet text so it no longer presents the old single Rs 5,500 activation model as the current only model.
+- Added validation:
+  - `npm run validate:vendor-entity-branch-onboarding`
+- Required manual SQL before production testing:
+  - Run `supabase/RUN_ONLY_VENDOR_ENTITY_BRANCH_ONBOARDING_FOUNDATION_2026_08_22.sql` in Supabase SQL Editor.
+- Remaining work:
+  - Full Company CRM screens for branch/entity review and branch KYC decisioning still need end-to-end UI testing after SQL deployment.
+  - Razorpay live payment split must be verified with a real/test captured onboarding attempt after the SQL trigger is installed.
+
 ## 2026-08-22 - Partner Commission Retention, GST Wallet Guard and Order Conversation Privacy
 
 - Added protected Partner commission retention/archive foundation:
@@ -71,8 +102,8 @@ Official support contact: `support@sabsewa.in`, `+91 8450092846`, `+91 817811344
 
 ## 2026-08-22 - Public Vendor Registration Routing Fix
 
-- Fixed the public Home "Register Your Shop" and `/hlm` "Register as Vendor" actions so they open `/auth/Register?role=vendor` directly instead of entering the generic `/auth` router. This prevents an already signed-in Master Admin from being redirected to `/company` when trying to inspect or start vendor registration.
-- Added a same-device check for the locally stored `registered_vendor_phone` on both public vendor registration entry points. If this device was already used for vendor registration, the page warns that the vendor is already registered and offers the vendor dashboard instead of silently starting a duplicate profile.
+- Fixed the public Home "Register Your Shop" and `/hlm` "Register as Vendor" actions so they perform a direct web navigation to `/auth/Register?role=vendor` instead of entering the generic `/auth` router. This prevents an already signed-in Master Admin from being redirected to `/company` when trying to inspect or start vendor registration.
+- Moved the same-device check for locally stored `registered_vendor_phone` into the vendor registration page itself. If this device was already used for vendor registration, `/auth/Register?role=vendor` now shows a visible "Vendor already registered" notice and offers the vendor dashboard while still allowing the registration form to be inspected below.
 - Confirmed the Partner Referral row is in the vendor registration form under `Partner Referral Details`, after the shop/trade name and service-type fields.
 
 ## 2026-08-22 - Vendor Delivery Model Simplification
@@ -231,7 +262,7 @@ Confirmed project direction:
 - AWS S3 may remain the file and image storage layer.
 - Supabase may remain the authentication, database, RLS and realtime backend layer.
 - Razorpay remains for vendor advance-wallet deposits and top-ups only.
-- Revised vendor payment policy is now implemented in code/docs: first payment Rs 5,500, split into Rs 500 non-refundable activation/service charge and Rs 5,000 refundable advance wallet credit; later standard top-ups Rs 5,000.
+- Current vendor onboarding payment policy is plan-based: payment is locked until KYC approval/provisional clearance; Plan 1/2/3 totals are Rs 5,590, Rs 6,180 and Rs 7,360 respectively, each with Rs 5,000 refundable security separated from the non-refundable platform fee and GST.
 - Gemini through Google AI Studio or Vertex AI must power meaningful business workflows.
 - Google Workspace/Drive should not be used as the product-image storage backend.
 
@@ -831,14 +862,14 @@ Use `RUN_ALL_MIGRATIONS_FOR_SABSEWA_LOCAL.sql` only on a blank/fresh Supabase pr
   - `https://api.sabsewa.in`
 - Live endpoint checks from this local shell were inconclusive because the Windows TLS client returned a receive/credential error. Verification should be done from the EC2 shell and a normal browser.
 
-- Implemented revised vendor activation and wallet accounting policy:
-  - Initial vendor Razorpay order is fixed at Rs 5,500.
+- Implemented revised vendor activation and wallet accounting policy. This older single Rs 5,500 activation model is superseded by the 2026-08-22 plan-based onboarding/payment split foundation:
+  - Current initial vendor Razorpay order amount must come from the approved onboarding plan after KYC approval/provisional clearance, not from a frontend-entered amount.
   - Razorpay order notes identify `vendor_initial_activation`, `service_charge: 500`, `wallet_credit: 5000`, `application: sabsewa_local`, public vendor ID and internal vendor ID.
   - Standard post-activation top-ups are fixed at Rs 5,000 with purpose `vendor_wallet_topup`.
   - Server rejects standard top-up before activation and rejects a second activation fee after `activation_fee_paid`.
   - Server-side payment verification checks Razorpay signature, order ID, captured/authorised status and expected amount before crediting wallet.
-  - Initial payment is recorded through `public.record_vendor_initial_activation_payment(...)` as one protected database operation with separate ledger rows for payment received, non-refundable activation fee and refundable wallet credit.
-  - Vendor usable wallet balance displays Rs 5,000 after first Rs 5,500 payment, not Rs 5,500.
+  - Current onboarding payment ledger must split refundable security deposit, non-refundable platform fee, output GST, gateway/reconciliation lines and refund treatment.
+  - Vendor usable wallet balance displays only the refundable Rs 5,000 security/advance component, not the full amount paid.
   - Voluntary closure refund calculation no longer deducts the Rs 500 activation/service charge again.
 - Added wallet visibility improvements:
   - Vendor wallet remains accessible even when order receiving is stopped, suspended or under closure request.
@@ -1015,8 +1046,8 @@ Passed:
 - Test customer order placement against real vendor item availability.
 - Test Razorpay top-up with live/test keys.
 - Run `supabase/RUN_ONLY_REVISED_VENDOR_ACTIVATION_WALLET_POLICY.sql` or the updated incremental bundle in the `sabsewa-local` Supabase project before testing the revised wallet flow.
-- Test first-time Rs 5,500 Razorpay activation payment end to end with server-side verification.
-- Verify exactly three ledger rows are created for first activation: `payment_received` Rs 5,500, `activation_fee` -Rs 500 non-refundable, and `security_deposit` Rs 5,000 refundable.
+- Test first-time plan-based Razorpay onboarding payment end to end with server-side verification.
+- Verify split ledger rows are created for refundable security deposit, non-refundable platform fee, output GST and gateway/reconciliation lines.
 - Retry the same Razorpay callback/webhook and confirm the wallet is not credited twice and the Rs 500 activation fee is not charged twice.
 - Test a later Rs 5,000 top-up and confirm no second activation fee entry appears.
 - Test voluntary closure preview and confirm the Rs 500 fee is shown as already collected and not deducted again.
@@ -1225,7 +1256,7 @@ Phone Auth & Provider Strategy: Captures the current status of Supabase Phone Au
 
 Hostinger Static PWA Export: Documents build validation, .htaccess copying, PWA service worker policies, and deployment checks via npm run export:web:hostinger.
 
-Razorpay Live-Mode Hardening: Documents webhook signature verification (HMAC-SHA256), environment banners, idempotency tables (razorpay_webhook_events), and the updated Rs 5,500 vendor activation wallet policy.
+Razorpay Live-Mode Hardening: Documents webhook signature verification (HMAC-SHA256), environment banners, idempotency tables (razorpay_webhook_events), and the current KYC-gated plan-based vendor onboarding/payment policy.
 
 Gemini XPRIZE Alignment: Outlines compliance status across AI backend logging (gemini_agent_logs), multilingual Flash translation, conversational ordering, and Devpost submission checklist items.
 ## 2026-08-08 - Vendor login role routing guard

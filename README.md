@@ -66,7 +66,7 @@ SabSewa Local is prepared for participation in the Gemini XPRIZE / AI Hackathon.
 - **Vendor CRM Shop Snapshot:** The vendor dashboard summarizes orders, completed sales, cash/UPI received, Credit/Udhaar given and recovered, delivery status, cash pending handover from delivery staff and attention items using existing order, payment, credit and delivery records.
 - **Partner Referral Attribution:** Vendor onboarding supports Partner-only referral attribution. A vendor may enter a Partner ID/referral ID or the Partner's registered mobile number, or explicitly choose direct/company onboarding. The backend re-validates active Partners before saving a permanent vendor-to-partner attribution used later by the Partner commission ledger.
 - **Monetization Structure:** Vendors can stay on category-based Pay As You Go pricing charged as base platform fee plus GST, or choose an optional monthly accepted-order plan. Covered monthly-plan orders are not also charged a category-based accepted-order fee; orders above the monthly allowance use the selected plan's configurable overage fee plus GST.
-- **Razorpay Payments:** Rs 5,500 first vendor activation (Rs 500 non-refundable service charge + Rs 5,000 refundable advance wallet balance) and Rs 5,000 standard top-ups.
+- **Razorpay Payments:** Vendor onboarding payments are collected only after KYC approval/provisional clearance. The refundable Rs 5,000 security deposit is kept separate from the non-refundable onboarding/platform fee and GST. Standard wallet top-ups remain Rs 5,000.
 - **Web-Resilient Routing:** Hard browser fallback handlers (`window.location.href`) guaranteeing smooth state transitions after OTP verification on web builds.
 
 ---
@@ -77,6 +77,29 @@ Vendor payments are strictly separated by Razorpay mode:
 
 * **Test Mode:** Transactions are simulated; no real money is collected, no production wallet balance is credited, and commercial order activation is disabled.
 * **Live Mode:** Wallet credits are applied exclusively via verified server-side HMAC-SHA256 signature checks on the `payment.captured` webhook (`POST /api/payments/razorpay/webhook`). Replay protection is enforced via `razorpay_webhook_events`.
+
+## Vendor Pricing Models
+
+## Vendor Onboarding Entity, Branch and Payment Model
+
+Vendor registration now separates normal users from internal records:
+
+- Owner account: the authenticated person/owner.
+- Legal business entity: the registered business controlled by that owner.
+- Branch/shop: the actual operating location visible to customers after approval.
+- Authorized terminal/device: operational access for catalogue, order and delivery workflows.
+
+If an existing vendor is detected, the registration page asks the applicant whether to open the existing dashboard, continue KYC/payment, register another branch, register another legal entity, add another terminal/device, or contact support if the registration does not belong to them. Additional branches and additional legal entities remain subject to Company CRM review, applicable KYC and approval before any payment is collected or activation is allowed.
+
+The current onboarding plan foundation is:
+
+- Plan 1: Rs 5,590 = Rs 5,000 refundable security deposit + Rs 500 onboarding/platform fee + Rs 90 GST.
+- Plan 2: Rs 6,180 = Rs 5,000 refundable security deposit + Rs 1,000 onboarding/platform fee + Rs 180 GST.
+- Plan 3: Rs 7,360 = Rs 5,000 refundable security deposit + Rs 2,000 onboarding/platform fee + Rs 360 GST.
+
+GST is applied only on the non-refundable onboarding/platform fee. The vendor wallet must show only the refundable security-deposit balance, while fee, GST, gateway reconciliation and refund treatment remain separate accounting/ledger lines.
+
+Run `supabase/RUN_ONLY_VENDOR_ENTITY_BRANCH_ONBOARDING_FOUNDATION_2026_08_22.sql` before testing this foundation in production.
 
 ## Vendor Pricing Models
 
@@ -129,7 +152,7 @@ Vendor registration includes an optional Partner Referral section. If a vendor w
 
 If no Partner is involved, the vendor chooses direct/company onboarding. If a Partner is provided, the app stores the vendor's confirmation and the backend endpoint `POST /api/partner/referrals/attribute` performs the final active-Partner validation, prevents self-referral and duplicate non-admin attribution, writes `partner_referred_vendors`, and locks the attribution. Partner commission is still generated only later when eligible company revenue is recorded for the referred vendor.
 
-The public Home "Register Your Shop" and `/hlm` "Register as Vendor" actions open `/auth/Register?role=vendor` directly so an already signed-in admin/master-admin session cannot accidentally redirect the user to the Company CRM while inspecting vendor onboarding. If the same browser/device has already stored a registered vendor mobile number, the page warns that the device was already used for vendor registration and offers the vendor dashboard instead of silently starting a duplicate profile.
+The public Home "Register Your Shop" and `/hlm` "Register as Vendor" actions navigate directly to `/auth/Register?role=vendor` so an already signed-in admin/master-admin session cannot accidentally redirect the user to the Company CRM while inspecting vendor onboarding. If the same browser/device has already stored a registered vendor mobile number, the vendor registration page itself shows a visible warning that the device was already used for vendor registration and offers the vendor dashboard while keeping the form visible for inspection.
 
 Run `supabase/RUN_ONLY_VENDOR_PARTNER_REFERRAL_HARDENING_2026_08_22.sql` before deploying this flow because the vendor registration profile writes the hardened referral status columns.
 

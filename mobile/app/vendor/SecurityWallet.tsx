@@ -44,7 +44,7 @@ export default function VendorSecurityWalletScreen() {
       case "orders_stopped":
         return "Orders stopped until top-up";
       case "security_deposit_required":
-        return "Initial Rs 5,500 activation payment required";
+        return "Approved onboarding payment required after KYC approval";
       default:
         return "Checking status";
     }
@@ -156,7 +156,7 @@ export default function VendorSecurityWalletScreen() {
         currency: "INR",
         name: "SabSewa Local",
         description: purpose === "vendor_initial_activation"
-          ? "Rs 5,500 vendor activation plus refundable advance balance"
+          ? "Approved vendor onboarding payment plus refundable security deposit"
           : "Rs 5,000 vendor advance wallet top-up",
         order_id: json.razorpay_order.id,
         theme: { color: "#1166ff" },
@@ -185,7 +185,7 @@ export default function VendorSecurityWalletScreen() {
         Alert.alert(
           purpose === "vendor_initial_activation" ? "Activation successful" : "Top-up successful",
           purpose === "vendor_initial_activation"
-            ? "Rs 5,000 has been credited to your refundable advance wallet. The Rs 500 activation/service charge is recorded separately."
+            ? "Rs 5,000 has been credited to your refundable advance wallet. The onboarding/platform fee and GST are recorded separately."
             : "Vendor advance balance updated."
         );
       }
@@ -287,7 +287,7 @@ export default function VendorSecurityWalletScreen() {
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.heading}>SabSewa Local Vendor Advance Balance</Text>
       <Text style={styles.subtitle}>
-        Wallet details remain visible at all times. New vendors pay Rs 5,500 once: Rs 500 non-refundable activation/service charge and Rs 5,000 refundable advance wallet balance. New orders stop below Rs 515.
+        Wallet details remain visible at all times. New vendors pay only after KYC approval. The refundable security deposit is Rs 5,000 and the selected onboarding/platform fee is taxable at 18% GST. New orders stop if the refundable operating balance falls below the configured minimum.
       </Text>
 
       {!wallet ? (
@@ -309,8 +309,8 @@ export default function VendorSecurityWalletScreen() {
             <Text style={styles.balance}>Rs {Number(wallet.current_balance || 0).toFixed(2)}</Text>
             <Text style={styles.muted}>Available refundable balance</Text>
             <Text style={styles.muted}>Opening balance: Rs {Number(wallet.opening_balance || 0).toFixed(2)}</Text>
-            <Text style={styles.muted}>Initial payment: Rs {isActivated ? "5,500.00" : "Not paid"}</Text>
-            <Text style={styles.muted}>Activation/service charge: Rs {Number(wallet.activation_fee_amount || 500).toFixed(2)} {isActivated ? "(paid once, non-refundable)" : "(due at activation)"}</Text>
+            <Text style={styles.muted}>Initial payment: {isActivated ? "Paid according to approved onboarding plan" : "Not paid"}</Text>
+            <Text style={styles.muted}>Onboarding/platform fee: Rs {Number(wallet.activation_fee_amount || 500).toFixed(2)} plus applicable GST {isActivated ? "(paid once, non-refundable)" : "(due only after KYC approval)"}</Text>
             <Text style={styles.muted}>Refundable balance: Rs {Number(wallet.current_balance || 0).toFixed(2)}</Text>
             <Text style={styles.muted}>Operational minimum: Rs {Number(wallet.stop_orders_threshold || 515).toFixed(2)}</Text>
           </View>
@@ -330,9 +330,10 @@ export default function VendorSecurityWalletScreen() {
             {!isActivated ? (
               <>
                 <View style={styles.allocationBox}>
-                  <Text style={styles.allocationLine}>Initial payment: Rs 5,500</Text>
-                  <Text style={styles.allocationLine}>Activation/service charge: Rs 500</Text>
-                  <Text style={styles.allocationLine}>Available wallet balance: Rs 5,000</Text>
+                  <Text style={styles.allocationLine}>Plan 1 total: Rs 5,590 = Rs 5,000 security + Rs 500 fee + Rs 90 GST</Text>
+                  <Text style={styles.allocationLine}>Plan 2 total: Rs 6,180 = Rs 5,000 security + Rs 1,000 fee + Rs 180 GST</Text>
+                  <Text style={styles.allocationLine}>Plan 3 total: Rs 7,360 = Rs 5,000 security + Rs 2,000 fee + Rs 360 GST</Text>
+                  <Text style={styles.allocationLine}>Wallet credit after activation: refundable security deposit only</Text>
                   <Text style={styles.allocationLine}>Refundable balance: Rs 5,000</Text>
                 </View>
                 <TouchableOpacity
@@ -343,7 +344,7 @@ export default function VendorSecurityWalletScreen() {
                     {activationDisclosureAccepted ? <Text style={styles.checkText}>OK</Text> : null}
                   </View>
                   <Text style={styles.checkLabel}>
-                    The initial payment is Rs 5,500. This includes a one-time, non-refundable activation and platform-service charge of Rs 500 and a refundable advance wallet balance of Rs 5,000. Future standard wallet top-ups are Rs 5,000, and no additional activation fee will be charged.
+                    I understand SabSewa will collect onboarding payment only after KYC approval. GST is charged only on the non-refundable onboarding/platform fee, and the vendor wallet shows only the refundable security-deposit balance. Additional branch/entity/terminal charges follow the current Company-approved policy.
                   </Text>
                 </TouchableOpacity>
               </>
@@ -360,7 +361,7 @@ export default function VendorSecurityWalletScreen() {
                   ? "Creating Razorpay Order..."
                   : isActivated
                     ? "Top Up Rs 5,000 with UPI or Card"
-                    : "Pay Rs 5,500 with UPI or Card"}
+                    : "Pay Approved Onboarding Amount with UPI or Card"}
               </Text>
             </TouchableOpacity>
           </View>

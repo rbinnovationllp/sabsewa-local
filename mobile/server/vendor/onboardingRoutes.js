@@ -72,16 +72,26 @@ const razorpay = new Razorpay({
 });
 
 const CANONICAL_FEE_MATRIX = {
-  FRUIT_VEGETABLE: { onboardingFee: 500, securityDeposit: 5000, perOrderCharge: 15, taxRate: 18 },
-  KIRANA_GENERAL: { onboardingFee: 1000, securityDeposit: 5000, perOrderCharge: 20, taxRate: 18 },
-  PHARMACY_MEDICAL: { onboardingFee: 2000, securityDeposit: 5000, perOrderCharge: 25, taxRate: 18 },
-  RESTAURANT_FOOD: { onboardingFee: 2000, securityDeposit: 5000, perOrderCharge: 25, taxRate: 18 },
-  BAKERY_DAIRY: { onboardingFee: 1000, securityDeposit: 5000, perOrderCharge: 15, taxRate: 18 },
-  HARDWARE_REPAIR: { onboardingFee: 1500, securityDeposit: 5000, perOrderCharge: 20, taxRate: 18 },
-  CLOTHING_TAILORING: { onboardingFee: 1000, securityDeposit: 5000, perOrderCharge: 15, taxRate: 18 },
-  HOME_BUSINESS: { onboardingFee: 500, securityDeposit: 5000, perOrderCharge: 10, taxRate: 18 },
-  OTHER: { onboardingFee: 2000, securityDeposit: 5000, perOrderCharge: 25, taxRate: 18 }
+  FRUIT_VEGETABLE: { planId: "onboarding_plan_1", onboardingFee: 500, securityDeposit: 5000, perOrderCharge: 15, taxRate: 18 },
+  KIRANA_GENERAL: { planId: "onboarding_plan_2", onboardingFee: 1000, securityDeposit: 5000, perOrderCharge: 20, taxRate: 18 },
+  PHARMACY_MEDICAL: { planId: "onboarding_plan_3", onboardingFee: 2000, securityDeposit: 5000, perOrderCharge: 25, taxRate: 18 },
+  RESTAURANT_FOOD: { planId: "onboarding_plan_3", onboardingFee: 2000, securityDeposit: 5000, perOrderCharge: 25, taxRate: 18 },
+  BAKERY_DAIRY: { planId: "onboarding_plan_2", onboardingFee: 1000, securityDeposit: 5000, perOrderCharge: 15, taxRate: 18 },
+  HARDWARE_REPAIR: { planId: "onboarding_plan_3", onboardingFee: 2000, securityDeposit: 5000, perOrderCharge: 20, taxRate: 18 },
+  CLOTHING_TAILORING: { planId: "onboarding_plan_2", onboardingFee: 1000, securityDeposit: 5000, perOrderCharge: 15, taxRate: 18 },
+  HOME_BUSINESS: { planId: "onboarding_plan_1", onboardingFee: 500, securityDeposit: 5000, perOrderCharge: 10, taxRate: 18 },
+  OTHER: { planId: "onboarding_plan_3", onboardingFee: 2000, securityDeposit: 5000, perOrderCharge: 25, taxRate: 18 }
 };
+
+const ONBOARDING_NEXT_ACTIONS = [
+  { action: "open_existing_vendor_dashboard", label: "Open existing vendor dashboard" },
+  { action: "continue_pending_kyc", label: "Continue pending KYC" },
+  { action: "continue_pending_onboarding_payment", label: "Continue pending onboarding payment" },
+  { action: "register_additional_branch", label: "Register another branch of existing business" },
+  { action: "register_additional_legal_entity", label: "Register another business/legal entity" },
+  { action: "add_authorized_terminal", label: "Add another authorized terminal/device" },
+  { action: "contact_support_wrong_registration", label: "Contact support because this registration does not belong to me" },
+];
 
 function resolveCanonicalId(rawCategory) {
   if (!rawCategory) return "OTHER";
@@ -101,6 +111,159 @@ function resolveCanonicalId(rawCategory) {
 
   return "OTHER";
 }
+
+function normalizeContact(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+async function bestEffortSelect(table, select, queryBuilder) {
+  const query = queryBuilder(supabase.from(table).select(select));
+  const { data, error } = await query;
+  if (!error) return data || [];
+  console.warn(`Optional onboarding detection query failed for ${table}`, { code: error.code, message: error.message });
+  return [];
+}
+
+function publicVendorSummary(vendor) {
+  return {
+    id: vendor.id,
+    public_vendor_id: vendor.public_vendor_id || null,
+    shop_name: vendor.shop_name || vendor.vendor_name || "Registered shop",
+    owner_name: vendor.owner_name || vendor.vendor_name || null,
+    phone: vendor.phone_number || vendor.phone || null,
+    email: vendor.email || null,
+    locality: vendor.locality || vendor.locality_code || null,
+    city: vendor.city || vendor.city_code || null,
+    category: vendor.category || null,
+    kyc_status: vendor.kyc_status || null,
+    onboarding_payment_status: vendor.onboarding_payment_status || null,
+    lifecycle_status: vendor.lifecycle_status || vendor.status || null,
+    status: vendor.status || null,
+    created_at: vendor.created_at || null,
+  };
+}
+
+router.get("/onboarding-plans", async (_req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from("vendor_onboarding_plans")
+      .select("*")
+      .eq("is_active", true)
+      .order("sort_order", { ascending: true });
+    if (!error && data?.length) return res.json({ success: true, plans: data, source: "vendor_onboarding_plans" });
+  } catch (error) {
+    console.warn("Vendor onboarding plans table unavailable; using server fallback.", error?.message || String(error));
+  }
+
+  const fallbackPlans = [
+    { plan_id: "onboarding_plan_1", plan_name: "Plan 1", security_deposit_paise: 500000, onboarding_fee_paise: 50000, gst_paise: 9000, total_payable_paise: 559000, gst_note: "GST applies only on the non-refundable onboarding/platform fee." },
+    { plan_id: "onboarding_plan_2", plan_name: "Plan 2", security_deposit_paise: 500000, onboarding_fee_paise: 100000, gst_paise: 18000, total_payable_paise: 618000, gst_note: "GST applies only on the non-refundable onboarding/platform fee." },
+    { plan_id: "onboarding_plan_3", plan_name: "Plan 3", security_deposit_paise: 500000, onboarding_fee_paise: 200000, gst_paise: 36000, total_payable_paise: 736000, gst_note: "GST applies only on the non-refundable onboarding/platform fee." },
+  ];
+  return res.json({ success: true, plans: fallbackPlans, source: "server_fallback" });
+});
+
+router.post("/detect-existing-registration", requireAuth, async (req, res) => {
+  try {
+    const authUser = req.auth?.user || {};
+    const body = req.body || {};
+    const phone = normalizeContact(body.phone || authUser.phone || authUser.user_metadata?.phone);
+    const email = normalizeContact(body.email || authUser.email || authUser.user_metadata?.email);
+    const pan = normalizeContact(body.pan_number || body.pan);
+    const gstin = normalizeContact(body.gstin || body.gst_number);
+
+    const ownerMatches = await bestEffortSelect(
+      "vendors",
+      "id, public_vendor_id, owner_user_id, shop_name, vendor_name, owner_name, phone_number, phone, email, city, city_code, locality, locality_code, category, kyc_status, onboarding_payment_status, lifecycle_status, status, created_at",
+      (query) => query.eq("owner_user_id", req.auth.user_id).order("created_at", { ascending: false }).limit(25)
+    );
+
+    const contactMatches = [];
+    if (phone) {
+      const phoneMatches = await bestEffortSelect(
+        "vendors",
+        "id, public_vendor_id, owner_user_id, shop_name, vendor_name, owner_name, phone_number, phone, email, city, city_code, locality, locality_code, category, kyc_status, onboarding_payment_status, lifecycle_status, status, created_at",
+        (query) => query.or(`phone.eq.${phone},phone_number.eq.${phone}`).limit(25)
+      );
+      contactMatches.push(...phoneMatches);
+    }
+    if (email) {
+      const emailMatches = await bestEffortSelect(
+        "vendors",
+        "id, public_vendor_id, owner_user_id, shop_name, vendor_name, owner_name, phone_number, phone, email, city, city_code, locality, locality_code, category, kyc_status, onboarding_payment_status, lifecycle_status, status, created_at",
+        (query) => query.eq("email", email).limit(25)
+      );
+      contactMatches.push(...emailMatches);
+    }
+
+    const entityMatches = [];
+    if (pan || gstin || req.auth.user_id) {
+      const parts = [`auth_user_id.eq.${req.auth.user_id}`];
+      if (pan) parts.push(`pan_number.eq.${pan.toUpperCase()}`);
+      if (gstin) parts.push(`gstin.eq.${gstin.toUpperCase()}`);
+      const entities = await bestEffortSelect(
+        "vendor_legal_entities",
+        "id, owner_account_id, auth_user_id, legal_entity_name, pan_number, gstin, entity_type, kyc_status, ownership_verification_status, status, created_at",
+        (query) => query.or(parts.join(",")).order("created_at", { ascending: false }).limit(25)
+      );
+      entityMatches.push(...entities);
+    }
+
+    const vendorMap = new Map();
+    [...ownerMatches, ...contactMatches].forEach((vendor) => vendorMap.set(vendor.id, publicVendorSummary(vendor)));
+    const vendors = Array.from(vendorMap.values());
+    const owned = vendors.filter((vendor) => ownerMatches.some((ownedVendor) => ownedVendor.id === vendor.id));
+    const needsSupportReview = vendors.some((vendor) => vendor.owner_user_id && vendor.owner_user_id !== req.auth.user_id);
+
+    return res.json({
+      success: true,
+      existing_found: vendors.length > 0 || entityMatches.length > 0,
+      own_vendor_found: owned.length > 0,
+      support_review_recommended: needsSupportReview,
+      vendors,
+      legal_entities: entityMatches,
+      next_actions: ONBOARDING_NEXT_ACTIONS,
+      message: vendors.length || entityMatches.length
+        ? "You are already registered with SabSewa Local. Please choose the correct next step."
+        : "No existing vendor registration was found for this authenticated account.",
+    });
+  } catch (error) {
+    console.error("Existing vendor registration detection failed", error);
+    return res.status(500).json({ success: false, error: "Unable to check existing vendor registration right now." });
+  }
+});
+
+router.post("/onboarding-decision", requireAuth, async (req, res) => {
+  try {
+    const { action, vendor_id, legal_entity_id, branch_id, details } = req.body || {};
+    const allowed = new Set(ONBOARDING_NEXT_ACTIONS.map((item) => item.action));
+    if (!allowed.has(action)) return res.status(400).json({ success: false, error: "Invalid onboarding action." });
+
+    await supabase.from("vendor_onboarding_decisions").insert({
+      actor_user_id: req.auth.user_id,
+      vendor_id: vendor_id || null,
+      legal_entity_id: legal_entity_id || null,
+      branch_id: branch_id || null,
+      action,
+      decision_status: ["register_additional_branch", "register_additional_legal_entity", "add_authorized_terminal"].includes(action)
+        ? "company_review_required"
+        : "recorded",
+      metadata: details || {},
+    });
+
+    return res.json({
+      success: true,
+      action,
+      payment_unlocked: false,
+      message: ["register_additional_branch", "register_additional_legal_entity", "add_authorized_terminal"].includes(action)
+        ? "Request recorded. Company review, applicable KYC and approval are required before any payment is collected or activation is allowed."
+        : "Selection recorded.",
+    });
+  } catch (error) {
+    console.error("Vendor onboarding decision failed", error);
+    return res.status(500).json({ success: false, error: "Unable to record onboarding selection right now." });
+  }
+});
 
 router.post("/:vendor_id/register-category", requireAuth, async (req, res) => {
   try {

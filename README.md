@@ -61,6 +61,7 @@ SabSewa Local is prepared for participation in the Gemini XPRIZE / AI Hackathon.
 - **Order Alerts:** New customer orders are submitted to the vendor notification system, shown in the vendor order inbox with a 10-minute response countdown, and keep customer contact/address locked until vendor acceptance. The vendor order screen repeats a three-burst bell/vibration alert while pending orders require action.
 - **Customer Payment Sync:** Customer order payments remain direct between customer and vendor, while the vendor records Fully Paid - Cash, Fully Paid - UPI, Partially Paid, On Credit/Udhaar or Unpaid so the customer order state and vendor-owned credit ledger stay synchronized.
 - **Restricted Delivery Staff Terminal:** Vendors can add delivery staff for a shop terminal, assign accepted/packed orders, revoke staff access, track assigned deliveries, record staff-reported cash collection and reconcile cash handover. Delivery staff cannot accept/reject orders, approve credit, modify catalogue, access KYC, billing or customer databases.
+- **Vendor CRM Shop Snapshot:** The vendor dashboard summarizes orders, completed sales, cash/UPI received, Credit/Udhaar given and recovered, delivery status, cash pending handover from delivery staff and attention items using existing order, payment, credit and delivery records.
 - **Monetization Structure:** Vendors can stay on category-based Pay As You Go pricing charged as base platform fee plus GST, or choose an optional monthly accepted-order plan. Covered monthly-plan orders are not also charged a category-based accepted-order fee; orders above the monthly allowance use the selected plan's configurable overage fee plus GST.
 - **Razorpay Payments:** Rs 5,500 first vendor activation (Rs 500 non-refundable service charge + Rs 5,000 refundable advance wallet balance) and Rs 5,000 standard top-ups.
 - **Web-Resilient Routing:** Hard browser fallback handlers (`window.location.href`) guaranteeing smooth state transitions after OTP verification on web builds.
@@ -95,6 +96,10 @@ SabSewa Local does not collect customer order payments for vendors. For cash, UP
 ## Delivery Staff Access
 
 Delivery staff are restricted operational users created and controlled by the vendor for a specific terminal. They receive a tokenized delivery terminal link and can only see deliveries assigned to them. They can update location, mark pickup/delivery, report cash collected, and request vendor approval when a customer asks for credit/Udhaar. Credit approval, payment finalization, catalogue management, KYC, billing, customer database access and order acceptance remain vendor/admin responsibilities. Run `supabase/RUN_ONLY_DELIVERY_STAFF_RESTRICTED_ACCESS_2026_08_22.sql` before enabling the restricted delivery-staff backend in production.
+
+## Vendor CRM Reporting
+
+The Vendor Dashboard is the shopkeeper's operating console. It now uses `GET /api/vendor/crm/:vendor_id/summary` to summarize Today, This Week, This Month and All Time figures from existing source-of-truth tables rather than duplicate reporting tables. The Customer Credit Ledger shows customer-wise Udhaar balances, current outstanding, recovered amount, ageing buckets, repayment requests and a controlled Request Payment action that queues a reminder through the existing credit reminder infrastructure.
 
 ---
 

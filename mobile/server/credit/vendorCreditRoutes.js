@@ -1,6 +1,7 @@
 import express from "express";
 import { supabase } from "../connection.js";
 import {
+  queueCreditReminder,
   recordCreditPayment,
   suspendCredit,
   upsertCreditAccount,
@@ -101,6 +102,32 @@ router.post("/:vendor_id/suspend", async (req, res) => {
     });
 
     return res.json({ success: true, account });
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({ success: false, error: error.message });
+  }
+});
+
+router.post("/:vendor_id/reminder", async (req, res) => {
+  try {
+    const { customer_id, reminder_type = "due_soon" } = req.body;
+    if (!customer_id) return res.status(400).json({ success: false, error: "customer_id is required." });
+
+    const { data: account, error } = await supabase
+      .from("vendor_credit_accounts")
+      .select("*")
+      .eq("vendor_id", req.params.vendor_id)
+      .eq("customer_id", customer_id)
+      .is("archived_at", null)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!account) return res.status(404).json({ success: false, error: "Credit account not found." });
+    if (Number(account.outstanding_balance || 0) <= 0) {
+      return res.status(409).json({ success: false, error: "This customer has no outstanding credit balance." });
+    }
+
+    await queueCreditReminder(account, reminder_type);
+    return res.json({ success: true, message: "Payment reminder queued." });
   } catch (error) {
     return res.status(error.statusCode || 500).json({ success: false, error: error.message });
   }

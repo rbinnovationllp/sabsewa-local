@@ -28,6 +28,8 @@ type LedgerEntry = {
 
 type CreditAccount = {
   customer_id: string;
+  customer_name?: string | null;
+  customer_mobile?: string | null;
   credit_limit: number;
   outstanding_balance: number;
   available_credit: number;
@@ -51,12 +53,62 @@ export default function CreditListScreen() {
   const [paymentDueDays, setPaymentDueDays] = useState("7");
   const [amount, setAmount] = useState("");
   const [notes, setNotes] = useState("");
+  const [search, setSearch] = useState("");
   const [saving, setSaving] = useState(false);
 
   const balances = useMemo(
     () => [...accounts].sort((a, b) => Number(b.outstanding_balance) - Number(a.outstanding_balance)),
     [accounts]
   );
+  const filteredBalances = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    if (!query) return balances;
+    return balances.filter((account) =>
+      [
+        account.customer_id,
+        account.customer_name,
+        account.customer_mobile,
+        account.status,
+      ]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(query))
+    );
+  }, [balances, search]);
+
+  const creditSummary = useMemo(() => {
+    const totalOutstanding = balances.reduce((sum, account) => sum + Number(account.outstanding_balance || 0), 0);
+    const totalLimit = balances.reduce((sum, account) => sum + Number(account.credit_limit || 0), 0);
+    const customersDue = balances.filter((account) => Number(account.outstanding_balance || 0) > 0).length;
+    const recovered = entries
+      .filter((entry) => entry.transaction_type === "payment_recorded")
+      .reduce((sum, entry) => sum + Number(entry.amount || 0), 0);
+    const creditGiven = entries
+      .filter((entry) => entry.transaction_type === "credit_purchase")
+      .reduce((sum, entry) => sum + Number(entry.amount || 0), 0);
+
+    return { totalOutstanding, totalLimit, customersDue, recovered, creditGiven };
+  }, [balances, entries]);
+
+  const ageing = useMemo(() => {
+    const buckets = [
+      { key: "0_7", label: "Outstanding 0-7 Days", min: 0, max: 7, amount: 0, count: 0 },
+      { key: "8_15", label: "8-15 Days", min: 8, max: 15, amount: 0, count: 0 },
+      { key: "16_30", label: "16-30 Days", min: 16, max: 30, amount: 0, count: 0 },
+      { key: "31_60", label: "31-60 Days", min: 31, max: 60, amount: 0, count: 0 },
+      { key: "60_plus", label: "60+ Days", min: 61, max: Infinity, amount: 0, count: 0 },
+    ];
+    const today = new Date();
+    balances.forEach((account) => {
+      const due = Number(account.outstanding_balance || 0);
+      if (due <= 0) return;
+      const dueDate = account.due_date ? new Date(account.due_date) : today;
+      const ageDays = Math.max(0, Math.floor((today.getTime() - dueDate.getTime()) / (24 * 60 * 60 * 1000)));
+      const bucket = buckets.find((item) => ageDays >= item.min && ageDays <= item.max) || buckets[0];
+      bucket.amount += due;
+      bucket.count += 1;
+    });
+    return buckets;
+  }, [balances]);
 
   useEffect(() => {
     resolveVendorAndLoad();
@@ -218,6 +270,17 @@ export default function CreditListScreen() {
     await loadLedger(vendorId);
   }
 
+  async function requestPayment(nextCustomerId: string) {
+    if (!vendorId) return;
+    const response = await fetch(apiUrl(`/api/vendor/credit/${vendorId}/reminder`), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ customer_id: nextCustomerId, reminder_type: "due_soon" }),
+    });
+    const json = await response.json();
+    Alert.alert(response.ok && json.success ? "Reminder queued" : "Reminder failed", json.message || json.error || "Unable to queue reminder.");
+  }
+
   if (loading) {
     return (
       <View style={styles.center}>
@@ -233,6 +296,35 @@ export default function CreditListScreen() {
       <Text style={styles.subtitle}>
         Vendor-owned customer credit ledger. SabSewa Local records limits, purchases, payments, due dates, and balances only. The vendor alone decides credit and handles recovery.
       </Text>
+
+      <View style={styles.summaryGrid}>
+        <View style={styles.summaryCard}>
+          <Text style={styles.summaryValue}>Rs {creditSummary.creditGiven.toFixed(2)}</Text>
+          <Text style={styles.summaryLabel}>Total Credit Sales</Text>
+        </View>
+        <View style={styles.summaryCard}>
+          <Text style={styles.summaryValue}>Rs {creditSummary.recovered.toFixed(2)}</Text>
+          <Text style={styles.summaryLabel}>Credit Recovered</Text>
+        </View>
+        <View style={styles.summaryCard}>
+          <Text style={styles.summaryValue}>Rs {creditSummary.totalOutstanding.toFixed(2)}</Text>
+          <Text style={styles.summaryLabel}>Current Outstanding</Text>
+        </View>
+        <View style={styles.summaryCard}>
+          <Text style={styles.summaryValue}>{creditSummary.customersDue}</Text>
+          <Text style={styles.summaryLabel}>Customers With Dues</Text>
+        </View>
+      </View>
+
+      <View style={styles.panel}>
+        <Text style={styles.panelTitle}>Credit Ageing</Text>
+        {ageing.map((bucket) => (
+          <View key={bucket.key} style={styles.ageRow}>
+            <Text style={styles.ageLabel}>{bucket.label}</Text>
+            <Text style={styles.ageValue}>Rs {bucket.amount.toFixed(2)} | {bucket.count} customer(s)</Text>
+          </View>
+        ))}
+      </View>
 
       <View style={styles.panel}>
         <Text style={styles.panelTitle}>Approve / Update Customer Credit</Text>
@@ -311,12 +403,20 @@ export default function CreditListScreen() {
         </View>
       ))}
       <Text style={styles.sectionTitle}>Customer Balances</Text>
+      <TextInput
+        style={styles.input}
+        value={search}
+        onChangeText={setSearch}
+        placeholder="Search customer name, mobile, customer ID or status"
+      />
       {balances.length === 0 ? (
         <Text style={styles.muted}>No credit entries yet.</Text>
       ) : (
-        balances.map((balance) => (
+        filteredBalances.map((balance) => (
           <View key={balance.customer_id} style={styles.balanceCard}>
-            <Text style={styles.customerId}>Customer: {balance.customer_id}</Text>
+            <Text style={styles.customerId}>Customer: {balance.customer_name || balance.customer_id}</Text>
+            {balance.customer_mobile ? <Text>Mobile: {balance.customer_mobile}</Text> : null}
+            <Text>Customer ID: {balance.customer_id}</Text>
             <Text>Limit: Rs {balance.credit_limit.toFixed(2)}</Text>
             <Text>Available: Rs {balance.available_credit.toFixed(2)}</Text>
             <Text>Due Date: {balance.due_date || "No dues"}</Text>
@@ -334,6 +434,11 @@ export default function CreditListScreen() {
             <TouchableOpacity style={styles.suspendBtn} onPress={() => suspendCustomerCredit(balance.customer_id)}>
               <Text style={styles.saveText}>Suspend Credit</Text>
             </TouchableOpacity>
+            {balance.outstanding_balance > 0 ? (
+              <TouchableOpacity style={styles.reminderBtn} onPress={() => requestPayment(balance.customer_id)}>
+                <Text style={styles.saveText}>Request Payment</Text>
+              </TouchableOpacity>
+            ) : null}
           </View>
         ))
       )}
@@ -358,6 +463,32 @@ const styles = StyleSheet.create({
   heading: { fontSize: 26, fontWeight: "900" },
   subtitle: { color: "#555", marginTop: 6, marginBottom: 18, lineHeight: 20 },
   muted: { color: "#666" },
+  summaryGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    marginBottom: 16,
+  },
+  summaryCard: {
+    width: "48%",
+    minWidth: 150,
+    flexGrow: 1,
+    borderWidth: 1,
+    borderColor: "#dbeafe",
+    borderRadius: 10,
+    padding: 12,
+    backgroundColor: "#f8fbff",
+  },
+  summaryValue: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: "#0f172a",
+  },
+  summaryLabel: {
+    color: "#475569",
+    fontWeight: "800",
+    marginTop: 4,
+  },
   panel: {
     borderWidth: 1,
     borderColor: "#ddd",
@@ -376,6 +507,7 @@ const styles = StyleSheet.create({
   saveBtn: { backgroundColor: "#16a34a", padding: 13, borderRadius: 10 },
   limitBtn: { backgroundColor: "#2563eb", padding: 13, borderRadius: 10, marginTop: 2 },
   suspendBtn: { backgroundColor: "#dc2626", padding: 10, borderRadius: 10, marginTop: 10 },
+  reminderBtn: { backgroundColor: "#0f766e", padding: 10, borderRadius: 10, marginTop: 8 },
   saveText: { color: "#fff", textAlign: "center", fontWeight: "900" },
   sectionTitle: { fontSize: 18, fontWeight: "900", marginTop: 8, marginBottom: 10 },
   balanceCard: {
@@ -387,6 +519,13 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
   },
   customerId: { fontWeight: "800" },
+  ageRow: {
+    borderTopWidth: 1,
+    borderTopColor: "#e5e7eb",
+    paddingVertical: 9,
+  },
+  ageLabel: { fontWeight: "900", color: "#111827" },
+  ageValue: { color: "#475569", marginTop: 2 },
   balance: { marginTop: 4, fontWeight: "900" },
   due: { color: "#dc2626" },
   advance: { color: "#16a34a" },

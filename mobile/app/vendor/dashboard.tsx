@@ -5,6 +5,7 @@ import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import BrandHeader from "@/components/BrandHeader";
+import { apiUrl } from "@/lib/backend";
 
 export default function VendorDashboard() {
   const legacyUser = useUser().user;
@@ -13,6 +14,8 @@ export default function VendorDashboard() {
 
   const [vendor, setVendor] = useState<any>(null);
   const [terminals, setTerminals] = useState<any[]>([]);
+  const [crmSummary, setCrmSummary] = useState<any>(null);
+  const [summaryRange, setSummaryRange] = useState<"today" | "week" | "month" | "all">("today");
 
   useEffect(() => {
     loadVendor();
@@ -30,6 +33,7 @@ export default function VendorDashboard() {
 
     if (!vendorData) return;
     setVendor(vendorData);
+    loadCrmSummary(vendorData.id);
 
     const { data: terminalData } = await supabase
       .from("vendor_terminals")
@@ -38,6 +42,20 @@ export default function VendorDashboard() {
       .order("created_at");
 
     setTerminals(terminalData || []);
+  }
+
+  async function loadCrmSummary(vendorId: string) {
+    try {
+      const response = await fetch(apiUrl(`/api/vendor/crm/${vendorId}/summary`));
+      const json = await response.json();
+      if (json.success) setCrmSummary(json);
+    } catch (error) {
+      console.log("Vendor CRM summary failed:", error);
+    }
+  }
+
+  function rupees(value: any) {
+    return `Rs ${Number(value || 0).toFixed(2)}`;
   }
 
   const vendorLoaded = Boolean(vendor?.id);
@@ -142,6 +160,9 @@ export default function VendorDashboard() {
     router.push(route as any);
   }
 
+  const activeSummary = crmSummary?.ranges?.[summaryRange] || {};
+  const attentionItems = crmSummary?.attention || [];
+
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <BrandHeader compact subtitle="Vendor CRM and shop operations" />
@@ -178,6 +199,70 @@ export default function VendorDashboard() {
           <Text style={styles.summaryLabel}>Minimum balance</Text>
         </View>
       </View>
+
+      <Text style={styles.sectionTitle}>Shop Snapshot</Text>
+      <View style={styles.rangeRow}>
+        {[
+          ["today", "Today"],
+          ["week", "This Week"],
+          ["month", "This Month"],
+          ["all", "All Time"],
+        ].map(([key, label]) => (
+          <TouchableOpacity
+            key={key}
+            style={[styles.rangeBtn, summaryRange === key && styles.rangeBtnActive]}
+            onPress={() => setSummaryRange(key as any)}
+          >
+            <Text style={[styles.rangeText, summaryRange === key && styles.rangeTextActive]}>{label}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      <View style={styles.metricGrid}>
+        <View style={styles.metricCard}>
+          <Text style={styles.metricValue}>{Number(activeSummary.orders_received || 0)}</Text>
+          <Text style={styles.metricLabel}>Orders Received</Text>
+        </View>
+        <View style={styles.metricCard}>
+          <Text style={styles.metricValue}>{Number(activeSummary.orders_pending || 0)}</Text>
+          <Text style={styles.metricLabel}>Orders Pending</Text>
+        </View>
+        <View style={styles.metricCard}>
+          <Text style={styles.metricValue}>{rupees(activeSummary.completed_order_value)}</Text>
+          <Text style={styles.metricLabel}>Completed Sales</Text>
+        </View>
+        <View style={styles.metricCard}>
+          <Text style={styles.metricValue}>{rupees(activeSummary.cash_received)}</Text>
+          <Text style={styles.metricLabel}>Cash Received</Text>
+        </View>
+        <View style={styles.metricCard}>
+          <Text style={styles.metricValue}>{rupees(activeSummary.upi_received)}</Text>
+          <Text style={styles.metricLabel}>UPI / Digital</Text>
+        </View>
+        <View style={styles.metricCard}>
+          <Text style={styles.metricValue}>{rupees(activeSummary.credit_given)}</Text>
+          <Text style={styles.metricLabel}>Credit Given</Text>
+        </View>
+        <View style={styles.metricCard}>
+          <Text style={styles.metricValue}>{rupees(activeSummary.credit_recovered)}</Text>
+          <Text style={styles.metricLabel}>Credit Recovered</Text>
+        </View>
+        <View style={styles.metricCard}>
+          <Text style={styles.metricValue}>{rupees(activeSummary.cash_pending_handover)}</Text>
+          <Text style={styles.metricLabel}>Cash With Staff</Text>
+        </View>
+      </View>
+
+      {attentionItems.length ? (
+        <View style={styles.attentionPanel}>
+          <Text style={styles.attentionTitle}>Needs Attention</Text>
+          {attentionItems.map((item: any) => (
+            <Text key={item.key} style={styles.attentionText}>
+              {item.label}: {item.key.includes("cash") ? rupees(item.value) : item.value}
+            </Text>
+          ))}
+        </View>
+      ) : null}
 
       <Text style={styles.sectionTitle}>Available Terminals</Text>
 
@@ -290,6 +375,76 @@ const styles = StyleSheet.create({
     color: "#6b7280",
     marginTop: 4,
     fontSize: 12,
+  },
+  rangeRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 12,
+  },
+  rangeBtn: {
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    backgroundColor: "#fff",
+  },
+  rangeBtnActive: {
+    backgroundColor: "#1166ff",
+    borderColor: "#1166ff",
+  },
+  rangeText: {
+    color: "#334155",
+    fontWeight: "800",
+  },
+  rangeTextActive: {
+    color: "#fff",
+  },
+  metricGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    marginBottom: 14,
+  },
+  metricCard: {
+    width: "48%",
+    minWidth: 145,
+    flexGrow: 1,
+    borderWidth: 1,
+    borderColor: "#dbeafe",
+    borderRadius: 8,
+    padding: 12,
+    backgroundColor: "#f8fbff",
+  },
+  metricValue: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: "#0f172a",
+  },
+  metricLabel: {
+    color: "#475569",
+    fontSize: 12,
+    fontWeight: "800",
+    marginTop: 4,
+  },
+  attentionPanel: {
+    borderWidth: 1,
+    borderColor: "#fed7aa",
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 18,
+    backgroundColor: "#fff7ed",
+  },
+  attentionTitle: {
+    fontWeight: "900",
+    color: "#9a3412",
+    marginBottom: 5,
+  },
+  attentionText: {
+    color: "#7c2d12",
+    fontWeight: "700",
+    marginTop: 3,
   },
   vendorName: {
     fontSize: 20,

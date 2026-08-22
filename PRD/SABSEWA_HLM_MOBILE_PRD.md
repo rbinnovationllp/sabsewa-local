@@ -204,6 +204,8 @@ Vendor must be able to:
 - Mark accepted order as packed.
 - Mark packed order as out for delivery.
 - Mark delivered order as completed.
+- View a Vendor CRM operating summary for Today, This Week, This Month and All Time, including orders, completed sales, cash/UPI received, Credit/Udhaar given and recovered, pending deliveries, active delivery staff and cash pending handover.
+- Vendor CRM summary figures must be derived from backend/database records such as orders, payment transactions, credit ledger accounts/transactions and delivery assignments, not from editable frontend values.
 
 ### 4.8 Gemini Smart Rejection And Support
 When vendor rejects an order:

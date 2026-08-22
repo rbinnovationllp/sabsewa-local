@@ -12,6 +12,33 @@ Production backend API URL: `https://api.sabsewa.in`
 
 Official support contact: `support@sabsewa.in`, `+91 8450092846`, `+91 8178113449`
 
+## 2026-08-22 - Vendor CRM Operating Summary and Credit/Udhaar Upgrade
+
+- Audited the existing Vendor CRM and confirmed that major modules already exist as separate screens: Orders, Delivery Team, Delivery Settings, Customer Credits, Payment Information, Billing/Subscription, Security Wallet, Catalogue Setup, Add Item, Manage Items, Today Availability, Bulk/Gemini inventory capture, KYC and Onboarding.
+- Added backend Vendor CRM summary route:
+  - `mobile/server/vendor/crmRoutes.js`
+  - Mounted at `GET /api/vendor/crm/:vendor_id/summary`
+  - Reuses existing `hyperlocal_orders`, `order_payment_transactions`, `vendor_credit_accounts`, `vendor_credit_transactions`, `delivery_assignments`, and `delivery_boys` data.
+- Upgraded Vendor Dashboard with mobile-first Shop Snapshot cards for Today / This Week / This Month / All Time:
+  - Orders received/pending
+  - Completed sales
+  - Cash received
+  - UPI/digital received
+  - Credit/Udhaar given
+  - Credit recovered
+  - Cash pending handover from delivery staff
+  - Attention alerts for pending orders, pending deliveries, cash with staff and customers with dues.
+- Upgraded Customer Credit Ledger screen with:
+  - Total credit sales
+  - Credit recovered
+  - Current outstanding
+  - Customers with dues
+  - Credit ageing buckets
+  - Search by customer name, mobile, ID or status
+  - Request Payment action using the existing credit reminder queue.
+- No new SQL is required for this CRM summary upgrade; it depends on the existing payment/credit/delivery tables and the 2026-08-22 delivery/payment SQL files being applied.
+- Remaining later phase: full product analytics, AI business insights, downloadable statements and true database RPC-level atomic financial reporting.
+
 ## 2026-08-22 - Restricted Delivery Staff Terminal Foundation
 
 - Added a vendor-managed Delivery Team screen at `mobile/app/vendor/DeliveryTeam.tsx` so vendors can add/disable delivery staff, generate restricted staff links, configure optional vendor-paid per-delivery compensation reference, and reconcile cash collected by staff.

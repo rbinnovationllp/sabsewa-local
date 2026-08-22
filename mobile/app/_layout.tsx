@@ -15,7 +15,17 @@ function TopNavigationBar() {
   const { role } = useAuth();
 
   const isHome = pathname === "/" || pathname === "/index";
+  const isPublicWorkflow =
+    pathname === "/vendor/register" ||
+    pathname === "/vendor-registration" ||
+    pathname === "/hlm" ||
+    pathname === "/partner";
   const handleGoHome = () => {
+    if (isPublicWorkflow) {
+      router.replace("/" as any);
+      return;
+    }
+
     const normalizedRole = String(role || "").toLowerCase();
     const adminRoles = new Set([
       "admin",

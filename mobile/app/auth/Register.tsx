@@ -36,7 +36,7 @@ export default function RegisterScreen() {
   const { role, method: methodParam } = useLocalSearchParams();
   const requestedRole = Array.isArray(role) ? role[0] : role;
   const effectiveRole = requestedRole || (pathname === "/vendor/register" || pathname === "/vendor-registration" ? "vendor" : undefined);
-  const { session, signInWithOtp, signUpWithEmailPassword, signInWithEmailOtp, signInWithGoogle } = useAuth();
+  const { session, role: currentRole, signInWithOtp, signUpWithEmailPassword, signInWithEmailOtp, signInWithGoogle } = useAuth();
   const requestedMethod =
     methodParam === "phone" || methodParam === "email_otp" || methodParam === "email_password" || methodParam === "google"
       ? methodParam
@@ -79,6 +79,7 @@ export default function RegisterScreen() {
   const [verifiedPartner, setVerifiedPartner] = useState<any>(null);
   const [verifying, setVerifying] = useState<boolean>(false);
   const [verificationError, setVerificationError] = useState<string>("");
+  const registeredVendorPhoneDisplay = registeredVendorPhone ? maskPhone(registeredVendorPhone) : "";
 
   const roleTitle =
     effectiveRole === "customer"
@@ -150,7 +151,7 @@ export default function RegisterScreen() {
           action,
           details: {
             source: "vendor_registration_existing_registration_panel",
-            registered_vendor_phone: registeredVendorPhone || null,
+            registered_vendor_phone_last4: registeredVendorPhone ? registeredVendorPhone.slice(-4) : null,
           },
         }),
       });
@@ -159,6 +160,28 @@ export default function RegisterScreen() {
     } catch {
       setVendorDecisionMessage("Selection saved locally. Please continue from your Vendor Dashboard or contact support if this registration does not belong to you.");
     }
+  }
+
+  function openVendorOnlyRoute(path: string) {
+    const normalizedRole = String(currentRole || "").toLowerCase();
+    if (!session?.user) {
+      router.push({
+        pathname: "/auth/Login",
+        params: { role: "vendor", next: path },
+      } as any);
+      return;
+    }
+
+    if (normalizedRole && normalizedRole !== "vendor") {
+      setVendorDecisionMessage("You are signed in with a non-vendor account. Please switch account or log out, then sign in with the vendor account linked to this shop.");
+      return;
+    }
+
+    router.push(path as any);
+  }
+
+  function openExistingVendorDashboard() {
+    openVendorOnlyRoute("/vendor/dashboard");
   }
 
   const handleRegister = async () => {
@@ -335,15 +358,15 @@ export default function RegisterScreen() {
         <View style={styles.alreadyRegisteredBox}>
           <Text style={styles.alreadyRegisteredTitle}>You are already registered with SabSewa Local</Text>
           <Text style={styles.alreadyRegisteredText}>
-            This browser/device was already used for vendor registration with mobile {registeredVendorPhone}. What would you like to do?
+            This browser/device is linked to an existing vendor registration{registeredVendorPhoneDisplay ? ` ending in ${registeredVendorPhoneDisplay.slice(-4)}` : ""}. What would you like to do?
           </Text>
-          <TouchableOpacity style={styles.alreadyRegisteredButton} onPress={() => router.push("/vendor" as any)}>
+          <TouchableOpacity style={styles.alreadyRegisteredButton} onPress={openExistingVendorDashboard}>
             <Text style={styles.alreadyRegisteredButtonText}>Open Vendor Dashboard</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.alreadyRegisteredButtonAlt} onPress={() => router.push("/vendor/KYC" as any)}>
+          <TouchableOpacity style={styles.alreadyRegisteredButtonAlt} onPress={() => openVendorOnlyRoute("/vendor/KYC")}>
             <Text style={styles.alreadyRegisteredButtonAltText}>Continue Pending KYC</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.alreadyRegisteredButtonAlt} onPress={() => router.push("/vendor/SecurityWallet" as any)}>
+          <TouchableOpacity style={styles.alreadyRegisteredButtonAlt} onPress={() => openVendorOnlyRoute("/vendor/SecurityWallet")}>
             <Text style={styles.alreadyRegisteredButtonAltText}>Continue Pending Onboarding Payment</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.alreadyRegisteredButtonAlt} onPress={() => recordVendorOnboardingDecision("register_additional_branch")}>

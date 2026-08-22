@@ -126,7 +126,6 @@ export default function CompanyLayout() {
   if (!verified) {
     return (
       <View style={styles.container}>
-        {renderHeader()}
         <View style={styles.centered}>
           <Text style={styles.title}>Master Admin Verification</Text>
           <Text style={styles.muted}>

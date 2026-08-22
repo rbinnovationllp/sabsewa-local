@@ -69,6 +69,7 @@ SabSewa Local will launch first in Bengaluru, Karnataka with functional support 
 - Provide clear customer actions: Shop from Nearby Stores, Register as Customer, Continue Shopping, Order Again, Recent Shops and My Orders where applicable.
 - Provide clear vendor actions: Register Your Shop, Vendor Login, Open Vendor Dashboard, Manage Today's Items, View Orders and Wallet Balance where applicable.
 - Register Your Shop must route to the dedicated public `/vendor/register` flow and must not be intercepted by Master Admin/Admin route guards.
+- Existing-device vendor-registration notices must mask stored contact details and must not use device recognition alone as dashboard authorization.
 - Do not display raw Vendor IDs or Terminal IDs to customers.
 
 ### 4.2 Customer Vendor Discovery

@@ -106,6 +106,11 @@ Official support contact: `support@sabsewa.in`, `+91 8450092846`, `+91 817811344
 - Added `mobile/app/vendor/register.tsx` as the canonical public vendor-registration route. It reuses the working `mobile/app/auth/Register.tsx` form and infers `vendor` role from the route.
 - Updated `mobile/providers/AuthProvider.tsx` so `/vendor/register` and legacy `/vendor-registration` are allowed public/vendor-intent routes and are not intercepted by Admin/Master Admin role redirects.
 - Kept the same-device check for locally stored `registered_vendor_phone` inside the vendor registration page itself. If this device was already used for vendor registration, `/vendor/register` shows a visible "Vendor already registered" notice and offers the vendor dashboard while still allowing the registration form to be inspected below.
+- Corrected the existing-vendor panel actions so `Open Vendor Dashboard` routes explicitly to `/vendor/dashboard` or to vendor login when no authenticated session is present. It no longer uses the ambiguous `/vendor` route.
+- `Continue Pending KYC` and `Continue Pending Onboarding Payment` now use the same vendor-session-aware routing helper; if the current session is Admin/Master Admin/customer/partner instead of vendor, the page shows a switch-account message and does not navigate to `/company`.
+- Masked the device-linked vendor mobile display and removed the full stored mobile number from the onboarding-decision payload.
+- Updated the global Home button so public workflows such as `/vendor/register`, `/vendor-registration`, `/hlm` and `/partner` go back to public Home instead of routing an already signed-in Admin/Master Admin session to `/company`.
+- Removed the duplicate nested Home/Back header from the Master Admin verification layout; the root app navigation remains the single header.
 - Confirmed the Partner Referral row is in the vendor registration form under `Partner Referral Details`, after the shop/trade name and service-type fields.
 - Extended `npm run validate:vendor-entity-branch-onboarding` to assert the public vendor route, Home/HLM CTA targets and auth-guard exception.
 - Validation passed: `npm run deploy:validate`, `npm run validate:onboarding`, `npm run validate:billing`, `npm run validate:vendor-entity-branch-onboarding`, `node --check mobile/server/vendor/onboardingRoutes.js`, and `git diff --check`.

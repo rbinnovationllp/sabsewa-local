@@ -60,6 +60,7 @@ SabSewa Local is prepared for participation in the Gemini XPRIZE / AI Hackathon.
 - **Order Fulfilment:** Full/partial order acceptance with customer details hidden until vendor accepts.
 - **Order Alerts:** New customer orders are submitted to the vendor notification system, shown in the vendor order inbox with a 10-minute response countdown, and keep customer contact/address locked until vendor acceptance. The vendor order screen repeats a three-burst bell/vibration alert while pending orders require action.
 - **Customer Payment Sync:** Customer order payments remain direct between customer and vendor, while the vendor records Fully Paid - Cash, Fully Paid - UPI, Partially Paid, On Credit/Udhaar or Unpaid so the customer order state and vendor-owned credit ledger stay synchronized.
+- **Restricted Delivery Staff Terminal:** Vendors can add delivery staff for a shop terminal, assign accepted/packed orders, revoke staff access, track assigned deliveries, record staff-reported cash collection and reconcile cash handover. Delivery staff cannot accept/reject orders, approve credit, modify catalogue, access KYC, billing or customer databases.
 - **Monetization Structure:** Vendors can stay on category-based Pay As You Go pricing charged as base platform fee plus GST, or choose an optional monthly accepted-order plan. Covered monthly-plan orders are not also charged a category-based accepted-order fee; orders above the monthly allowance use the selected plan's configurable overage fee plus GST.
 - **Razorpay Payments:** Rs 5,500 first vendor activation (Rs 500 non-refundable service charge + Rs 5,000 refundable advance wallet balance) and Rs 5,000 standard top-ups.
 - **Web-Resilient Routing:** Hard browser fallback handlers (`window.location.href`) guaranteeing smooth state transitions after OTP verification on web builds.
@@ -90,6 +91,10 @@ Monthly plan prices are displayed as base fee plus GST, with the advance/securit
 ## Direct Customer Payment Records
 
 SabSewa Local does not collect customer order payments for vendors. For cash, UPI and other direct payments, the vendor records what was actually received. Full payments update the customer order as paid. Partial payments automatically push the remaining balance into the vendor-owned customer credit ledger, and full-credit orders record the entire amount as Udhaar/Credit. Run `supabase/RUN_ONLY_ORDER_PAYMENT_STATUS_SYNC_2026_08_22.sql` before deploying the payment-status synchronization backend because it expands the database check constraints for partial and disputed payment states.
+
+## Delivery Staff Access
+
+Delivery staff are restricted operational users created and controlled by the vendor for a specific terminal. They receive a tokenized delivery terminal link and can only see deliveries assigned to them. They can update location, mark pickup/delivery, report cash collected, and request vendor approval when a customer asks for credit/Udhaar. Credit approval, payment finalization, catalogue management, KYC, billing, customer database access and order acceptance remain vendor/admin responsibilities. Run `supabase/RUN_ONLY_DELIVERY_STAFF_RESTRICTED_ACCESS_2026_08_22.sql` before enabling the restricted delivery-staff backend in production.
 
 ---
 

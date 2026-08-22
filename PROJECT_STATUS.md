@@ -12,6 +12,20 @@ Production backend API URL: `https://api.sabsewa.in`
 
 Official support contact: `support@sabsewa.in`, `+91 8450092846`, `+91 8178113449`
 
+## 2026-08-22 - Restricted Delivery Staff Terminal Foundation
+
+- Added a vendor-managed Delivery Team screen at `mobile/app/vendor/DeliveryTeam.tsx` so vendors can add/disable delivery staff, generate restricted staff links, configure optional vendor-paid per-delivery compensation reference, and reconcile cash collected by staff.
+- Hardened delivery staff backend routes:
+  - `mobile/server/routes/riderActions.js` now verifies that every location, picked, cash-collected, credit-request and delivered action belongs to the authenticated delivery staff token and assigned delivery.
+  - `mobile/server/routes/deliveryAssign.js` now verifies the order and delivery staff belong to the same vendor/terminal before assignment or reassignment.
+  - `mobile/server/routes/riders.js` now supports vendor-side staff creation, disable/revoke access, summary counts and cash reconciliation.
+- Updated delivery staff mobile screens so delivery staff can see only assigned delivery tasks, report cash collected, request vendor credit/Udhaar approval, mark picked/delivered, and view vendor QR without using personal QR.
+- Added delivery staff audit table and delivery assignment cash/status columns in:
+  - `supabase/RUN_ONLY_DELIVERY_STAFF_RESTRICTED_ACCESS_2026_08_22.sql`
+- Remaining limitation: this is the restricted delivery-staff foundation, not a full payroll system. Vendor-side compensation remains informational and paid by the vendor outside SabSewa unless a future payroll module is added.
+- Required manual Supabase SQL before deploying:
+  - `supabase/RUN_ONLY_DELIVERY_STAFF_RESTRICTED_ACCESS_2026_08_22.sql`
+
 ## 2026-08-22 - Customer/Vendor Payment Status Synchronization
 
 - Added vendor-authoritative order payment updates for direct customer payments:

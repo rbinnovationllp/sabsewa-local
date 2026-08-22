@@ -621,6 +621,23 @@ export default function VendorOrdersScreen() {
             </Link>
           )}
 
+          {["accepted", "packed", "out_for_delivery"].includes(order.status) && (
+            <Link
+              href={{
+                pathname: "/vendor/assign-delivery",
+                params: {
+                  vendor_id: vendorId,
+                  terminal_id: order.terminal_id || "",
+                },
+              }}
+              style={styles.trackBtn}
+            >
+              <Text style={{ color: "white", textAlign: "center" }}>
+                Assign Delivery Staff
+              </Text>
+            </Link>
+          )}
+
           {/* ACTION BUTTONS */}
           <View style={styles.btnRow}>
             {order.status === "pending" && (

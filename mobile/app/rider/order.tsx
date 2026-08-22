@@ -1,19 +1,18 @@
-﻿// app/rider/order.tsx
+// app/rider/order.tsx
 import { useEffect, useState } from "react";
 import { Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
-import { useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Location from "expo-location";
 import { apiUrl } from "@/lib/backend";
 
 const PAYMENT_OPTIONS = [
-  { key: "cash", label: "Cash" },
-  { key: "vendor_qr", label: "Scan Vendor QR" },
-  { key: "bank_transfer", label: "Bank Transfer" },
-  { key: "other_digital", label: "Other Digital" },
-  { key: "credit", label: "Udhaar / Credit" },
+  { key: "cash", label: "Cash collected" },
+  { key: "vendor_qr", label: "Vendor UPI/QR shown" },
+  { key: "already_paid", label: "Customer says already paid" },
 ];
 
 export default function RiderOrderScreen() {
+  const router = useRouter();
   const params: any = useLocalSearchParams();
   const token = params.token as string;
   const assignmentId = params.assignment_id as string;
@@ -25,7 +24,8 @@ export default function RiderOrderScreen() {
   const [paymentMethod, setPaymentMethod] = useState("cash");
   const [paymentReference, setPaymentReference] = useState("");
   const [creditNotes, setCreditNotes] = useState("");
-  const [settling, setSettling] = useState(false);
+  const [cashAmount, setCashAmount] = useState("");
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     loadPaymentContext();
@@ -41,8 +41,8 @@ export default function RiderOrderScreen() {
       const json = await response.json();
       if (json.success) {
         setPaymentContext(json);
-        const preferred = json.payment_profile?.preferred_methods?.[0];
-        if (preferred) setPaymentMethod(preferred === "vendor_qr" ? "vendor_qr" : preferred);
+        const total = Number(json.order?.quoted_total_amount || json.order?.total_amount || 0);
+        if (total > 0) setCashAmount(String(total.toFixed(2)));
       }
     } catch (err) {
       console.log("payment-context error:", err);
@@ -82,48 +82,73 @@ export default function RiderOrderScreen() {
   }
 
   async function markPicked() {
-    await fetch(apiUrl("/api/rider/picked"), {
+    const response = await fetch(apiUrl("/api/rider/picked"), {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-rider-token": token },
       body: JSON.stringify({ assignment_id: assignmentId }),
     });
-    alert("Marked as picked. Customer will receive tracking SMS.");
+    const json = await response.json();
+    alert(json.success ? "Marked as picked. Customer will receive order tracking." : json.message || "Unable to mark picked.");
   }
 
-  async function confirmSettlement() {
-    if (!orderId) {
-      alert("Order id is required for settlement.");
-      return;
-    }
-
-    setSettling(true);
+  async function reportCashCollected() {
+    setBusy(true);
     try {
-      const settlementResponse = await fetch(apiUrl(`/api/settlement/orders/${orderId}/settle`), {
+      const response = await fetch(apiUrl("/api/rider/cash-collected"), {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-rider-token": token },
         body: JSON.stringify({
-          payment_method: paymentMethod,
+          assignment_id: assignmentId,
+          amount_collected: cashAmount,
           payment_reference: paymentReference.trim() || null,
-          confirmed_by: "rider",
-          credit_notes: creditNotes.trim() || null,
         }),
       });
-      const settlementJson = await settlementResponse.json();
-      if (!settlementResponse.ok || !settlementJson.success) throw new Error(settlementJson.error || "Settlement failed.");
+      const json = await response.json();
+      if (!response.ok || !json.success) throw new Error(json.message || "Unable to report cash collection.");
+      await loadPaymentContext();
+      alert("Cash collection reported. Vendor must reconcile physical cash handover.");
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Unable to report cash collection.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
-      await fetch(apiUrl("/api/rider/delivered"), {
+  async function requestCreditApproval() {
+    setBusy(true);
+    try {
+      const response = await fetch(apiUrl("/api/rider/request-credit"), {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-rider-token": token },
-        body: JSON.stringify({ assignment_id: assignmentId }),
+        body: JSON.stringify({ assignment_id: assignmentId, note: creditNotes.trim() || null }),
       });
-
-      stopTracking();
-      await loadPaymentContext();
-      alert(paymentMethod === "credit" ? "Credit recorded as pending payment." : `Payment settled. Receipt ${settlementJson.receipt_number}`);
+      const json = await response.json();
+      if (!response.ok || !json.success) throw new Error(json.message || "Unable to request vendor approval.");
+      alert("Credit/Udhaar request sent to vendor for approval.");
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Unable to settle order.");
+      alert(error instanceof Error ? error.message : "Unable to request vendor approval.");
     } finally {
-      setSettling(false);
+      setBusy(false);
+    }
+  }
+
+  async function markDelivered() {
+    setBusy(true);
+    try {
+      const response = await fetch(apiUrl("/api/rider/delivered"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-rider-token": token },
+        body: JSON.stringify({ assignment_id: assignmentId, idempotency_key: `${assignmentId}-${Date.now()}` }),
+      });
+      const json = await response.json();
+      if (!response.ok || !json.success) throw new Error(json.message || "Unable to mark delivered.");
+      stopTracking();
+      alert("Delivery marked as completed.");
+      router.replace({ pathname: "/rider", params: { token } });
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Unable to mark delivered.");
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -133,15 +158,15 @@ export default function RiderOrderScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>Order Payment & Delivery</Text>
-      <Text style={styles.meta}>Assignment: {assignmentId}</Text>
+      <Text style={styles.title}>Restricted Delivery Terminal</Text>
+      <Text style={styles.meta}>Assigned delivery only. Product, KYC, order acceptance and vendor credit decisions remain with the vendor.</Text>
 
       {order ? (
         <View style={styles.card}>
           <Text style={styles.vendorName}>{vendor?.shop_name || vendor?.vendor_name || "Vendor"}</Text>
-          <Text style={styles.meta}>Order #{order.order_number}</Text>
-          <Text style={styles.amount}>Total Payable: Rs {Number(order.total_amount || 0).toFixed(2)}</Text>
-          <Text style={styles.meta}>Payment goes directly to the vendor.</Text>
+          <Text style={styles.meta}>Order #{order.order_number || orderId}</Text>
+          <Text style={styles.amount}>Collectable Amount: Rs {Number(order.quoted_total_amount || order.total_amount || 0).toFixed(2)}</Text>
+          <Text style={styles.meta}>Payment must be to vendor account/QR or vendor-approved cash collection only.</Text>
         </View>
       ) : null}
 
@@ -149,16 +174,16 @@ export default function RiderOrderScreen() {
         <View style={styles.qrPanel}>
           <Text style={styles.sectionTitle}>{qrCode.label || "Vendor QR Code"}</Text>
           <Image source={{ uri: qrCode.public_url }} style={styles.qrImage} resizeMode="contain" />
-          {qrCode.upi_id ? <Text style={styles.meta}>UPI: {qrCode.upi_id}</Text> : null}
+          {qrCode.upi_id ? <Text style={styles.meta}>Vendor UPI: {qrCode.upi_id}</Text> : null}
         </View>
       ) : (
         <View style={styles.warningPanel}>
           <Text style={styles.warningTitle}>No vendor QR saved</Text>
-          <Text style={styles.warningText}>Use cash, bank transfer or another vendor-approved method.</Text>
+          <Text style={styles.warningText}>Do not use personal QR. Collect cash only if the vendor permits it.</Text>
         </View>
       )}
 
-      <Text style={styles.sectionTitle}>Payment Option</Text>
+      <Text style={styles.sectionTitle}>Payment Handling</Text>
       <View style={styles.optionGrid}>
         {PAYMENT_OPTIONS.map((option) => (
           <TouchableOpacity
@@ -171,11 +196,26 @@ export default function RiderOrderScreen() {
         ))}
       </View>
 
-      {paymentMethod === "credit" ? (
-        <TextInput style={styles.input} value={creditNotes} onChangeText={setCreditNotes} placeholder="Credit notes / due date instruction" />
-      ) : (
-        <TextInput style={styles.input} value={paymentReference} onChangeText={setPaymentReference} placeholder="Reference / UTR / cash note optional" />
-      )}
+      {paymentMethod === "cash" ? (
+        <>
+          <TextInput style={styles.input} value={cashAmount} onChangeText={setCashAmount} keyboardType="decimal-pad" placeholder="Cash amount collected" />
+          <TextInput style={styles.input} value={paymentReference} onChangeText={setPaymentReference} placeholder="Cash note / optional reference" />
+          <TouchableOpacity style={styles.btnSuccess} onPress={reportCashCollected} disabled={busy}>
+            <Text style={styles.btnText}>Report Cash Collected</Text>
+          </TouchableOpacity>
+        </>
+      ) : null}
+
+      {paymentMethod === "already_paid" ? (
+        <View style={styles.warningPanel}>
+          <Text style={styles.warningText}>Ask the customer to show vendor payment proof. Final payment confirmation remains with the vendor.</Text>
+        </View>
+      ) : null}
+
+      <TextInput style={styles.input} value={creditNotes} onChangeText={setCreditNotes} placeholder="If customer requests Udhaar, enter note for vendor approval" />
+      <TouchableOpacity style={styles.btnSecondary} onPress={requestCreditApproval} disabled={busy}>
+        <Text style={styles.btnText}>Request Vendor Credit/Udhaar Approval</Text>
+      </TouchableOpacity>
 
       {!tracking ? (
         <TouchableOpacity style={styles.btnPrimary} onPress={startTracking}>
@@ -191,8 +231,8 @@ export default function RiderOrderScreen() {
         <Text style={styles.btnText}>Mark as Picked</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity style={styles.btnSuccess} onPress={confirmSettlement} disabled={settling}>
-        <Text style={styles.btnText}>{settling ? "Settling..." : "Confirm Payment & Complete"}</Text>
+      <TouchableOpacity style={styles.btnSuccess} onPress={markDelivered} disabled={busy}>
+        <Text style={styles.btnText}>{busy ? "Saving..." : "Mark Delivered"}</Text>
       </TouchableOpacity>
     </ScrollView>
   );

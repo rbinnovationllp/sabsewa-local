@@ -85,6 +85,16 @@ C:\Users\HP\SabSewa-Local\supabase\RUN_ONLY_ORDER_PAYMENT_STATUS_SYNC_2026_08_22
 
 It preserves direct customer-to-vendor payment handling while allowing validated order states for full cash/UPI payment, partial payment, vendor-owned credit/Udhaar, payment reported and payment disputed. Partial balances are recorded in `vendor_credit_accounts` and `vendor_credit_transactions`; vendor-confirmed received amounts are recorded in `order_payment_transactions`.
 
+## Restricted Delivery Staff Terminal - 2026-08-22
+
+Run this SQL before deploying the restricted delivery-staff backend/UI:
+
+```text
+C:\Users\HP\SabSewa-Local\supabase\RUN_ONLY_DELIVERY_STAFF_RESTRICTED_ACCESS_2026_08_22.sql
+```
+
+It extends `delivery_boys` and `delivery_assignments` for restricted staff roles, disabled-token handling, assignment ownership, staff-reported cash collection, vendor cash reconciliation, staff credit-request notes, idempotent delivery completion and `delivery_staff_audit_logs`. Delivery staff remain vendor-controlled operational users and are not Admin, Vendor Owner or Partner users.
+
 ## Vendor Final Pricing, GST and Monthly Accepted-Order Plans - 2026-08-17
 
 Run this revised SQL before enabling the pricing changes in production:

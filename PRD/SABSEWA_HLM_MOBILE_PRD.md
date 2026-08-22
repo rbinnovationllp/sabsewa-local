@@ -217,6 +217,10 @@ When vendor rejects an order:
 - Rider views assigned order.
 - Rider updates order status.
 - Customer/vendor can see live tracking while order is out for delivery.
+- Delivery staff access is restricted to assigned delivery tasks only. Delivery staff must not accept/reject customer orders, approve credit/Udhaar, modify products/prices, access vendor KYC, billing, catalogue administration, customer databases or admin/partner records.
+- Vendor owners/managers create and disable delivery staff for a specific vendor terminal. Disabled staff access must be revoked immediately and incomplete assignments must return to the vendor for reassignment.
+- Delivery staff may report cash collected, show the vendor QR, mark pickup/delivery and request vendor approval if the customer asks for credit. Vendor-side payment confirmation, cash reconciliation and credit approval remain vendor responsibilities.
+- Cash collected by delivery staff must be recorded with staff, vendor, terminal, order, amount, collection time and reconciliation status. SabSewa records this operational trail but does not determine or pay delivery staff wages.
 - Delivery screens must show only a reasonable estimated delivery window, not guaranteed countdown promises.
 - Customer-facing delivery copy must state: `The delivery time shown is an estimate provided by the vendor and is not a guaranteed deadline. SabSewa Local does not support unsafe or unrealistic delivery commitments. Actual delivery time may vary, and road safety will always take priority over speed.`
 - The application must not display 7-minute, 10-minute or similar fixed ultra-fast delivery promises, rank delivery personnel by speed, encourage unsafe fulfilment or penalise riders solely for missing an unrealistic deadline.

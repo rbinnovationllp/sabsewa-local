@@ -124,6 +124,12 @@ export default function VendorDashboard() {
       route: vendorLoaded && terminals[0]?.id ? `/vendor/DeliverySettings?vendor=${vendor.id}&terminal=${terminals[0].id}` : "",
     },
     {
+      title: "Delivery Team",
+      description: "Add or disable delivery staff, assign restricted delivery access and reconcile collected cash.",
+      color: "#0f766e",
+      route: vendorLoaded && terminals[0]?.id ? `/vendor/DeliveryTeam?vendor=${vendor.id}&terminal=${terminals[0].id}` : "",
+    },
+    {
       title: "Exit & Refund",
       description: "Preview voluntary closure, refundable balance and final statement.",
       color: "#b91c1c",

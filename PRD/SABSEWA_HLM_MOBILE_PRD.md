@@ -60,6 +60,9 @@ SabSewa Local will launch first in Bengaluru, Karnataka with functional support 
 - Monitors orders, vendor activity, and exceptions.
 - Reviews Gemini audit logs for AI actions.
 - Company CRM access must be isolated from customer, vendor, partner and rider accounts. Administrative authority must be resolved from trusted backend/database records, not from user-editable client metadata, hidden URLs, stale browser routes or cached sessions.
+- The Company Master CRM is a `master_admin`-only area unless a separately scoped admin portal is created. `/company` and any CRM alias route must require an authenticated user, trusted backend `master_admin` role, active admin profile/assignment, backend-verified Master Admin secret session and no-store/private API responses.
+- The Master Admin secret must be verified only on the backend. Browser/PWA sessions should use an HttpOnly cookie; raw secrets and web verification tokens must not be stored in frontend code, `dist`, GitHub, localStorage or client-visible environment variables.
+- Vendor, partner, customer and non-master admin login/register buttons must never route to Master Admin verification. If a user has the wrong active account for a workflow, the UI must ask them to sign out or switch account.
 
 ## 4. Core Mobile Modules
 

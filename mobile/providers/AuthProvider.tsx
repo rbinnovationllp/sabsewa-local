@@ -2,7 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from "react";
 import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 import { usePathname, useRouter, useSegments } from "expo-router";
-import { MASTER_ADMIN_SESSION_STORAGE_KEY } from "@/lib/backend";
+import { apiUrl, authenticatedApiHeaders, MASTER_ADMIN_SESSION_STORAGE_KEY } from "@/lib/backend";
 
 type AppRole = "customer" | "vendor" | "rider" | "admin" | "company_admin" | "super_admin" | string;
 
@@ -31,7 +31,8 @@ function cleanRole(value: unknown): AppRole | null {
 function roleHome(role: AppRole | null) {
   if (role === "vendor") return "/vendor/dashboard";
   if (role === "rider") return "/rider";
-  if (isAdminRoleValue(role)) return "/company";
+  if (role === "master_admin") return "/company";
+  if (isAdminRoleValue(role)) return "/auth/unauthorized";
   return "/customer/dashboard";
 }
 
@@ -199,7 +200,15 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
       window.sessionStorage.removeItem(MASTER_ADMIN_SESSION_STORAGE_KEY);
     }
 
-    if (adminRoles.has(normalizedRole) && !inCompanyArea && inAuthGroup) {
+    if (inCompanyArea && normalizedRole !== "master_admin") {
+      if (typeof window !== "undefined") {
+        window.sessionStorage.removeItem(MASTER_ADMIN_SESSION_STORAGE_KEY);
+      }
+      router.replace("/auth/unauthorized" as any);
+      return;
+    }
+
+    if (normalizedRole === "master_admin" && !inCompanyArea && inAuthGroup) {
       router.replace("/company" as any);
       return;
     }
@@ -225,6 +234,15 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
   }, [user, role, loading, roleLoading, segments, pathname, router]);
 
   const signOut = async () => {
+    try {
+      await fetch(apiUrl("/api/admin/master/logout"), {
+        method: "POST",
+        headers: await authenticatedApiHeaders(),
+        credentials: "include",
+      });
+    } catch {
+      // Logout must still clear the local auth session even if the backend is unreachable.
+    }
     await supabase.auth.signOut();
     if (typeof window !== "undefined") {
       window.sessionStorage.removeItem(MASTER_ADMIN_SESSION_STORAGE_KEY);

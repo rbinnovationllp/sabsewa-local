@@ -1528,3 +1528,13 @@ Remaining production validation: test real vendor device behavior for PWA open/b
 - Backend KYC submission now blocks until Identity Proof, Address/Business Proof, Business Establishment Address Proof and Owner + Shop Photograph are uploaded, with regulated licence remaining conditional.
 - Added Supabase migration `supabase/RUN_FIX_VENDOR_BUSINESS_ESTABLISHMENT_ADDRESS_PROOF_2026_08_23.sql` to extend the `vendor_kyc_documents_document_type_check` constraint without weakening validation.
 - Manual action required: run the new SQL in Supabase, rebuild `mobile/dist`, deploy the frontend, then update/restart the EC2 backend before production KYC testing.
+
+## 2026-08-23 - Strict Master Admin CRM Security
+
+- Tightened Company CRM access so only a trusted `master_admin` role may reach `/company`; non-master admin roles, vendors, partners and customers are redirected away from the CRM.
+- Master Admin verification now stores the browser CRM verification session in a server-issued HttpOnly cookie scoped to `/api`; frontend JavaScript does not persist or expose the web CRM token after verification.
+- Company CRM backend APIs now require all of the following: authenticated Supabase user, trusted `master_admin` role, active admin profile/assignment, and an unexpired Master Admin secret verification session.
+- Direct CRM aliases `/admin/crm`, `/master-admin/crm` and `/company-crm` now route into the same `/company` guard instead of bypassing it.
+- Vendor login/register routing remains isolated from the Master Admin route; signed-in non-vendor sessions are blocked from using the vendor login flow until the user signs out or switches account.
+- Added `mobile/server/scripts/validate-master-admin-security.mjs` and `npm run validate:master-admin-security` to detect regressions in this security boundary.
+- No new Supabase SQL is required for this code patch, but production must already have the Master Admin profile/assignment and backend-only Master Admin secret hash/signing environment variables configured.

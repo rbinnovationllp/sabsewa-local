@@ -40,5 +40,5 @@ export async function authenticatedApiHeaders(extraHeaders: Record<string, strin
 
 export async function authenticatedFetch(path: string, init: RequestInit = {}) {
   const headers = await authenticatedApiHeaders(init.headers as Record<string, string> | undefined);
-  return fetch(apiUrl(path), { ...init, headers });
+  return fetch(apiUrl(path), { credentials: "include", ...init, headers });
 }

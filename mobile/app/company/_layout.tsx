@@ -7,10 +7,10 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  Platform,
 } from "react-native";
 import { apiUrl, authenticatedApiHeaders, MASTER_ADMIN_SESSION_STORAGE_KEY } from "@/lib/backend";
 import { useAuth } from "@/providers/AuthProvider";
-import { isAdminRole } from "@/utils/roleRouter";
 
 export default function CompanyLayout() {
   const router = useRouter();
@@ -21,7 +21,7 @@ export default function CompanyLayout() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const hasAdminRole = isAdminRole(role);
+  const hasMasterAdminRole = String(role || "").toLowerCase() === "master_admin";
 
   const handleGoHome = () => {
     if (typeof window !== "undefined") {
@@ -42,7 +42,7 @@ export default function CompanyLayout() {
   useEffect(() => {
     async function checkSession() {
       if (loading || roleLoading) return;
-      if (!user || !hasAdminRole) {
+      if (!user || !hasMasterAdminRole) {
         if (typeof window !== "undefined") {
           window.sessionStorage.removeItem(MASTER_ADMIN_SESSION_STORAGE_KEY);
         }
@@ -52,6 +52,7 @@ export default function CompanyLayout() {
       try {
         const response = await fetch(apiUrl("/api/admin/master/session"), {
           headers: await authenticatedApiHeaders(),
+          credentials: "include",
         });
         const json = await response.json();
         setVerified(Boolean(response.ok && json?.success));
@@ -62,7 +63,7 @@ export default function CompanyLayout() {
       }
     }
     checkSession();
-  }, [loading, roleLoading, user?.id, hasAdminRole]);
+  }, [loading, roleLoading, user?.id, hasMasterAdminRole]);
 
   async function verifySecret() {
     setError(null);
@@ -74,15 +75,17 @@ export default function CompanyLayout() {
         method: "POST",
         headers: await authenticatedApiHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ secret: entered }),
+        credentials: "include",
       });
 
       const json = await response.json().catch(() => ({}));
       if (response.ok && json?.success) {
         if (typeof window !== "undefined") {
-          window.sessionStorage.setItem(
-            MASTER_ADMIN_SESSION_STORAGE_KEY,
-            json.master_admin_session?.token || "master_admin_session_valid"
-          );
+          if (Platform.OS !== "web" && json.master_admin_session?.token) {
+            window.sessionStorage.setItem(MASTER_ADMIN_SESSION_STORAGE_KEY, json.master_admin_session.token);
+          } else {
+            window.sessionStorage.removeItem(MASTER_ADMIN_SESSION_STORAGE_KEY);
+          }
         }
         setSecret("");
         setVerified(true);
@@ -121,7 +124,7 @@ export default function CompanyLayout() {
 
   if (!user) return <Redirect href="/auth/Login" />;
 
-  if (!hasAdminRole) return <Redirect href="/auth/unauthorized" />;
+  if (!hasMasterAdminRole) return <Redirect href="/auth/unauthorized" />;
 
   if (!verified) {
     return (

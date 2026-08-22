@@ -225,6 +225,12 @@ SabSewa-Local/
 - Vendor order operations include in-app notification records, web-push dispatch when VAPID keys are configured, and a visible New Orders counter on the Vendor Orders screen.
 - Run `supabase/RUN_ONLY_ADMIN_KYC_MONITORING_AND_VENDOR_ORDER_NOTIFICATIONS_2026_08_10.sql` before production testing these workflows.
 
+### Strict Master Admin CRM Access
+
+The Company CRM at `/company` is a Master Admin-only control area. Access requires an authenticated Supabase session, a trusted backend/database `master_admin` role, an active admin profile/assignment, and a recent backend-verified Master Admin secret session. Browser/PWA verification uses a server-issued HttpOnly cookie; the Master Admin secret and browser verification token must not be stored in frontend code, `dist`, GitHub, localStorage or public environment variables.
+
+Direct aliases such as `/admin/crm`, `/master-admin/crm` and `/company-crm` are routed through the same `/company` guard. Vendor, partner, customer and non-master admin routes must never redirect into the Master Admin verification page. Run `cd mobile/server && npm run validate:master-admin-security` after auth/routing changes.
+
 ## Partner Program
 
 SabSewa Local includes a Partner With Us program for eligible customers, vendors, independent individuals, local promoters and organizations who can help build active hyperlocal marketplaces. Partners are expected to help onboard suitable local vendors and also create customer awareness around those vendors so nearby people know they can order through SabSewa Local.

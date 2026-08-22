@@ -5,6 +5,7 @@ import {
   createMasterAdminSession,
   enforceMasterAdminSecretAttemptLimit,
   isMasterAdminRole,
+  MASTER_ADMIN_SESSION_COOKIE,
   recordMasterAdminSecretAttempt,
   requireMasterAdminSession,
   verifyMasterAdminSecret,
@@ -63,11 +64,34 @@ router.post("/verify-secret", requireUserJwt(supabase), enforceMasterAdminSecret
 
   if (!ok) return res.status(401).json({ success: false, error: "Invalid Master Admin secret code." });
   const session = createMasterAdminSession(req.auth.user_id);
-  return res.json({ success: true, master_admin_session: session });
+  const ttlMs = Math.max(60 * 1000, Number(process.env.MASTER_ADMIN_SESSION_TTL_MS || 30 * 60 * 1000));
+  const cookieOptions = {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+    maxAge: ttlMs,
+    path: "/api",
+  };
+  res.cookie(MASTER_ADMIN_SESSION_COOKIE, session.token, cookieOptions);
+  const platform = String(req.headers["x-sabsewa-platform"] || "").toLowerCase();
+  const responseSession = platform === "web"
+    ? { expires_at: session.expires_at, delivery: "http_only_cookie" }
+    : session;
+  return res.json({ success: true, master_admin_session: responseSession });
 });
 
 router.get("/session", requireUserJwt(supabase), requireMasterAdminSession, async (_req, res) => {
   return res.json({ success: true, role: "master_admin" });
+});
+
+router.post("/logout", requireUserJwt(supabase), async (_req, res) => {
+  res.clearCookie(MASTER_ADMIN_SESSION_COOKIE, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+    path: "/api",
+  });
+  return res.json({ success: true });
 });
 
 export default router;

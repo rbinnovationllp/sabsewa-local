@@ -52,7 +52,7 @@ const app = express();
 
 // --- MIDDLEWARE ---
 app.use(securityHeaders);
-app.use(cors({ origin: process.env.CORS_ORIGIN?.split(",") || true }));
+app.use(cors({ origin: process.env.CORS_ORIGIN?.split(",") || true, credentials: true }));
 app.use("/api/payments", razorpayWebhookRouter);
 app.use("/api/webhooks", razorpayWebhookRouter);
 app.use("/api/webhooks", supabaseWebhookRouter);

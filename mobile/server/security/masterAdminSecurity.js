@@ -4,6 +4,7 @@ const SESSION_TTL_MS = Number(process.env.MASTER_ADMIN_SESSION_TTL_MS || 30 * 60
 const MAX_ATTEMPTS = Number(process.env.MASTER_ADMIN_SECRET_MAX_ATTEMPTS || 5);
 const LOCKOUT_MS = Number(process.env.MASTER_ADMIN_SECRET_LOCKOUT_MS || 15 * 60 * 1000);
 const attempts = new Map();
+export const MASTER_ADMIN_SESSION_COOKIE = "sabsewa_master_admin_session";
 
 function now() {
   return Date.now();
@@ -57,6 +58,22 @@ export function verifyMasterAdminSessionToken(token, userId) {
   }
 }
 
+function cookieToken(req) {
+  const cookieHeader = String(req.headers.cookie || "");
+  const cookies = Object.fromEntries(
+    cookieHeader
+      .split(";")
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .map((part) => {
+        const index = part.indexOf("=");
+        if (index === -1) return [part, ""];
+        return [part.slice(0, index), decodeURIComponent(part.slice(index + 1))];
+      })
+  );
+  return cookies[MASTER_ADMIN_SESSION_COOKIE] || null;
+}
+
 export function enforceMasterAdminSecretAttemptLimit(req, res, next) {
   const key = clientKey(req);
   const entry = attempts.get(key);
@@ -86,7 +103,7 @@ export function requireMasterAdminSession(req, res, next) {
   if (!isMasterAdminRole(req.auth?.role)) {
     return res.status(403).json({ success: false, error: "Master Admin role is required." });
   }
-  const token = req.headers["x-master-admin-session"];
+  const token = req.headers["x-master-admin-session"] || cookieToken(req);
   if (!verifyMasterAdminSessionToken(token, req.auth.user_id)) {
     return res.status(403).json({ success: false, error: "Master Admin secret verification is required." });
   }

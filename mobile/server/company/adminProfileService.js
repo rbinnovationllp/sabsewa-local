@@ -1,5 +1,5 @@
 import { supabase } from "../connection.js";
-import { isMasterAdminRole, verifyMasterAdminSessionToken } from "../security/masterAdminSecurity.js";
+import { isMasterAdminRole, MASTER_ADMIN_SESSION_COOKIE, verifyMasterAdminSessionToken } from "../security/masterAdminSecurity.js";
 
 export const ADMIN_MANAGEMENT_PERMISSION = "admins.manage";
 
@@ -33,17 +33,35 @@ export async function getAdminProfile(userId) {
   return data || null;
 }
 
+function cookieToken(req) {
+  const cookieHeader = String(req.headers.cookie || "");
+  const cookies = Object.fromEntries(
+    cookieHeader
+      .split(";")
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .map((part) => {
+        const index = part.indexOf("=");
+        if (index === -1) return [part, ""];
+        return [part.slice(0, index), decodeURIComponent(part.slice(index + 1))];
+      })
+  );
+  return cookies[MASTER_ADMIN_SESSION_COOKIE] || null;
+}
+
 export function requireCompanyAdmin(permission = "kyc.review") {
   return async function companyAdminGuard(req, res, next) {
     try {
       if (!req.auth?.user_id) return res.status(401).json({ success: false, error: "Authentication is required." });
       const role = String(req.auth.role || "").toLowerCase();
 
-      if (isMasterAdminRole(role)) {
-        const sessionToken = req.headers["x-master-admin-session"];
-        if (!verifyMasterAdminSessionToken(sessionToken, req.auth.user_id)) {
-          return res.status(403).json({ success: false, error: "Master Admin secret verification is required." });
-        }
+      if (!isMasterAdminRole(role)) {
+        return res.status(403).json({ success: false, error: "Master Admin role is required for Company CRM." });
+      }
+
+      const sessionToken = req.headers["x-master-admin-session"] || cookieToken(req);
+      if (!verifyMasterAdminSessionToken(sessionToken, req.auth.user_id)) {
+        return res.status(403).json({ success: false, error: "Master Admin secret verification is required." });
       }
 
       const profile = await getAdminProfile(req.auth.user_id);

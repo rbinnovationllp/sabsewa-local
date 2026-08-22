@@ -59,6 +59,7 @@ SabSewa Local is prepared for participation in the Gemini XPRIZE / AI Hackathon.
 - **Catalogue & Inventory:** Vendor catalogue setup after registration with searchable multi-select master catalogue, image pending handling, and daily availability toggles.
 - **Order Fulfilment:** Full/partial order acceptance with customer details hidden until vendor accepts.
 - **Order Alerts:** New customer orders are submitted to the vendor notification system, shown in the vendor order inbox with a 10-minute response countdown, and keep customer contact/address locked until vendor acceptance. The vendor order screen repeats a three-burst bell/vibration alert while pending orders require action.
+- **Customer Payment Sync:** Customer order payments remain direct between customer and vendor, while the vendor records Fully Paid - Cash, Fully Paid - UPI, Partially Paid, On Credit/Udhaar or Unpaid so the customer order state and vendor-owned credit ledger stay synchronized.
 - **Monetization Structure:** Vendors can stay on category-based Pay As You Go pricing charged as base platform fee plus GST, or choose an optional monthly accepted-order plan. Covered monthly-plan orders are not also charged a category-based accepted-order fee; orders above the monthly allowance use the selected plan's configurable overage fee plus GST.
 - **Razorpay Payments:** Rs 5,500 first vendor activation (Rs 500 non-refundable service charge + Rs 5,000 refundable advance wallet balance) and Rs 5,000 standard top-ups.
 - **Web-Resilient Routing:** Hard browser fallback handlers (`window.location.href`) guaranteeing smooth state transitions after OTP verification on web builds.
@@ -85,6 +86,10 @@ Monthly plans:
 - Pro: up to 1,500 accepted orders, Rs 13,500 base + Rs 2,430 GST = Rs 15,930/month, Rs 16,875 required refundable/adjustable advance balance.
 
 Monthly plan prices are displayed as base fee plus GST, with the advance/security balance shown separately. Plan-specific overage fees are configurable in the backend/database and are currently seeded as Standard Rs 10 + GST/order, Plus Rs 9 + GST/order, and Pro Rs 8 + GST/order after the included allowance is exhausted. If wallet balance is insufficient, the available balance is applied, the shortfall is recorded as vendor platform liability, and only the affected terminal is placed on billing hold until recharge. Vendors choose the model from Vendor Billing, and all selections/changes are recorded in pricing audit tables. Run the revised `supabase/RUN_ONLY_VENDOR_MONTHLY_ORDER_PRICING_2026_08_17.sql` before production use.
+
+## Direct Customer Payment Records
+
+SabSewa Local does not collect customer order payments for vendors. For cash, UPI and other direct payments, the vendor records what was actually received. Full payments update the customer order as paid. Partial payments automatically push the remaining balance into the vendor-owned customer credit ledger, and full-credit orders record the entire amount as Udhaar/Credit. Run `supabase/RUN_ONLY_ORDER_PAYMENT_STATUS_SYNC_2026_08_22.sql` before deploying the payment-status synchronization backend because it expands the database check constraints for partial and disputed payment states.
 
 ---
 

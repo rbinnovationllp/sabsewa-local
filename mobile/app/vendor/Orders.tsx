@@ -63,6 +63,8 @@ export default function VendorOrdersScreen() {
   const [quotePrices, setQuotePrices] = useState<Record<string, Record<string, string>>>({});
   const [deliveryOverrides, setDeliveryOverrides] = useState<Record<string, string>>({});
   const [deliveryOverrideReasons, setDeliveryOverrideReasons] = useState<Record<string, string>>({});
+  const [paymentAmounts, setPaymentAmounts] = useState<Record<string, string>>({});
+  const [paymentReferences, setPaymentReferences] = useState<Record<string, string>>({});
   const alertLoopRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [nowMs, setNowMs] = useState(Date.now());
 
@@ -224,6 +226,82 @@ export default function VendorOrdersScreen() {
       }
     }
     return [];
+  }
+
+  function finalOrderAmount(order: any) {
+    return Number(order.quoted_total_amount || order.total_amount || 0);
+  }
+
+  function paymentStatusLabel(order: any) {
+    const status = String(order.payment_status || "unpaid");
+    if (status === "paid") return "FULLY PAID";
+    if (status === "partially_paid") return "PARTIALLY PAID";
+    if (status === "credit_due" || status === "pending_payment") return "ON CREDIT / UDHAAR";
+    return status.toUpperCase();
+  }
+
+  function canCompleteOrder(order: any) {
+    return ["paid", "partially_paid", "credit_due", "pending_payment"].includes(String(order.payment_status || ""));
+  }
+
+  function completeOrder(order: any) {
+    if (!canCompleteOrder(order)) {
+      Alert.alert("Record payment first", "Please choose Fully Paid, Partially Paid, On Credit/Udhaar or Unpaid before completing this order. Unpaid orders cannot be completed until the payment position is recorded.");
+      return;
+    }
+    updateStatus(order.id, "completed");
+  }
+
+  function methodLabel(method: string) {
+    if (method === "cash") return "Cash";
+    if (method === "vendor_qr") return "UPI";
+    if (method === "credit") return "Credit / Udhaar";
+    if (method === "unpaid") return "Unpaid";
+    return method || "Not selected";
+  }
+
+  async function settleOrder(order: any, paymentMethod: "cash" | "vendor_qr" | "credit" | "unpaid", amountOverride?: number) {
+    const total = finalOrderAmount(order);
+    const amountReceived = amountOverride == null
+      ? paymentMethod === "credit" || paymentMethod === "unpaid"
+        ? 0
+        : total
+      : amountOverride;
+
+    if (!Number.isFinite(amountReceived) || amountReceived < 0 || amountReceived > total) {
+      Alert.alert("Payment amount", "Enter an amount between 0 and the order total.");
+      return;
+    }
+
+    const response = await fetch(apiUrl(`/api/settlement/orders/${order.id}/settle`), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        payment_method: paymentMethod,
+        amount_received: amountReceived,
+        payment_reference: paymentReferences[order.id]?.trim() || null,
+        confirmed_by: "vendor",
+        actor_user_id: user?.id,
+        credit_notes: amountReceived < total ? "Vendor recorded unpaid balance as customer credit / udhaar." : null,
+      }),
+    });
+
+    const json = await response.json();
+    if (!response.ok || !json.success) {
+      Alert.alert("Payment update failed", json.error || "Unable to update payment status.");
+      return;
+    }
+
+    const summary = json.payment_summary;
+    Alert.alert(
+      "Payment updated",
+      summary
+        ? `Status: ${summary.status}\nOrder Amount: Rs ${Number(summary.order_amount || 0).toFixed(2)}\nAmount Received: Rs ${Number(summary.amount_received || 0).toFixed(2)}\nOutstanding: Rs ${Number(summary.outstanding_amount || 0).toFixed(2)}`
+        : "Customer account and vendor ledger were updated."
+    );
+    setPaymentAmounts((current) => ({ ...current, [order.id]: "" }));
+    setPaymentReferences((current) => ({ ...current, [order.id]: "" }));
+    fetchOrders();
   }
 
   async function rejectOrder(order: any) {
@@ -481,6 +559,48 @@ export default function VendorOrdersScreen() {
             ) : null}
           </View>
           <Text>Status: {order.status}</Text>
+          {order.details_unlocked ? (
+            <View style={styles.paymentPanel}>
+              <Text style={styles.paymentTitle}>Customer Payment / Udhaar</Text>
+              <Text style={styles.paymentLine}>Payment Method: {methodLabel(order.payment_method)}</Text>
+              <Text style={styles.paymentLine}>Order Amount: Rs {finalOrderAmount(order).toFixed(2)}</Text>
+              <Text style={styles.paymentLine}>Status: {paymentStatusLabel(order)}</Text>
+              <Text style={styles.lockedText}>Vendor records what was actually received. The customer app and credit ledger are updated from this confirmation.</Text>
+              <TextInput
+                style={styles.reasonInput}
+                placeholder="Partial amount received, e.g. 500"
+                keyboardType="numeric"
+                value={paymentAmounts[order.id] || ""}
+                onChangeText={(text) => setPaymentAmounts((current) => ({ ...current, [order.id]: text }))}
+              />
+              <TextInput
+                style={styles.reasonInput}
+                placeholder="Payment reference / note, optional"
+                value={paymentReferences[order.id] || ""}
+                onChangeText={(text) => setPaymentReferences((current) => ({ ...current, [order.id]: text }))}
+              />
+              <View style={styles.btnRow}>
+                <TouchableOpacity style={styles.cashPaidBtn} onPress={() => settleOrder(order, "cash")}>
+                  <Text style={styles.btnTxt}>Fully Paid - Cash</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.upiPaidBtn} onPress={() => settleOrder(order, "vendor_qr")}>
+                  <Text style={styles.btnTxt}>Fully Paid - UPI</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.partialPaidBtn}
+                  onPress={() => settleOrder(order, "cash", Number(paymentAmounts[order.id] || 0))}
+                >
+                  <Text style={styles.btnTxt}>Partially Paid</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.creditBtn} onPress={() => settleOrder(order, "credit")}>
+                  <Text style={styles.btnTxt}>On Credit / Udhaar</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.unpaidBtn} onPress={() => settleOrder(order, "unpaid")}>
+                  <Text style={styles.btnTxt}>Unpaid</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : null}
 
           {/* TRACK RIDER BUTTON */}
           {order.status === "out_for_delivery" && (
@@ -564,8 +684,8 @@ export default function VendorOrdersScreen() {
 
             {order.status === "out_for_delivery" && (
               <TouchableOpacity
-                style={styles.completeBtn}
-                onPress={() => updateStatus(order.id, "completed")}
+                style={[styles.completeBtn, !canCompleteOrder(order) && styles.disabledBtn]}
+                onPress={() => completeOrder(order)}
               >
                 <Text style={styles.btnTxt}>Complete</Text>
               </TouchableOpacity>
@@ -627,6 +747,17 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   deliveryTitle: { fontWeight: "900", color: "#0f172a", marginBottom: 4 },
+  paymentPanel: {
+    backgroundColor: "#f0fdf4",
+    borderWidth: 1,
+    borderColor: "#86efac",
+    borderRadius: 10,
+    padding: 10,
+    marginTop: 10,
+    marginBottom: 8,
+  },
+  paymentTitle: { fontWeight: "900", color: "#166534", marginBottom: 4 },
+  paymentLine: { color: "#14532d", fontWeight: "700", marginTop: 2 },
 
   btnRow: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 10 },
   reasonChipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 6, width: "100%" },
@@ -655,6 +786,12 @@ const styles = StyleSheet.create({
   packedBtn: { backgroundColor: "#005bbb", padding: 10, borderRadius: 8 },
   outBtn: { backgroundColor: "#f5a623", padding: 10, borderRadius: 8 },
   completeBtn: { backgroundColor: "purple", padding: 10, borderRadius: 8 },
+  cashPaidBtn: { backgroundColor: "#15803d", padding: 10, borderRadius: 8 },
+  upiPaidBtn: { backgroundColor: "#2563eb", padding: 10, borderRadius: 8 },
+  partialPaidBtn: { backgroundColor: "#b45309", padding: 10, borderRadius: 8 },
+  creditBtn: { backgroundColor: "#7c3aed", padding: 10, borderRadius: 8 },
+  unpaidBtn: { backgroundColor: "#6b7280", padding: 10, borderRadius: 8 },
+  disabledBtn: { opacity: 0.55 },
 
   trackBtn: {
     marginTop: 10,

@@ -201,3 +201,72 @@ export async function notifyCustomerOrderDispatched(orderId, { actorUserId = nul
 
   return { notification, push_result: pushResult, summary };
 }
+
+export async function notifyCustomerPaymentConfirmed(order, {
+  paymentMethod,
+  amountReceived,
+  outstandingAmount,
+  paymentStatus,
+  actorUserId = null,
+} = {}) {
+  if (!order?.customer_id || !order?.vendor_id || !order?.id) {
+    return { skipped: true, reason: "missing_order_customer_or_vendor" };
+  }
+
+  const methodLabel = paymentMethod === "vendor_qr"
+    ? "UPI"
+    : paymentMethod === "credit"
+      ? "Udhaar / Credit"
+      : paymentMethod === "cash"
+        ? "Cash"
+        : "Vendor payment";
+  const received = Number(amountReceived || 0);
+  const outstanding = Number(outstandingAmount || 0);
+  const orderTotal = Number(order.quoted_total_amount || order.total_amount || received + outstanding || 0);
+  const isFullPaid = outstanding <= 0 && received >= orderTotal;
+  const title = isFullPaid ? "Payment Confirmed" : paymentStatus === "partially_paid" ? "Partial Payment Recorded" : "Credit / Udhaar Recorded";
+  const body = isFullPaid
+    ? `The vendor has confirmed receipt of Rs ${received.toFixed(2)} by ${methodLabel}. No amount is outstanding against this order.`
+    : `The vendor has recorded Rs ${received.toFixed(2)} received by ${methodLabel}. Outstanding Rs ${outstanding.toFixed(2)} has been added to your vendor credit ledger.`;
+  const payload = {
+    title,
+    body,
+    data: {
+      url: `/customer/OrderHistory`,
+      order_id: order.id,
+      notification_type: "order_payment_status_updated",
+      payment_method: paymentMethod,
+      amount_received: received,
+      outstanding_amount: outstanding,
+      payment_status: paymentStatus,
+    },
+  };
+
+  const pushResult = await sendFcmToCustomer(order.customer_id, payload);
+  const { data: notification, error } = await supabase
+    .from("customer_notifications")
+    .insert({
+      customer_id: order.customer_id,
+      vendor_id: order.vendor_id,
+      order_id: order.id,
+      notification_type: "order_payment_status_updated",
+      title,
+      body,
+      payload: {
+        payment_method: paymentMethod,
+        amount_received: received,
+        outstanding_amount: outstanding,
+        order_total: orderTotal,
+        actor_user_id: actorUserId,
+        push_result: pushResult,
+      },
+      delivery_channel: pushResult.sent > 0 ? "push" : "in_app",
+      delivery_status: pushResult.sent > 0 ? "sent" : "queued",
+      sent_at: pushResult.sent > 0 ? new Date().toISOString() : null,
+    })
+    .select()
+    .single();
+  if (error) throw error;
+
+  return { notification, push_result: pushResult };
+}

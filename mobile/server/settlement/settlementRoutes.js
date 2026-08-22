@@ -3,6 +3,7 @@ import express from "express";
 import { supabase } from "../connection.js";
 import { recordCreditPayment, recordCreditPurchase, upsertCreditAccount } from "../credit/vendorCreditService.js";
 import { writeOrderAuditLog } from "../audit/orderAudit.js";
+import { notifyCustomerPaymentConfirmed } from "../notifications/dispatchNotificationService.js";
 
 const router = express.Router();
 const PAID_METHODS = new Set(["cash", "vendor_qr", "bank_transfer", "other_digital"]);
@@ -287,10 +288,10 @@ router.get("/orders/:order_id/payment-context", async (req, res) => {
 router.post("/orders/:order_id/settle", async (req, res) => {
   try {
     const orderId = req.params.order_id;
-    const { payment_method, payment_reference, confirmed_by, credit_notes, due_date, actor_user_id } = req.body;
+    const { payment_method, payment_reference, confirmed_by, credit_notes, due_date, actor_user_id, amount_received } = req.body;
     const method = String(payment_method || "");
-    if (!PAID_METHODS.has(method) && method !== "credit") {
-      return res.status(400).json({ success: false, error: "Select cash, vendor QR, bank transfer, other digital payment or credit." });
+    if (!PAID_METHODS.has(method) && method !== "credit" && method !== "unpaid") {
+      return res.status(400).json({ success: false, error: "Select cash, vendor QR, bank transfer, other digital payment, credit or unpaid." });
     }
 
     const { data: order, error: orderError } = await supabase
@@ -302,18 +303,72 @@ router.post("/orders/:order_id/settle", async (req, res) => {
     if (!["accepted", "packed", "out_for_delivery", "completed"].includes(order.status)) {
       return res.status(409).json({ success: false, error: "Only accepted or delivery-stage orders can be settled." });
     }
+    if (order.payment_status === "paid" && order.settlement_status === "complete") {
+      return res.status(409).json({ success: false, error: "This order is already fully paid and settled." });
+    }
 
     const amount = Number(order.quoted_total_amount || order.total_amount || 0);
     const now = new Date().toISOString();
+    const receivedInput = amount_received === undefined || amount_received === null || amount_received === ""
+      ? (method === "credit" || method === "unpaid" ? 0 : amount)
+      : Number(amount_received);
+    if (!Number.isFinite(receivedInput) || receivedInput < 0) {
+      return res.status(400).json({ success: false, error: "Enter a valid amount received." });
+    }
+    if (receivedInput > amount) {
+      return res.status(400).json({ success: false, error: "Amount received cannot be more than the order amount." });
+    }
+    if (method === "credit" && receivedInput > 0) {
+      return res.status(400).json({ success: false, error: "Use Partial Payment when some amount was received and the balance is on credit." });
+    }
+    const amountReceived = Number(receivedInput.toFixed(2));
+    const outstandingAmount = Number(Math.max(amount - amountReceived, 0).toFixed(2));
+    const isPartial = amountReceived > 0 && outstandingAmount > 0;
+    if (PAID_METHODS.has(method) && amountReceived <= 0) {
+      return res.status(400).json({ success: false, error: "Use Unpaid or Credit if no cash/UPI amount was received." });
+    }
 
-    if (method === "credit") {
+    if (method === "unpaid") {
+      const { data: updated, error: updateError } = await supabase
+        .from("hyperlocal_orders")
+        .update({
+          payment_status: "unpaid",
+          settlement_status: "pending",
+          payment_reference: payment_reference || null,
+          payment_confirmed_by: confirmed_by || null,
+          updated_at: now,
+        })
+        .eq("id", order.id)
+        .select()
+        .single();
+      if (updateError) throw updateError;
+
+      await writeOrderAuditLog({
+        orderId: order.id,
+        vendorId: order.vendor_id,
+        actorUserId: actor_user_id || null,
+        actorRole: confirmed_by || "vendor",
+        action: "vendor_payment_marked_unpaid",
+        fromStatus: order.status,
+        toStatus: order.status,
+        metadata: { order_total: amount, amount_received: 0, outstanding_amount: amount },
+        req,
+      });
+
+      return res.json({ success: true, order: updated, payment_summary: { payment_method: "unpaid", order_amount: amount, amount_received: 0, outstanding_amount: amount, status: "UNPAID" } });
+    }
+
+    if (method === "credit" || isPartial) {
+      if (["credit_due", "partially_paid", "pending_payment"].includes(order.payment_status) && order.settlement_status === "credit_pending") {
+        return res.status(409).json({ success: false, error: "Credit or partial payment has already been recorded for this order." });
+      }
       await upsertCreditAccount({
         vendorId: order.vendor_id,
         customerId: order.customer_id,
-        creditLimit: Math.max(amount, amount + 1),
+        creditLimit: Math.max(outstandingAmount, outstandingAmount + 1),
         paymentDueDays: due_date ? 0 : 7,
         vendorUserId: actor_user_id || null,
-        notes: credit_notes || "Credit order created during delivery settlement.",
+        notes: credit_notes || (isPartial ? "Partial payment balance moved to vendor credit." : "Credit order created during delivery settlement."),
         customerName: order.customer_name || null,
         customerMobile: order.customer_phone || null,
         customerAddress: order.customer_address || order.delivery_address || null,
@@ -323,15 +378,35 @@ router.post("/orders/:order_id/settle", async (req, res) => {
         vendorId: order.vendor_id,
         customerId: order.customer_id,
         orderId: order.id,
-        amount,
+        amount: outstandingAmount,
         vendorUserId: actor_user_id || null,
       });
+
+      if (amountReceived > 0) {
+        await supabase.from("order_payment_transactions").insert({
+          order_id: order.id,
+          vendor_id: order.vendor_id,
+          payment_method: method,
+          amount: amountReceived,
+          payment_status: "confirmed",
+          settlement_status: "partial",
+          payment_reference: payment_reference || null,
+          confirmed_by: confirmed_by || null,
+          metadata: {
+            direct_to_vendor: true,
+            platform_collected_funds: false,
+            order_total: amount,
+            outstanding_amount: outstandingAmount,
+            credit_created_for_balance: true,
+          },
+        });
+      }
 
       const { data: updated, error: updateError } = await supabase
         .from("hyperlocal_orders")
         .update({
-          payment_method: "credit",
-          payment_status: "pending_payment",
+          payment_method: isPartial ? method : "credit",
+          payment_status: isPartial ? "partially_paid" : "credit_due",
           settlement_status: "credit_pending",
           customer_delivery_snapshot: {
             customer_name: order.customer_name || null,
@@ -340,14 +415,57 @@ router.post("/orders/:order_id/settle", async (req, res) => {
             credit_date: now.slice(0, 10),
             due_date: due_date || null,
             credit_notes: credit_notes || null,
+            order_amount: amount,
+            amount_received: amountReceived,
+            outstanding_amount: outstandingAmount,
           },
+          payment_confirmed_by: confirmed_by || null,
+          payment_reference: payment_reference || null,
           updated_at: now,
         })
         .eq("id", order.id)
         .select()
         .single();
       if (updateError) throw updateError;
-      return res.json({ success: true, order: updated, settlement_status: "credit_pending" });
+
+      let paymentNotification = null;
+      try {
+        paymentNotification = await notifyCustomerPaymentConfirmed(updated, {
+          paymentMethod: isPartial ? method : "credit",
+          amountReceived,
+          outstandingAmount,
+          paymentStatus: isPartial ? "partially_paid" : "credit_due",
+          actorUserId: actor_user_id || null,
+        });
+      } catch (notificationError) {
+        paymentNotification = { error: notificationError.message };
+      }
+
+      await writeOrderAuditLog({
+        orderId: order.id,
+        vendorId: order.vendor_id,
+        actorUserId: actor_user_id || null,
+        actorRole: confirmed_by || "vendor",
+        action: isPartial ? "vendor_partial_payment_credit_recorded" : "vendor_credit_payment_recorded",
+        fromStatus: order.status,
+        toStatus: order.status,
+        metadata: { payment_method: isPartial ? method : "credit", order_total: amount, amount_received: amountReceived, outstanding_amount: outstandingAmount, payment_notification: paymentNotification },
+        req,
+      });
+
+      return res.json({
+        success: true,
+        order: updated,
+        settlement_status: "credit_pending",
+        payment_notification: paymentNotification,
+        payment_summary: {
+          payment_method: isPartial ? method : "credit",
+          order_amount: amount,
+          amount_received: amountReceived,
+          outstanding_amount: outstandingAmount,
+          status: isPartial ? "PARTIALLY PAID" : "ON CREDIT / UDHAAR",
+        },
+      });
     }
 
     const receipt = order.receipt_number || receiptNumber(order.id);
@@ -419,6 +537,19 @@ router.post("/orders/:order_id/settle", async (req, res) => {
     });
     const platformCharge = platformChargeError ? { error: platformChargeError.message } : platformChargeData;
 
+    let paymentNotification = null;
+    try {
+      paymentNotification = await notifyCustomerPaymentConfirmed(updated, {
+        paymentMethod: method,
+        amountReceived: amount,
+        outstandingAmount: 0,
+        paymentStatus: "paid",
+        actorUserId: actor_user_id || null,
+      });
+    } catch (notificationError) {
+      paymentNotification = { error: notificationError.message };
+    }
+
     await writeOrderAuditLog({
       orderId: order.id,
       vendorId: order.vendor_id,
@@ -427,11 +558,25 @@ router.post("/orders/:order_id/settle", async (req, res) => {
       action: "direct_vendor_payment_settled",
       fromStatus: order.status,
       toStatus: "completed",
-      metadata: { payment_method: method, receipt_number: receipt, customer_pii_redacted: true, platform_charge: platformCharge },
+      metadata: { payment_method: method, receipt_number: receipt, customer_pii_redacted: true, platform_charge: platformCharge, payment_notification: paymentNotification },
       req,
     });
 
-    return res.json({ success: true, order: updated, receipt_number: receipt, settlement_status: "complete", platform_charge: platformCharge });
+    return res.json({
+      success: true,
+      order: updated,
+      receipt_number: receipt,
+      settlement_status: "complete",
+      platform_charge: platformCharge,
+      payment_notification: paymentNotification,
+      payment_summary: {
+        payment_method: method,
+        order_amount: amount,
+        amount_received: amount,
+        outstanding_amount: 0,
+        status: "FULLY PAID",
+      },
+    });
   } catch (error) {
     return res.status(error.statusCode || 500).json({ success: false, error: error.message });
   }

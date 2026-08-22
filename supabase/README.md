@@ -75,6 +75,16 @@ C:\Users\HP\SabSewa-Local\supabase\RUN_ONLY_REVISED_VENDOR_ACTIVATION_WALLET_POL
 
 The `vendor_security_*` table names are legacy internal names. In SabSewa Local product wording, this is the vendor advance balance. The first vendor payment is Rs 5,500, split into a one-time non-refundable Rs 500 activation/service charge and Rs 5,000 refundable advance wallet credit. Later standard top-ups are Rs 5,000. A backend-resolved category base platform fee plus GST is deducted when the vendor securely confirms and accepts a real-world order, and customer order payment remains direct between customer and vendor.
 
+## Customer/Vendor Payment Status Sync - 2026-08-22
+
+Run this SQL before deploying the payment synchronization backend/UI:
+
+```text
+C:\Users\HP\SabSewa-Local\supabase\RUN_ONLY_ORDER_PAYMENT_STATUS_SYNC_2026_08_22.sql
+```
+
+It preserves direct customer-to-vendor payment handling while allowing validated order states for full cash/UPI payment, partial payment, vendor-owned credit/Udhaar, payment reported and payment disputed. Partial balances are recorded in `vendor_credit_accounts` and `vendor_credit_transactions`; vendor-confirmed received amounts are recorded in `order_payment_transactions`.
+
 ## Vendor Final Pricing, GST and Monthly Accepted-Order Plans - 2026-08-17
 
 Run this revised SQL before enabling the pricing changes in production:

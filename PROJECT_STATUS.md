@@ -1,6 +1,6 @@
 # SabSewa Local Project Status
 
-Updated: 2026-08-18
+Updated: 2026-08-22
 
 Scope: `C:\Users\HP\SabSewa-Local`
 
@@ -11,6 +11,22 @@ Production web URL: `https://www.sabsewa.in`
 Production backend API URL: `https://api.sabsewa.in`
 
 Official support contact: `support@sabsewa.in`, `+91 8450092846`, `+91 8178113449`
+
+## 2026-08-22 - Customer/Vendor Payment Status Synchronization
+
+- Added vendor-authoritative order payment updates for direct customer payments:
+  - Fully Paid - Cash
+  - Fully Paid - UPI
+  - Partially Paid
+  - On Credit / Udhaar
+  - Unpaid
+- Patched `mobile/server/settlement/settlementRoutes.js` so the vendor's confirmation updates `hyperlocal_orders`, writes `order_payment_transactions`, moves any unpaid balance into `vendor_credit_accounts` / `vendor_credit_transactions`, writes an order audit log, and creates a customer notification.
+- Patched `mobile/app/vendor/Orders.tsx` with simple vendor controls for recording what was actually received against an accepted/unlocked order.
+- Patched `mobile/app/customer/OrderHistory.tsx` so customers see friendly synchronized payment states and can open the credit repayment screen for partial/credit balances.
+- Added customer payment confirmation notifications through `mobile/server/notifications/dispatchNotificationService.js`.
+- Required manual Supabase SQL before deploying this backend change:
+  - `supabase/RUN_ONLY_ORDER_PAYMENT_STATUS_SYNC_2026_08_22.sql`
+- Validation pending: run the SQL, rebuild/export web, deploy backend/frontend, and test full cash, UPI, partial and credit order flows with a real vendor/customer pair.
 
 ## 2026-08-18 - Language Selection/Admin Routing Guard Fix
 

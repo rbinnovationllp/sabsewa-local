@@ -1,6 +1,6 @@
 import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
-import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, Image } from "react-native";
+import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, Image } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
@@ -27,6 +27,7 @@ export default function HomeScreen() {
   const { user, loading, signOut } = useAuth();
   const { language, t, setLanguage, isLanguageAvailable } = useLanguage();
   const [profileName, setProfileName] = useState("");
+  const [vendorRegistrationNotice, setVendorRegistrationNotice] = useState("");
   const role = user?.user_metadata?.role;
   const isCustomer = role === "customer";
   const isVendor = role === "vendor";
@@ -95,19 +96,19 @@ export default function HomeScreen() {
   }
 
   async function handleVendorRegistration() {
+    setVendorRegistrationNotice("");
     const registeredPhone = await AsyncStorage.getItem("registered_vendor_phone");
     if (registeredPhone) {
-      Alert.alert(
-        "Vendor already registered",
-        `This device was already used for vendor registration with mobile ${registeredPhone}. Open the vendor dashboard to continue, or use another device/account for a new vendor registration.`,
-        [
-          { text: "Open Vendor Dashboard", onPress: () => router.push("/vendor" as any) },
-          { text: "Cancel", style: "cancel" },
-        ]
+      setVendorRegistrationNotice(
+        `You are already registered as a vendor on this device with mobile ${registeredPhone}. Open Vendor Dashboard to continue, or use another device/account for a new vendor registration.`
       );
       return;
     }
 
+    if (typeof window !== "undefined" && window.location) {
+      window.location.href = "/auth/Register?role=vendor";
+      return;
+    }
     router.push({ pathname: "/auth/Register", params: { role: "vendor" } } as any);
   }
 
@@ -258,6 +259,15 @@ export default function HomeScreen() {
             <TouchableOpacity style={styles.primaryButton} onPress={handleVendorRegistration}>
               <Text style={styles.primaryText}>{t("home.registerShop")}</Text>
             </TouchableOpacity>
+            {vendorRegistrationNotice ? (
+              <View style={styles.noticeBox}>
+                <Text style={styles.noticeTitle}>Vendor already registered</Text>
+                <Text style={styles.noticeText}>{vendorRegistrationNotice}</Text>
+                <TouchableOpacity style={styles.noticeButton} onPress={() => router.push("/vendor" as any)}>
+                  <Text style={styles.noticeButtonText}>Open Vendor Dashboard</Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
             <TouchableOpacity style={styles.secondaryButton} onPress={() => router.push("/auth/Login" as any)}>
               <Text style={styles.secondaryText}>{t("home.vendorLogin")}</Text>
             </TouchableOpacity>
@@ -378,5 +388,17 @@ const styles = StyleSheet.create({
     marginTop: 10,
     flexGrow: 1
   },
-  secondaryText: { color: "#1166ff", fontWeight: "900", textAlign: "center" }
+  secondaryText: { color: "#1166ff", fontWeight: "900", textAlign: "center" },
+  noticeBox: {
+    borderWidth: 1,
+    borderColor: "#fdba74",
+    backgroundColor: "#fff7ed",
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 10,
+  },
+  noticeTitle: { color: "#9a3412", fontWeight: "900", marginBottom: 4 },
+  noticeText: { color: "#7c2d12", lineHeight: 19 },
+  noticeButton: { backgroundColor: "#0f766e", borderRadius: 8, padding: 11, alignItems: "center", marginTop: 10 },
+  noticeButtonText: { color: "#fff", fontWeight: "900" },
 });

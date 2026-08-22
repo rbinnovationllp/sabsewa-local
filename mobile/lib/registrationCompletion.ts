@@ -1,5 +1,6 @@
 import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
+import { apiUrl } from "@/lib/backend";
 import { getDeviceMetadata } from "@/lib/deviceIdentity";
 import {
   SABSEWA_ACCEPTANCE_STATEMENT,
@@ -20,6 +21,20 @@ function clean(value: unknown) {
 
 function addressFromMetadata(metadata: any) {
   return clean(metadata.primary_address);
+}
+
+function referralMetadata(metadata: any) {
+  const referral = metadata?.partner_referral || {};
+  return {
+    isPartnerReferral: Boolean(metadata.referred_by_partner_flag && (referral.referral_code || referral.partner_id || referral.entered_referral_id || referral.entered_phone)),
+    sourceType: clean(referral.source_type) || (metadata.referred_by_partner_flag ? "approved_partner" : "direct_company"),
+    partnerApplicationId: clean(referral.partner_application_id || metadata.attributed_partner_id),
+    partnerId: clean(referral.partner_id),
+    referralCode: clean(referral.referral_code || metadata.partner_referral_code_used),
+    enteredReferralId: clean(referral.entered_referral_id),
+    enteredPhone: clean(referral.entered_phone),
+    confirmedByVendor: referral.confirmed_by_vendor !== false,
+  };
 }
 
 export async function completeRegistrationProfile(
@@ -91,6 +106,7 @@ export async function completeRegistrationProfile(
   if (role === "vendor") {
     const shopName = clean(metadata.shop_name);
     const shopAddress = addressFromMetadata(metadata);
+    const referral = referralMetadata(metadata);
     const { data: existingVendor, error: existingError } = await supabase
       .from("vendors")
       .select("id")
@@ -108,14 +124,44 @@ export async function completeRegistrationProfile(
       lat: metadata.location_coordinates?.lat || null,
       lng: metadata.location_coordinates?.lng || null,
       status: "pending",
+      referral_source_type: referral.isPartnerReferral ? "approved_partner" : "direct_company",
+      referral_status: referral.isPartnerReferral ? "pending_backend_validation" : "direct_company",
+      referral_confirmed_by_vendor: referral.confirmedByVendor,
+      attribution_method: referral.isPartnerReferral ? "vendor_registration_form" : "no_referral_selected",
+      commission_eligibility_status: referral.isPartnerReferral ? "pending_partner_validation" : "not_partner_referred",
     };
 
+    let vendorId = existingVendor?.id || null;
     if (existingVendor?.id) {
-      const { error: updateError } = await supabase.from("vendors").update(vendorPayload).eq("id", existingVendor.id);
+      const { data: updatedVendor, error: updateError } = await supabase.from("vendors").update(vendorPayload).eq("id", existingVendor.id).select("id").single();
       if (updateError) throw updateError;
+      vendorId = updatedVendor?.id || existingVendor.id;
     } else {
-      const { error: vendorError } = await supabase.from("vendors").insert(vendorPayload);
+      const { data: createdVendor, error: vendorError } = await supabase.from("vendors").insert(vendorPayload).select("id").single();
       if (vendorError) throw vendorError;
+      vendorId = createdVendor?.id || null;
+    }
+
+    if (referral.isPartnerReferral && vendorId) {
+      const response = await fetch(apiUrl("/api/partner/referrals/attribute"), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        },
+        body: JSON.stringify({
+          vendor_id: vendorId,
+          partner_id: referral.partnerApplicationId || referral.partnerId || referral.enteredReferralId,
+          referral_id: referral.enteredReferralId,
+          referral_code: referral.referralCode || referral.enteredReferralId,
+          phone: referral.enteredPhone,
+          referral_confirmed_by_vendor: referral.confirmedByVendor,
+        }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || "Partner referral could not be verified and saved.");
+      }
     }
   }
 

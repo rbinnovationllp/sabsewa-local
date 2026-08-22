@@ -192,6 +192,19 @@ export default function RegisterScreen() {
         marketing_consent: marketingConsent,
         registration_method: method,
         referred_by_partner_flag: Boolean(referredByPartner && verifiedPartner),
+        partner_referral: {
+          source_type: referredByPartner && verifiedPartner ? "approved_partner" : "direct_company",
+          confirmed_by_vendor: !referredByPartner || Boolean(verifiedPartner),
+          attribution_method: referredByPartner && verifiedPartner
+            ? (partnerSearch.partnerId.trim() ? "partner_id_or_referral_code" : "registered_mobile")
+            : "no_referral_selected",
+          partner_application_id: verifiedPartner ? verifiedPartner.id : null,
+          partner_id: verifiedPartner ? verifiedPartner.partner_id : null,
+          referral_code: verifiedPartner ? (verifiedPartner.referral_code || verifiedPartner.partner_id) : null,
+          entered_referral_id: partnerSearch.partnerId.trim() || null,
+          entered_phone: partnerSearch.phone.trim() || null,
+          entered_name: partnerSearch.name.trim() || null,
+        },
         attributed_partner_id: verifiedPartner ? verifiedPartner.id : null,
         partner_referral_code_used: verifiedPartner ? (verifiedPartner.referral_code || verifiedPartner.partner_id) : null,
         customer_data_disclosure_consent:
@@ -481,11 +494,12 @@ export default function RegisterScreen() {
                 style={[styles.radioBtn, !referredByPartner && styles.radioActive]}
                 onPress={() => {
                   setReferredByPartner(false);
+                  setPartnerSearch({ name: "", phone: "", partnerId: "" });
                   setVerifiedPartner(null);
                   setVerificationError("");
                 }}
               >
-                <Text style={!referredByPartner ? styles.radioTextActive : styles.radioText}>No</Text>
+                <Text style={!referredByPartner ? styles.radioTextActive : styles.radioText}>I was not referred by anyone</Text>
               </TouchableOpacity>
             </View>
 
@@ -493,23 +507,26 @@ export default function RegisterScreen() {
               <View style={styles.verifyBox}>
                 <TextInput
                   style={styles.input}
-                  placeholder="Partner / Referral Person Name"
+                  placeholder="Referrer name for assisted lookup"
                   value={partnerSearch.name}
                   onChangeText={(v) => setPartnerSearch({ ...partnerSearch, name: v })}
                 />
                 <TextInput
                   style={styles.input}
-                  placeholder="Partner Registered Mobile Number *"
+                  placeholder="Referrer registered mobile number"
                   keyboardType="phone-pad"
                   value={partnerSearch.phone}
                   onChangeText={(v) => setPartnerSearch({ ...partnerSearch, phone: v })}
                 />
                 <TextInput
                   style={styles.input}
-                  placeholder="Referral Code (Optional)"
+                  placeholder="Partner ID or Referral ID"
                   value={partnerSearch.partnerId}
                   onChangeText={(v) => setPartnerSearch({ ...partnerSearch, partnerId: v })}
                 />
+                <Text style={styles.partnerHelpText}>
+                  Partner ID/referral code or registered mobile number is required. Name alone cannot create a Partner attribution.
+                </Text>
 
                 <TouchableOpacity
                   style={styles.verifyBtn}
@@ -522,9 +539,11 @@ export default function RegisterScreen() {
                 {verifiedPartner && (
                   <View style={styles.verifiedCard}>
                     <Text style={styles.verifiedTitle}>✓ Verified Partner Linked</Text>
-                    <Text style={styles.verifiedText}>Name: {verifiedPartner.verified_name}</Text>
-                    <Text style={styles.verifiedText}>Verified Partner: {verifiedPartner.verified_name || verifiedPartner.partner_id}</Text>
-                    <Text style={styles.verifiedText}>Location: {verifiedPartner.city}, {verifiedPartner.state}</Text>
+                    <Text style={styles.verifiedText}>Partner: {verifiedPartner.display_name || "Verified SabSewa Partner"}</Text>
+                    <Text style={styles.verifiedText}>Partner/Referral ID: {verifiedPartner.partner_id || verifiedPartner.referral_code}</Text>
+                    <Text style={styles.partnerHelpText}>
+                      This Partner link will be saved only after SabSewa confirms the active Partner record during registration.
+                    </Text>
                   </View>
                 )}
 
@@ -728,6 +747,7 @@ const styles = StyleSheet.create({
   verifiedCard: { borderWidth: 1, borderColor: "#86efac", backgroundColor: "#f0fdf4", borderRadius: 8, padding: 10, marginTop: 8 },
   verifiedTitle: { color: "#166534", fontWeight: "900", marginBottom: 4 },
   verifiedText: { color: "#14532d", fontSize: 12 },
+  partnerHelpText: { color: "#7c2d12", fontSize: 12, lineHeight: 17, marginBottom: 8 },
   partnerErrorText: { color: "#b91c1c", fontSize: 12, marginTop: 6, fontWeight: "700" },
 
   error: {

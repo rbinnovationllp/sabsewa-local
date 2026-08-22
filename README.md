@@ -63,6 +63,7 @@ SabSewa Local is prepared for participation in the Gemini XPRIZE / AI Hackathon.
 - **Restricted Delivery Staff Terminal:** Vendors can add delivery staff for a shop terminal, assign accepted/packed orders, revoke staff access, track assigned deliveries, record staff-reported cash collection and reconcile cash handover. Delivery staff cannot accept/reject orders, approve credit, modify catalogue, access KYC, billing or customer databases.
 - **Simple Vendor Delivery Models:** Each vendor terminal can use Self Delivery, One Delivery Staff, or Multiple Delivery Staff. One-person shops can mark vendor self-delivery without creating staff accounts, one-staff shops can use a default staff member for one-tap assignment, and larger shops can select among multiple staff.
 - **Vendor CRM Shop Snapshot:** The vendor dashboard summarizes orders, completed sales, cash/UPI received, Credit/Udhaar given and recovered, delivery status, cash pending handover from delivery staff and attention items using existing order, payment, credit and delivery records.
+- **Partner Referral Attribution:** Vendor onboarding supports Partner-only referral attribution. A vendor may enter a Partner ID/referral ID or the Partner's registered mobile number, or explicitly choose direct/company onboarding. The backend re-validates active Partners before saving a permanent vendor-to-partner attribution used later by the Partner commission ledger.
 - **Monetization Structure:** Vendors can stay on category-based Pay As You Go pricing charged as base platform fee plus GST, or choose an optional monthly accepted-order plan. Covered monthly-plan orders are not also charged a category-based accepted-order fee; orders above the monthly allowance use the selected plan's configurable overage fee plus GST.
 - **Razorpay Payments:** Rs 5,500 first vendor activation (Rs 500 non-refundable service charge + Rs 5,000 refundable advance wallet balance) and Rs 5,000 standard top-ups.
 - **Web-Resilient Routing:** Hard browser fallback handlers (`window.location.href`) guaranteeing smooth state transitions after OTP verification on web builds.
@@ -103,6 +104,14 @@ Vendor delivery setup is intentionally flexible. A terminal may be configured as
 ## Vendor CRM Reporting
 
 The Vendor Dashboard is the shopkeeper's operating console. It now uses `GET /api/vendor/crm/:vendor_id/summary` to summarize Today, This Week, This Month and All Time figures from existing source-of-truth tables rather than duplicate reporting tables. The Customer Credit Ledger shows customer-wise Udhaar balances, current outstanding, recovered amount, ageing buckets, repayment requests and a controlled Request Payment action that queues a reminder through the existing credit reminder infrastructure.
+
+## Partner Referral During Vendor Onboarding
+
+Vendor registration includes an optional Partner Referral section. If a vendor was onboarded by a SabSewa Partner, the vendor can provide the Partner ID/referral ID or the Partner's registered mobile number. The displayed confirmation uses a masked Partner name only; Partner private details are not exposed. Name alone is not an authoritative identifier.
+
+If no Partner is involved, the vendor chooses direct/company onboarding. If a Partner is provided, the app stores the vendor's confirmation and the backend endpoint `POST /api/partner/referrals/attribute` performs the final active-Partner validation, prevents self-referral and duplicate non-admin attribution, writes `partner_referred_vendors`, and locks the attribution. Partner commission is still generated only later when eligible company revenue is recorded for the referred vendor.
+
+Run `supabase/RUN_ONLY_VENDOR_PARTNER_REFERRAL_HARDENING_2026_08_22.sql` before deploying this flow because the vendor registration profile writes the hardened referral status columns.
 
 ---
 

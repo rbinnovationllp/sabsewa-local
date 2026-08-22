@@ -75,6 +75,16 @@ C:\Users\HP\SabSewa-Local\supabase\RUN_ONLY_REVISED_VENDOR_ACTIVATION_WALLET_POL
 
 The `vendor_security_*` table names are legacy internal names. In SabSewa Local product wording, this is the vendor advance balance. The first vendor payment is Rs 5,500, split into a one-time non-refundable Rs 500 activation/service charge and Rs 5,000 refundable advance wallet credit. Later standard top-ups are Rs 5,000. A backend-resolved category base platform fee plus GST is deducted when the vendor securely confirms and accepts a real-world order, and customer order payment remains direct between customer and vendor.
 
+## Vendor Onboarding Partner Referral Hardening - 2026-08-22
+
+Run this SQL before deploying the hardened vendor registration Partner Referral flow:
+
+```text
+C:\Users\HP\SabSewa-Local\supabase\RUN_ONLY_VENDOR_PARTNER_REFERRAL_HARDENING_2026_08_22.sql
+```
+
+This migration adds durable referral status columns to `vendors` and `partner_referred_vendors`, ensures one Partner attribution per vendor through a full unique `vendor_id` index, refreshes the vendor-to-partner sync trigger, and adds `partner_referral_attribution_audit` for future Master Admin corrections. It does not release Partner commission. Commission remains dependent on an active Partner, approved/active vendor, and eligible company revenue.
+
 ## Customer/Vendor Payment Status Sync - 2026-08-22
 
 Run this SQL before deploying the payment synchronization backend/UI:

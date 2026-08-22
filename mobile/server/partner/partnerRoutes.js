@@ -37,6 +37,21 @@ function normalizePhone(value) {
   return clean(value).replace(/\D/g, "");
 }
 
+function maskPartnerName(value) {
+  const words = clean(value).split(/\s+/).filter(Boolean);
+  if (!words.length) return "Verified SabSewa Partner";
+  return words
+    .map((word) => {
+      if (word.length <= 2) return `${word[0] || ""}*`;
+      return `${word[0]}${"*".repeat(Math.min(word.length - 2, 6))}${word[word.length - 1]}`;
+    })
+    .join(" ");
+}
+
+function partnerCodeFor(partner, fallback = "") {
+  return clean(partner?.referral_code || partner?.partner_id || partner?.application_id || fallback).toUpperCase();
+}
+
 function normalizePaymentMethod(value) {
   const method = clean(value).toLowerCase();
   return PAYMENT_METHODS.has(method) ? method : "";
@@ -211,9 +226,10 @@ async function insertPaymentDetail(applicationId, payment) {
  */
 router.post("/verify-referral", async (req, res) => {
   try {
-    const { partner_id, phone, partner_name } = req.body || {};
+    const { partner_id, referral_id, phone, partner_name } = req.body || {};
     const cleanPhone = normalizePhone(phone);
-    const cleanId = clean(partner_id).toUpperCase();
+    const phoneTail = cleanPhone.slice(-10);
+    const cleanId = clean(partner_id || referral_id).toUpperCase();
     const cleanName = clean(partner_name).toLowerCase();
 
     if (!cleanPhone && !cleanId) {
@@ -222,13 +238,13 @@ router.post("/verify-referral", async (req, res) => {
 
     let query = supabase
       .from("partner_applications")
-      .select("id, partner_id, referral_code, applicant_name, phone, city, state, status")
+      .select("id, partner_id, referral_code, application_id, applicant_name, phone, status, kyc_status, payment_details_status")
       .eq("status", "active");
 
     if (cleanId) {
       query = query.or(`partner_id.eq.${cleanId},referral_code.eq.${cleanId},application_id.eq.${cleanId}`);
-    } else if (cleanPhone) {
-      query = query.or(`phone.eq.${phone},phone.eq.${cleanPhone}`);
+    } else if (phoneTail) {
+      query = query.or(`phone.eq.${cleanPhone},phone.ilike.%${phoneTail}`);
     }
 
     const { data: matches, error } = await query;
@@ -242,18 +258,17 @@ router.post("/verify-referral", async (req, res) => {
       });
     }
 
-    const matchedPartner = matches.find(p => cleanName ? p.applicant_name.toLowerCase().includes(cleanName) : true) || matches[0];
+    const matchedPartner = matches.find((p) => cleanName ? clean(p.applicant_name).toLowerCase().includes(cleanName) : true) || matches[0];
 
     return res.json({
       success: true,
       verified: true,
       partner: {
         id: matchedPartner.id,
-        partner_id: matchedPartner.partner_id || matchedPartner.referral_code,
-        verified_name: matchedPartner.applicant_name,
-        city: matchedPartner.city,
-        state: matchedPartner.state,
-        referral_code: matchedPartner.referral_code
+        partner_id: matchedPartner.partner_id || matchedPartner.referral_code || matchedPartner.application_id,
+        display_name: maskPartnerName(matchedPartner.applicant_name),
+        referral_code: matchedPartner.referral_code || matchedPartner.partner_id || matchedPartner.application_id,
+        status: "active"
       }
     });
   } catch (error) {
@@ -267,17 +282,19 @@ router.post("/verify-referral", async (req, res) => {
  */
 router.post("/referrals/attribute", requireAuth, async (req, res) => {
   try {
-    const { vendor_id, partner_id, referral_code } = req.body || {};
-    const cleanCode = clean(referral_code || partner_id).toUpperCase();
+    const { vendor_id, partner_id, referral_id, referral_code, phone, referral_confirmed_by_vendor } = req.body || {};
+    const cleanCode = clean(referral_code || referral_id || partner_id).toUpperCase();
+    const cleanPhone = normalizePhone(phone);
+    const phoneTail = cleanPhone.slice(-10);
 
-    if (!vendor_id || !cleanCode) {
-      return res.status(400).json({ success: false, error: "Vendor profile and partner referral code are required." });
+    if (!vendor_id || (!cleanCode && !phoneTail)) {
+      return res.status(400).json({ success: false, error: "Vendor profile and Partner ID, referral code, or registered mobile number are required." });
     }
 
     const referralActorIsAdmin = ["admin", "company_admin", "super_admin", "master_admin", "national_admin", "state_admin", "district_admin", "city_admin"].includes(String(req.auth?.role || "").toLowerCase());
     const { data: vendor, error: vendorError } = await supabase
       .from("vendors")
-      .select("id, owner_user_id, attributed_partner_id, partner_attribution_locked")
+      .select("id, owner_user_id, attributed_partner_id, partner_attribution_locked, phone")
       .eq("id", vendor_id)
       .maybeSingle();
 
@@ -289,15 +306,21 @@ router.post("/referrals/attribute", requireAuth, async (req, res) => {
       return res.status(403).json({ success: false, error: "You can attribute only your own vendor profile." });
     }
 
-    if (vendor.partner_attribution_locked && vendor.attributed_partner_id && !referralActorIsAdmin) {
+    if (vendor.partner_attribution_locked && !referralActorIsAdmin) {
       return res.status(409).json({ success: false, error: "This vendor already has a locked Partner referral attribution. Contact SabSewa support for correction." });
     }
 
-    const { data: partner, error: partnerError } = await supabase
+    let partnerQuery = supabase
       .from("partner_applications")
-      .select("id, partner_id, referral_code, status, revenue_share_percent")
-      .or(`referral_code.eq.${cleanCode},partner_id.eq.${cleanCode},id.eq.${partner_id || '00000000-0000-0000-0000-000000000000'}`)
-      .maybeSingle();
+      .select("id, partner_id, referral_code, application_id, phone, status, kyc_status, payment_details_status, revenue_share_percent");
+
+    if (cleanCode) {
+      partnerQuery = partnerQuery.or(`referral_code.eq.${cleanCode},partner_id.eq.${cleanCode},application_id.eq.${cleanCode},id.eq.${partner_id || "00000000-0000-0000-0000-000000000000"}`);
+    } else {
+      partnerQuery = partnerQuery.or(`phone.eq.${cleanPhone},phone.ilike.%${phoneTail}`);
+    }
+
+    const { data: partner, error: partnerError } = await partnerQuery.maybeSingle();
 
     if (partnerError || !partner) {
       return res.status(404).json({ success: false, error: "Invalid or inactive partner referral code." });
@@ -307,34 +330,79 @@ router.post("/referrals/attribute", requireAuth, async (req, res) => {
       return res.status(400).json({ success: false, error: "This partner program account is currently not active." });
     }
 
+    const vendorPhoneTail = normalizePhone(vendor.phone).slice(-10);
+    const partnerPhoneTail = normalizePhone(partner.phone).slice(-10);
+    if (vendorPhoneTail && partnerPhoneTail && vendorPhoneTail === partnerPhoneTail) {
+      return res.status(400).json({ success: false, error: "Self-referral is not allowed for Partner attribution." });
+    }
+
+    const now = new Date().toISOString();
+    const canonicalCode = partnerCodeFor(partner, cleanCode);
+    const attributionMethod = cleanCode ? "partner_id_or_referral_code" : "registered_mobile";
     const { data: referral, error: referralError } = await supabase
       .from("partner_referred_vendors")
       .upsert({
         partner_application_id: partner.id,
         vendor_id,
         partner_id: partner.partner_id || null,
-        referral_code: partner.referral_code || cleanCode,
+        referral_code: canonicalCode,
         referral_status: "attributed",
-        vendor_onboarding_date: new Date().toISOString(),
+        vendor_onboarding_date: now,
+        referral_source: "vendor_registration_partner_referral",
+        referral_source_type: "approved_partner",
+        referral_confirmed_by_vendor: referral_confirmed_by_vendor !== false,
+        attribution_method: attributionMethod,
+        validated_at: now,
+        validated_by: req.auth?.user_id || null,
+        commission_eligibility_status: "pending_eligible_revenue",
         benefit_percent: Number(partner.revenue_share_percent || DEFAULT_BENEFIT_PERCENT),
-        attributed_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
+        attributed_at: now,
+        updated_at: now,
       }, { onConflict: "vendor_id" })
       .select()
       .single();
 
     if (referralError) throw referralError;
 
-    await supabase
+    const { error: vendorUpdateError } = await supabase
       .from("vendors")
       .update({
         attributed_partner_id: partner.id,
         referred_by_partner_flag: true,
-        partner_referral_code_used: partner.referral_code || cleanCode,
-        partner_attribution_verified_at: new Date().toISOString(),
+        partner_referral_code_used: canonicalCode,
+        referral_source_type: "approved_partner",
+        referrer_partner_id: partner.id,
+        referral_code_entered: cleanCode || cleanPhone,
+        referral_status: "attributed",
+        referred_at: now,
+        referral_confirmed_by_vendor: referral_confirmed_by_vendor !== false,
+        attribution_method: attributionMethod,
+        referral_validated_at: now,
+        referral_validated_by: req.auth?.user_id || null,
+        commission_eligibility_status: "pending_eligible_revenue",
+        partner_attribution_verified_at: now,
         partner_attribution_locked: true,
       })
       .eq("id", vendor_id);
+
+    if (vendorUpdateError) throw vendorUpdateError;
+
+    await supabase.from("partner_referral_attribution_audit").insert({
+      vendor_id,
+      previous_partner_application_id: vendor.attributed_partner_id || null,
+      new_partner_application_id: partner.id,
+      previous_referral_code: null,
+      new_referral_code: canonicalCode,
+      action: "vendor_registration_partner_referral",
+      actor_user_id: req.auth?.user_id || null,
+      actor_role: req.auth?.role || null,
+      metadata: {
+        attribution_method: attributionMethod,
+        referral_confirmed_by_vendor: referral_confirmed_by_vendor !== false,
+      },
+    }).then(({ error: auditError }) => {
+      if (auditError) console.warn("Partner referral attribution audit insert failed", auditError.message);
+    });
 
     return res.status(201).json({ success: true, referral });
   } catch (error) {
@@ -878,25 +946,68 @@ router.post("/admin/reattribute-vendor", ...requireAdmin, async (req, res) => {
       return res.status(400).json({ success: false, error: "Target partner account is not active." });
     }
 
-    await supabase
+    const { data: previousVendor } = await supabase
+      .from("vendors")
+      .select("attributed_partner_id, partner_referral_code_used")
+      .eq("id", vendor_id)
+      .maybeSingle();
+
+    const now = new Date().toISOString();
+    const canonicalCode = partnerCodeFor(newPartner);
+    const { error: vendorUpdateError } = await supabase
       .from("vendors")
       .update({
         attributed_partner_id: newPartner.id,
         referred_by_partner_flag: true,
-        partner_referral_code_used: newPartner.referral_code || newPartner.partner_id,
-        partner_attribution_verified_at: new Date().toISOString(),
+        partner_referral_code_used: canonicalCode,
+        referral_source_type: "admin_assisted",
+        referrer_partner_id: newPartner.id,
+        referral_code_entered: canonicalCode,
+        referral_status: "verified",
+        referred_at: now,
+        referral_confirmed_by_vendor: true,
+        attribution_method: "admin_correction",
+        referral_validated_at: now,
+        referral_validated_by: req.auth?.user_id || null,
+        commission_eligibility_status: "pending_eligible_revenue",
+        partner_attribution_verified_at: now,
         partner_attribution_locked: true,
       })
       .eq("id", vendor_id);
 
+    if (vendorUpdateError) throw vendorUpdateError;
+
     await supabase.from("partner_referred_vendors").upsert({
       vendor_id,
       partner_application_id: newPartner.id,
-      referral_code: newPartner.referral_code || newPartner.partner_id,
+      partner_id: newPartner.partner_id || null,
+      referral_code: canonicalCode,
       referral_status: "verified",
+      referral_source: "admin_partner_referral_correction",
+      referral_source_type: "admin_assisted",
+      referral_confirmed_by_vendor: true,
+      attribution_method: "admin_correction",
+      validated_at: now,
+      validated_by: req.auth?.user_id || null,
+      commission_eligibility_status: "pending_eligible_revenue",
       notes: `Reattributed by Master Admin. Reason: ${reason}`,
-      updated_at: new Date().toISOString(),
+      updated_at: now,
     }, { onConflict: "vendor_id" });
+
+    await supabase.from("partner_referral_attribution_audit").insert({
+      vendor_id,
+      previous_partner_application_id: previousVendor?.attributed_partner_id || null,
+      new_partner_application_id: newPartner.id,
+      previous_referral_code: previousVendor?.partner_referral_code_used || null,
+      new_referral_code: canonicalCode,
+      action: "admin_partner_referral_correction",
+      reason,
+      actor_user_id: req.auth?.user_id || null,
+      actor_role: req.auth?.role || null,
+      metadata: { source: "partner_admin_reattribute_vendor" },
+    }).then(({ error: auditError }) => {
+      if (auditError) console.warn("Partner referral attribution audit insert failed", auditError.message);
+    });
 
     await writeAdminAudit({
       req,

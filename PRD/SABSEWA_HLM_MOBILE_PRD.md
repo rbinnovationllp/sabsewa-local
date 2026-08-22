@@ -141,6 +141,7 @@ Required output format:
 ### 4.5.0 Registration And Trusted Device Login
 - Customer registration collects only necessary service data: name, OTP-verified mobile number, preferred language, delivery address, optional location coordinates and current Terms/Privacy acceptance.
 - Vendor registration collects owner/entity name, shop/trade name, category, shop address/geolocation, OTP-verified mobile number, KYC/business information placeholder, terms/privacy acceptance, verification status and activation/payment status.
+- Vendor registration may optionally collect Partner Referral details only for SabSewa Partner attribution. The vendor can enter a Partner ID/referral ID or the Partner's registered mobile number, or explicitly choose direct/company onboarding. The Partner name field is only assisted lookup/display and must never be the authoritative identifier. Backend validation must confirm an active Partner before locking attribution and writing `partner_referred_vendors`.
 - Customer profile, primary address and Terms/Privacy acceptance must be persisted before the app displays a registration-success confirmation.
 - The customer success message must be localized: `Congratulations! You are now registered as a SabSewa Local customer. You can start shopping online from trusted shops in your locality.`
 - Registration submission must be idempotent and must prevent repeated taps from creating duplicate profiles, duplicate addresses or duplicate policy-acceptance records.

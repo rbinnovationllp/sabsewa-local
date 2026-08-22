@@ -12,6 +12,31 @@ Production backend API URL: `https://api.sabsewa.in`
 
 Official support contact: `support@sabsewa.in`, `+91 8450092846`, `+91 8178113449`
 
+## 2026-08-22 - Vendor Onboarding Partner Referral Hardening
+
+- Audited the current vendor registration flow and confirmed Partner Referral support already existed, but it was partial:
+  - Vendor registration UI collected Partner/referral details.
+  - Backend already had `/api/partner/verify-referral` and `/api/partner/referrals/attribute`.
+  - Partner commission creation already depends on `partner_referred_vendors` and eligible company revenue, so attribution alone does not release commission.
+- Hardened the Partner Referral flow so it remains Partner-only:
+  - Vendor registration now records a structured `partner_referral` object.
+  - Vendors can explicitly choose `I was not referred by anyone`, which is stored as `direct_company`.
+  - Active Partner lookup is authoritative by Partner ID/referral ID or registered mobile number; name is assisted lookup only.
+  - Verification response now returns a masked Partner display name instead of full Partner private details/location.
+  - After OTP/profile completion, referred vendors call the backend attribution endpoint so the server re-validates the active Partner before locking attribution.
+  - Backend blocks duplicate non-admin attribution and self-referral.
+  - Master Admin reattribution writes the same canonical fields and audit path.
+- Added Supabase SQL:
+  - `supabase/RUN_ONLY_VENDOR_PARTNER_REFERRAL_HARDENING_2026_08_22.sql`
+- Required manual SQL before deploying this feature:
+  - Run `supabase/RUN_ONLY_VENDOR_PARTNER_REFERRAL_HARDENING_2026_08_22.sql` in the production Supabase SQL Editor.
+- Validation:
+  - `node --check mobile/server/partner/partnerRoutes.js` passed.
+  - `npm run validate:onboarding` passed.
+  - `npm run validate:billing` passed.
+  - `npm run deploy:validate` passed.
+  - Local `npm run typecheck` could not run because `tsc` is not installed in the current `mobile\node_modules`; install dev dependencies before rerunning TypeScript locally.
+
 ## 2026-08-22 - Vendor Delivery Model Simplification
 
 - Added terminal-level delivery operating models so small shops are not forced to create a delivery team:

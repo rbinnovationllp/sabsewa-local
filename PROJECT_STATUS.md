@@ -109,7 +109,7 @@ Official support contact: `support@sabsewa.in`, `+91 8450092846`, `+91 817811344
 - Corrected the existing-vendor panel actions so `Open Vendor Dashboard` routes explicitly to `/vendor/dashboard` or to vendor login when no authenticated session is present. It no longer uses the ambiguous `/vendor` route.
 - `Continue Pending KYC` and `Continue Pending Onboarding Payment` now use the same vendor-session-aware routing helper; if the current session is Admin/Master Admin/customer/partner instead of vendor, the page shows a switch-account message and does not navigate to `/company`.
 - Masked the device-linked vendor mobile display and removed the full stored mobile number from the onboarding-decision payload.
-- Updated the global Home button so public workflows such as `/vendor/register`, `/vendor-registration`, `/hlm` and `/partner` go back to public Home instead of routing an already signed-in Admin/Master Admin session to `/company`.
+- Updated the global Home button so it always opens the public Home route `/`. This prevents the top-left Home button on Master Admin verification, vendor registration or other screens from appearing broken by routing an already signed-in Admin/Master Admin session back to `/company`.
 - Removed the duplicate nested Home/Back header from the Master Admin verification layout; the root app navigation remains the single header.
 - Confirmed the Partner Referral row is in the vendor registration form under `Partner Referral Details`, after the shop/trade name and service-type fields.
 - Extended `npm run validate:vendor-entity-branch-onboarding` to assert the public vendor route, Home/HLM CTA targets and auth-guard exception.

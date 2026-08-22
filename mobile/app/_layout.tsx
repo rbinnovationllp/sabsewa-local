@@ -4,7 +4,7 @@ import { Platform, View, TouchableOpacity, Text, StyleSheet } from "react-native
 import { Ionicons } from "@expo/vector-icons";
 
 import { LanguageProvider, useLanguage } from "@/providers/LanguageProvider";
-import AuthProvider, { useAuth } from "@/providers/AuthProvider";
+import AuthProvider from "@/providers/AuthProvider";
 import { UserProvider } from "@/contexts/UserContext";
 import PwaInstallPrompt from "@/components/PwaInstallPrompt";
 
@@ -12,48 +12,10 @@ function TopNavigationBar() {
   const { t } = useLanguage();
   const router = useRouter();
   const pathname = usePathname();
-  const { role } = useAuth();
 
   const isHome = pathname === "/" || pathname === "/index";
-  const isPublicWorkflow =
-    pathname === "/vendor/register" ||
-    pathname === "/vendor-registration" ||
-    pathname === "/hlm" ||
-    pathname === "/partner";
   const handleGoHome = () => {
-    if (isPublicWorkflow) {
-      router.replace("/" as any);
-      return;
-    }
-
-    const normalizedRole = String(role || "").toLowerCase();
-    const adminRoles = new Set([
-      "admin",
-      "company_admin",
-      "super_admin",
-      "master_admin",
-      "national_admin",
-      "state_admin",
-      "district_admin",
-      "city_admin",
-      "kyc_reviewer",
-      "finance_admin",
-      "support_admin",
-    ]);
-
-    if (normalizedRole === "vendor") {
-      router.replace("/vendor/dashboard" as any);
-    } else if (normalizedRole === "customer") {
-      router.replace("/customer/dashboard" as any);
-    } else if (normalizedRole === "partner") {
-      router.replace("/partner-dashboard" as any);
-    } else if (normalizedRole === "rider") {
-      router.replace("/rider" as any);
-    } else if (adminRoles.has(normalizedRole)) {
-      router.replace("/company" as any);
-    } else {
-      router.replace("/" as any);
-    }
+    router.replace("/" as any);
   };
 
   return (

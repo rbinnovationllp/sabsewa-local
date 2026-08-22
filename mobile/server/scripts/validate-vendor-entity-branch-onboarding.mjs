@@ -40,7 +40,8 @@ assert.doesNotMatch(registerScreen, /with mobile \{registeredVendorPhone\}/, "ex
 assert.match(publicHome, /window\.location\.href = "\/vendor\/register"/, "Home Register Your Shop must use public vendor route");
 assert.match(hlmLanding, /window\.location\.href = "\/vendor\/register"/, "HLM Register as Vendor must use public vendor route");
 assert.match(authEntry, /role === "vendor"[\s\S]*router\.push\("\/vendor\/register"/, "Auth role chooser must route vendors to public vendor route");
-assert.match(rootLayout, /isPublicWorkflow[\s\S]*pathname === "\/vendor\/register"/, "root Home button must treat vendor registration as a public workflow");
+assert.match(rootLayout, /const handleGoHome = \(\) => \{[\s\S]*router\.replace\("\/" as any\);[\s\S]*\};/, "root Home button must always route to public Home");
+assert.doesNotMatch(rootLayout, /router\.replace\("\/company" as any\)/, "root Home button must not route signed-in admins back to Company CRM");
 assert.doesNotMatch(companyLayout, /\{renderHeader\(\)\}/, "Company verification page must not render a duplicate nested Home/Back header");
 assert.match(authProvider, /isPublicVendorRegistrationRoute/, "auth guard must allow public vendor registration route");
 assert.match(authProvider, /pathname === "\/vendor\/register"/, "auth guard must explicitly allow /vendor/register");

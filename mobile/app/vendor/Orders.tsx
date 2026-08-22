@@ -65,6 +65,7 @@ export default function VendorOrdersScreen() {
   const [deliveryOverrideReasons, setDeliveryOverrideReasons] = useState<Record<string, string>>({});
   const [paymentAmounts, setPaymentAmounts] = useState<Record<string, string>>({});
   const [paymentReferences, setPaymentReferences] = useState<Record<string, string>>({});
+  const [deliverySettingsByTerminal, setDeliverySettingsByTerminal] = useState<Record<string, any>>({});
   const alertLoopRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [nowMs, setNowMs] = useState(Date.now());
 
@@ -112,6 +113,7 @@ export default function VendorOrdersScreen() {
     }
 
     const nextOrders = json.orders || [];
+    loadDeliverySettingsForOrders(nextOrders);
     const pendingIds = nextOrders.filter((order: any) => order.status === "pending").map((order: any) => String(order.id));
     const hasNewPending = pendingIds.some((id: string) => !lastPendingOrderIds.includes(id));
     if (hasNewPending && lastPendingOrderIds.length > 0) {
@@ -131,6 +133,26 @@ export default function VendorOrdersScreen() {
     setLastPendingOrderIds(pendingIds);
     setNewOrderCount(pendingIds.length);
     setOrders(nextOrders);
+  }
+
+  async function loadDeliverySettingsForOrders(nextOrders: any[]) {
+    const terminalIds = Array.from(new Set(nextOrders.map((order: any) => order.terminal_id).filter(Boolean)));
+    const missingIds = terminalIds.filter((id: any) => !deliverySettingsByTerminal[String(id)]);
+    if (!missingIds.length) return;
+
+    const loaded: Record<string, any> = {};
+    await Promise.all(
+      missingIds.map(async (id: any) => {
+        try {
+          const response = await fetch(apiUrl(`/api/vendor/delivery-settings/terminal/${id}`));
+          const json = await response.json();
+          if (json.success && json.settings) loaded[String(id)] = json.settings;
+        } catch {}
+      })
+    );
+    if (Object.keys(loaded).length > 0) {
+      setDeliverySettingsByTerminal((current) => ({ ...current, ...loaded }));
+    }
   }
 
   async function updateStatus(orderId: string, status: string) {
@@ -258,6 +280,21 @@ export default function VendorOrdersScreen() {
     if (method === "credit") return "Credit / Udhaar";
     if (method === "unpaid") return "Unpaid";
     return method || "Not selected";
+  }
+
+  function deliveryModelForOrder(order: any) {
+    return deliverySettingsByTerminal[String(order.terminal_id || "")]?.delivery_model || "multiple_staff";
+  }
+
+  function assignDeliveryLabel(order: any) {
+    const model = deliveryModelForOrder(order);
+    if (model === "vendor_self") return "Record Self Delivery";
+    if (model === "single_staff") return "Assign One Delivery Staff";
+    return "Assign Delivery Staff";
+  }
+
+  function outForDeliveryLabel(order: any) {
+    return deliveryModelForOrder(order) === "vendor_self" ? "Start Self Delivery" : "Out for Delivery";
   }
 
   async function settleOrder(order: any, paymentMethod: "cash" | "vendor_qr" | "credit" | "unpaid", amountOverride?: number) {
@@ -633,7 +670,7 @@ export default function VendorOrdersScreen() {
               style={styles.trackBtn}
             >
               <Text style={{ color: "white", textAlign: "center" }}>
-                Assign Delivery Staff
+                {assignDeliveryLabel(order)}
               </Text>
             </Link>
           )}
@@ -695,7 +732,7 @@ export default function VendorOrdersScreen() {
                 style={styles.outBtn}
                 onPress={() => updateStatus(order.id, "out_for_delivery")}
               >
-                <Text style={styles.btnTxt}>Out for Delivery</Text>
+                <Text style={styles.btnTxt}>{outForDeliveryLabel(order)}</Text>
               </TouchableOpacity>
             )}
 

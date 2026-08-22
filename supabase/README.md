@@ -95,6 +95,16 @@ C:\Users\HP\SabSewa-Local\supabase\RUN_ONLY_DELIVERY_STAFF_RESTRICTED_ACCESS_202
 
 It extends `delivery_boys` and `delivery_assignments` for restricted staff roles, disabled-token handling, assignment ownership, staff-reported cash collection, vendor cash reconciliation, staff credit-request notes, idempotent delivery completion and `delivery_staff_audit_logs`. Delivery staff remain vendor-controlled operational users and are not Admin, Vendor Owner or Partner users.
 
+## Vendor Delivery Model - 2026-08-22
+
+Run this SQL before deploying the model-aware delivery settings and assignment UI:
+
+```text
+C:\Users\HP\SabSewa-Local\supabase\RUN_ONLY_VENDOR_DELIVERY_MODEL_2026_08_22.sql
+```
+
+It adds `vendor_terminals.delivery_model`, `vendor_terminals.default_delivery_boy_id`, and safe assignment metadata support so each terminal can operate as `vendor_self`, `single_staff`, or `multiple_staff`. Self delivery records an audited assignment without requiring a delivery staff account or public rider link.
+
 ## Vendor Final Pricing, GST and Monthly Accepted-Order Plans - 2026-08-17
 
 Run this revised SQL before enabling the pricing changes in production:

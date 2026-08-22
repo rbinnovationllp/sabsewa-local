@@ -22,10 +22,11 @@ async function auditDeliveryAssignment(action, payload = {}) {
 
 router.post("/", async (req, res) => {
   try {
-    const { vendor_id, order_id, delivery_boy_id, terminal_id, assigned_by } = req.body;
+    const { vendor_id, order_id, delivery_boy_id, terminal_id, assigned_by, delivery_mode } = req.body;
+    const isSelfDelivery = delivery_mode === "vendor_self";
 
-    if (!vendor_id || !order_id || !delivery_boy_id || !terminal_id) {
-      return res.status(400).json({ success: false, message: "vendor_id, terminal_id, order_id and delivery_boy_id are required" });
+    if (!vendor_id || !order_id || !terminal_id || (!isSelfDelivery && !delivery_boy_id)) {
+      return res.status(400).json({ success: false, message: "vendor_id, terminal_id, order_id and delivery_boy_id are required unless this is vendor self delivery" });
     }
 
     const { data: order, error: orderError } = await supabase
@@ -42,6 +43,73 @@ router.post("/", async (req, res) => {
     }
     if (!ASSIGNABLE_ORDER_STATUSES.includes(order.status)) {
       return res.status(409).json({ success: false, message: `Order status ${order.status} cannot be assigned for delivery` });
+    }
+
+    const { data: terminalSettings, error: terminalError } = await supabase
+      .from("vendor_terminals")
+      .select("id, delivery_model, default_delivery_boy_id")
+      .eq("id", terminal_id)
+      .eq("vendor_id", vendor_id)
+      .maybeSingle();
+
+    if (terminalError) throw terminalError;
+    if (!terminalSettings) return res.status(404).json({ success: false, message: "Terminal settings not found for this vendor" });
+
+    if (isSelfDelivery && terminalSettings.delivery_model !== "vendor_self") {
+      return res.status(409).json({ success: false, message: "This terminal is not configured for self delivery." });
+    }
+
+    if (isSelfDelivery) {
+      const { data: existing } = await supabase
+        .from("delivery_assignments")
+        .select("id, delivery_boy_id")
+        .eq("order_id", order_id)
+        .maybeSingle();
+
+      const assignmentPayload = {
+        order_id,
+        vendor_id,
+        terminal_id,
+        delivery_boy_id: null,
+        status: "assigned",
+        assigned_at: new Date().toISOString(),
+        assigned_by: assigned_by || null,
+        reassigned_from: existing?.delivery_boy_id || null,
+        metadata: {
+          delivery_model: "vendor_self",
+          assigned_by: assigned_by || null,
+          note: "Vendor/shop owner will deliver this order personally.",
+        },
+      };
+
+      const { data: assignments, error } = await supabase
+        .from("delivery_assignments")
+        .upsert(assignmentPayload, { onConflict: "order_id" })
+        .select();
+
+      if (error) throw error;
+
+      if (existing?.delivery_boy_id) {
+        await supabase.from("delivery_boys").update({ status: "available" }).eq("id", existing.delivery_boy_id);
+      }
+
+      const assignment = Array.isArray(assignments) ? assignments[0] : assignments;
+      await auditDeliveryAssignment("vendor_self_delivery_assigned", {
+        vendor_id,
+        terminal_id,
+        assignment_id: assignment?.id,
+        order_id,
+        metadata: { assigned_by: assigned_by || null },
+      });
+
+      return res.json({
+        success: true,
+        message: "Self delivery recorded for this order",
+        assignment,
+        rider_link: null,
+        rider_phone: null,
+        rider_name: "Vendor / shop owner",
+      });
     }
 
     const { data: rider, error: riderError } = await supabase

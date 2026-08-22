@@ -12,6 +12,21 @@ Production backend API URL: `https://api.sabsewa.in`
 
 Official support contact: `support@sabsewa.in`, `+91 8450092846`, `+91 8178113449`
 
+## 2026-08-22 - Vendor Delivery Model Simplification
+
+- Added terminal-level delivery operating models so small shops are not forced to create a delivery team:
+  - Self Delivery by Vendor / shop owner
+  - One Delivery Staff with optional default staff for one-tap assignment
+  - Multiple Delivery Staff with existing manual staff selection
+- Updated `mobile/app/vendor/DeliverySettings.tsx` to let each terminal choose its delivery model and default staff where applicable.
+- Updated `mobile/app/vendor/assign-delivery.tsx` so self-delivery records an audited vendor-delivery assignment without generating a rider link, one-staff shops get a recommended one-tap assignment, and multi-staff shops keep the existing staff selection flow.
+- Updated `mobile/server/routes/deliveryAssign.js` and `mobile/server/hyperlocal/deliverySettingsRoutes.js` to persist/read the delivery model and verify self-delivery only for terminals configured for it.
+- Added Supabase SQL:
+  - `supabase/RUN_ONLY_VENDOR_DELIVERY_MODEL_2026_08_22.sql`
+- Required manual Supabase SQL before deploying this change:
+  - Run `supabase/RUN_ONLY_VENDOR_DELIVERY_MODEL_2026_08_22.sql`
+- Remaining live validation: run SQL, rebuild/export web, deploy backend/frontend, then test one terminal in each model: self-delivery, one-staff, and multiple-staff assignment.
+
 ## 2026-08-22 - Vendor CRM Operating Summary and Credit/Udhaar Upgrade
 
 - Audited the existing Vendor CRM and confirmed that major modules already exist as separate screens: Orders, Delivery Team, Delivery Settings, Customer Credits, Payment Information, Billing/Subscription, Security Wallet, Catalogue Setup, Add Item, Manage Items, Today Availability, Bulk/Gemini inventory capture, KYC and Onboarding.

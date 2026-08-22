@@ -264,7 +264,7 @@ async function verifyVendor(req, res, next) {
 
     const { data: order, error } = await supabase
       .from("hyperlocal_orders")
-      .select("id, vendor_id, status, total_amount, delivery_charge, partial_fulfillment_status, price_quote_required, price_quote_status, vendor_response_deadline_at, vendor_response_status")
+      .select("id, vendor_id, terminal_id, status, total_amount, delivery_charge, partial_fulfillment_status, price_quote_required, price_quote_status, vendor_response_deadline_at, vendor_response_status")
       .eq("id", order_id)
       .single();
 
@@ -765,7 +765,41 @@ router.post("/status", verifyVendor, async (req, res) => {
     return res.status(500).json({ success: false, error: error.message });
 
   let dispatchNotification = null;
+  let selfDeliveryAssignment = null;
   if (new_status === "out_for_delivery") {
+    try {
+      const { data: terminalSettings } = await supabase
+        .from("vendor_terminals")
+        .select("id, delivery_model")
+        .eq("id", req.order.terminal_id)
+        .eq("vendor_id", req.order.vendor_id)
+        .maybeSingle();
+
+      if (terminalSettings?.delivery_model === "vendor_self") {
+        const { data: assignment, error: assignmentError } = await supabase
+          .from("delivery_assignments")
+          .upsert({
+            order_id,
+            vendor_id: req.order.vendor_id,
+            terminal_id: req.order.terminal_id,
+            delivery_boy_id: null,
+            status: "assigned",
+            assigned_at: new Date().toISOString(),
+            assigned_by: actor_user_id || null,
+            metadata: {
+              delivery_model: "vendor_self",
+              source: "vendor_status_out_for_delivery",
+              note: "Vendor/shop owner started self delivery.",
+            },
+          }, { onConflict: "order_id" })
+          .select()
+          .single();
+        selfDeliveryAssignment = assignmentError ? { error: assignmentError.message } : assignment;
+      }
+    } catch (assignmentError) {
+      selfDeliveryAssignment = { error: assignmentError.message };
+    }
+
     try {
       dispatchNotification = await notifyCustomerOrderDispatched(order_id, {
         actorUserId: actor_user_id || null,
@@ -809,7 +843,7 @@ router.post("/status", verifyVendor, async (req, res) => {
     action: "vendor_order_status_change",
     fromStatus: req.order.status,
     toStatus: new_status,
-    metadata: { dispatch_notification: dispatchNotification, platform_charge: platformCharge },
+    metadata: { dispatch_notification: dispatchNotification, self_delivery_assignment: selfDeliveryAssignment, platform_charge: platformCharge },
     req,
   });
 
@@ -819,6 +853,7 @@ router.post("/status", verifyVendor, async (req, res) => {
     order: data,
     vendor_advance_wallet: null,
     dispatch_notification: dispatchNotification,
+    self_delivery_assignment: selfDeliveryAssignment,
     platform_charge: platformCharge,
   });
 });

@@ -91,6 +91,9 @@ export default function VendorDeliveryTeamScreen() {
       <Text style={styles.note}>
         Add delivery staff for this terminal. Delivery staff can see only assigned deliveries, update location, report cash collected, and mark delivery status. They cannot accept orders, change catalogue, approve credit, access KYC, billing or customer databases.
       </Text>
+      <Text style={styles.selfDeliveryNote}>
+        If the shop owner personally delivers orders, open Delivery Settings and choose Self Delivery. You do not need to create staff records for a one-person shop.
+      </Text>
 
       <View style={styles.card}>
         <Text style={styles.sectionTitle}>Add Delivery Staff</Text>
@@ -133,6 +136,7 @@ const styles = StyleSheet.create({
   container: { padding: 20, paddingTop: 70, gap: 14, backgroundColor: "#fff" },
   title: { fontSize: 28, fontWeight: "900", color: "#111827" },
   note: { color: "#4b5563", lineHeight: 21 },
+  selfDeliveryNote: { color: "#1e3a8a", backgroundColor: "#eff6ff", borderWidth: 1, borderColor: "#bfdbfe", borderRadius: 8, padding: 10, lineHeight: 20 },
   card: { borderWidth: 1, borderColor: "#dbeafe", backgroundColor: "#f8fbff", borderRadius: 8, padding: 14, gap: 10 },
   sectionTitle: { fontSize: 18, fontWeight: "900", color: "#111827" },
   input: { borderWidth: 1, borderColor: "#cbd5e1", borderRadius: 8, padding: 12, backgroundColor: "#fff" },

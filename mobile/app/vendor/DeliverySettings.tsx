@@ -4,6 +4,24 @@ import { useLocalSearchParams } from "expo-router";
 import { apiUrl } from "@/lib/backend";
 import { useAuth } from "@/providers/AuthProvider";
 
+const DELIVERY_MODELS = [
+  {
+    value: "vendor_self",
+    title: "Self Delivery",
+    description: "The shop owner or authorized vendor personally delivers orders. No delivery staff setup is required.",
+  },
+  {
+    value: "single_staff",
+    title: "One Delivery Staff",
+    description: "Use this when the shop has one regular delivery person. Assignment stays simple.",
+  },
+  {
+    value: "multiple_staff",
+    title: "Multiple Staff",
+    description: "Use this when the shop assigns orders to different delivery staff members.",
+  },
+];
+
 export default function VendorDeliverySettingsScreen() {
   const params: any = useLocalSearchParams();
   const { user } = useAuth();
@@ -19,11 +37,15 @@ export default function VendorDeliverySettingsScreen() {
     delivery_available: true,
     pickup_available: true,
     delivery_provider_type: "vendor",
+    delivery_model: "multiple_staff",
+    default_delivery_boy_id: "",
   });
+  const [deliveryStaff, setDeliveryStaff] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     loadSettings();
+    loadDeliveryStaff();
   }, [terminalId]);
 
   async function loadSettings() {
@@ -41,7 +63,18 @@ export default function VendorDeliverySettingsScreen() {
         delivery_available: json.settings.delivery_available !== false,
         pickup_available: Boolean(json.settings.pickup_available),
         delivery_provider_type: json.settings.delivery_provider_type || "vendor",
+        delivery_model: json.settings.delivery_model || "multiple_staff",
+        default_delivery_boy_id: json.settings.default_delivery_boy_id || "",
       });
+    }
+  }
+
+  async function loadDeliveryStaff() {
+    if (!terminalId || !params.vendor) return;
+    const response = await fetch(apiUrl(`/api/riders?vendor_id=${params.vendor}&terminal_id=${terminalId}`));
+    const json = await response.json();
+    if (json.success) {
+      setDeliveryStaff((json.riders || []).filter((person: any) => person.is_active !== false && person.status !== "inactive"));
     }
   }
 
@@ -81,6 +114,44 @@ export default function VendorDeliverySettingsScreen() {
       <Text style={styles.note}>
         Use a reasonable estimated delivery window. SabSewa Local does not support unsafe countdown delivery promises.
       </Text>
+
+      <Text style={styles.sectionTitle}>Delivery operating model</Text>
+      <Text style={styles.note}>
+        Choose the simplest model that matches your shop. A one-person shop can use self delivery without creating delivery staff.
+      </Text>
+      {DELIVERY_MODELS.map((model) => (
+        <TouchableOpacity
+          key={model.value}
+          style={[styles.modelCard, settings.delivery_model === model.value && styles.modelCardActive]}
+          onPress={() => setSettings((current) => ({
+            ...current,
+            delivery_model: model.value,
+            default_delivery_boy_id: model.value === "single_staff" ? current.default_delivery_boy_id : "",
+          }))}
+        >
+          <Text style={styles.modelTitle}>{model.title}</Text>
+          <Text style={styles.modelDescription}>{model.description}</Text>
+        </TouchableOpacity>
+      ))}
+
+      {settings.delivery_model === "single_staff" ? (
+        <View style={styles.singleStaffPanel}>
+          <Text style={styles.label}>Default delivery staff for one-tap assignment</Text>
+          {deliveryStaff.length === 0 ? (
+            <Text style={styles.warning}>No active delivery staff found. Add one staff member from Delivery Team, or switch to Self Delivery.</Text>
+          ) : (
+            deliveryStaff.map((person: any) => (
+              <TouchableOpacity
+                key={person.id}
+                style={[styles.staffChip, settings.default_delivery_boy_id === person.id && styles.staffChipActive]}
+                onPress={() => setValue("default_delivery_boy_id", person.id)}
+              >
+                <Text style={styles.staffChipText}>{person.name || "Delivery Staff"} - {person.phone || "No phone"}</Text>
+              </TouchableOpacity>
+            ))
+          )}
+        </View>
+      ) : null}
 
       <Text style={styles.label}>Minimum order for free delivery</Text>
       <TextInput style={styles.input} keyboardType="decimal-pad" value={settings.free_delivery_min_order} onChangeText={(v) => setValue("free_delivery_min_order", v)} />
@@ -123,6 +194,16 @@ const styles = StyleSheet.create({
   input: { borderWidth: 1, borderColor: "#d1d5db", borderRadius: 8, padding: 12, marginBottom: 14, backgroundColor: "#fff" },
   row: { flexDirection: "row", gap: 10 },
   half: { flex: 1 },
+  sectionTitle: { fontSize: 18, fontWeight: "900", color: "#111827", marginBottom: 8 },
+  modelCard: { borderWidth: 1, borderColor: "#d1d5db", borderRadius: 8, padding: 12, marginBottom: 10, backgroundColor: "#fff" },
+  modelCardActive: { borderColor: "#1166ff", backgroundColor: "#eff6ff" },
+  modelTitle: { fontWeight: "900", color: "#111827", marginBottom: 4 },
+  modelDescription: { color: "#4b5563", lineHeight: 19 },
+  singleStaffPanel: { borderWidth: 1, borderColor: "#bfdbfe", backgroundColor: "#f8fbff", borderRadius: 8, padding: 12, marginBottom: 14 },
+  warning: { color: "#9a3412", backgroundColor: "#fff7ed", borderWidth: 1, borderColor: "#fed7aa", borderRadius: 8, padding: 10, marginBottom: 8 },
+  staffChip: { borderWidth: 1, borderColor: "#cbd5e1", borderRadius: 8, padding: 10, marginBottom: 8, backgroundColor: "#fff" },
+  staffChipActive: { backgroundColor: "#ecfdf5", borderColor: "#34d399" },
+  staffChipText: { fontWeight: "800", color: "#064e3b" },
   toggle: { borderWidth: 1, borderColor: "#d1d5db", borderRadius: 8, padding: 13, marginBottom: 10, alignItems: "center" },
   toggleOn: { backgroundColor: "#ecfdf5", borderColor: "#34d399" },
   toggleText: { fontWeight: "900", color: "#064e3b" },

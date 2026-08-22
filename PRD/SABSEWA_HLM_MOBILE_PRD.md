@@ -221,6 +221,8 @@ When vendor rejects an order:
 - Customer/vendor can see live tracking while order is out for delivery.
 - Delivery staff access is restricted to assigned delivery tasks only. Delivery staff must not accept/reject customer orders, approve credit/Udhaar, modify products/prices, access vendor KYC, billing, catalogue administration, customer databases or admin/partner records.
 - Vendor owners/managers create and disable delivery staff for a specific vendor terminal. Disabled staff access must be revoked immediately and incomplete assignments must return to the vendor for reassignment.
+- Vendor delivery must support three simple real-world models per terminal: self delivery by the vendor/shop owner, one regular delivery staff member, and multiple delivery staff. A one-person shop must not be forced to create a delivery team.
+- For self delivery, the vendor can record that the shop owner will deliver the order personally without generating a rider link. For one-staff shops, the CRM should support one-tap/default staff assignment. Larger vendors can continue selecting a specific delivery staff member.
 - Delivery staff may report cash collected, show the vendor QR, mark pickup/delivery and request vendor approval if the customer asks for credit. Vendor-side payment confirmation, cash reconciliation and credit approval remain vendor responsibilities.
 - Cash collected by delivery staff must be recorded with staff, vendor, terminal, order, amount, collection time and reconciliation status. SabSewa records this operational trail but does not determine or pay delivery staff wages.
 - Delivery screens must show only a reasonable estimated delivery window, not guaranteed countdown promises.
@@ -258,6 +260,7 @@ When vendor rejects an order:
 
 ### 4.13 Vendor Delivery Settings
 - Vendors or terminal operators may configure minimum order value for free delivery, delivery fee below that value, service radius, estimated delivery window, delivery availability and optional pickup facility.
+- Vendors or terminal operators may configure the delivery operating model as `vendor_self`, `single_staff`, or `multiple_staff`, plus an optional default delivery staff member for one-staff shops.
 - These settings must be validated on the backend and recorded in an audit table.
 - Before the customer confirms an order, the cart must display item subtotal, delivery charge, free-delivery threshold, amount still required for free delivery where applicable, estimated delivery window, total payable amount and whether delivery is by the vendor or another authorised provider.
 - The confirmed order must store a snapshot of the applicable threshold, delivery charge, provider type and estimated delivery window. A vendor must not change the confirmed order delivery charge without explicit customer consent.

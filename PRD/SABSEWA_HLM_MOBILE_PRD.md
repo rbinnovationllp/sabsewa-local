@@ -91,6 +91,8 @@ SabSewa Local will launch first in Bengaluru, Karnataka with functional support 
 ### 4.3 Catalog And Cart
 - Display item image, name, price, availability, and quantity controls.
 - Add/remove items from cart.
+- Homepage showcase product cards may save a pending customer cart intent, support selectable pack-size/weight variants, update displayed price/unit-price text, support image/card selection and show quantity controls, but final cart creation must still route through verified vendor discovery/catalogue selection so the real vendor, terminal and product records are backend-validatable.
+- The final cart review must allow the customer to edit quantities, remove items and review totals before placing the order.
 - Show cart total, delivery address, phone, and notes.
 - Place order against selected vendor and terminal.
 

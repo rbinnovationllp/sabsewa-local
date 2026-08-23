@@ -176,6 +176,7 @@ export const enCommon = {
   "home.partnerBannerText": "Help onboard local vendors and create customer awareness in your area.",
   "home.showcaseTitle": "Fresh Local Produce Near You",
   "home.add": "Add",
+  "home.viewCart": "View Cart",
   "customerOrder.title": "Place Your Order",
   "customerOrder.searchPlaceholder": "Shop name, category or product",
   "customerOrder.useMyLocation": "Use My Location",

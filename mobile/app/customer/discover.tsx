@@ -11,7 +11,7 @@ import {
   Image,
 } from "react-native";
 import * as Location from "expo-location";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { apiUrl } from "@/lib/backend";
 import { useAuth } from "@/providers/AuthProvider";
@@ -51,24 +51,36 @@ function flattenLocalNames(localNames: any) {
 
 export default function CustomerVendorDiscoveryScreen() {
   const router = useRouter();
+  const params: any = useLocalSearchParams();
   const { user } = useAuth();
   const { language, t } = useLanguage();
 
-  const [category, setCategory] = useState("vegetables");
+  const initialCategory = String(params.category || "vegetables");
+  const initialProductSearch = String(params.q || params.pendingProduct || "");
+  const pendingProduct = String(params.pendingProduct || "");
+  const pendingVariant = String(params.pendingVariant || "");
+  const pendingPrice = String(params.pendingPrice || "");
+  const pendingQty = Number(params.pendingQty || 0);
+
+  const [category, setCategory] = useState(initialCategory);
   const [lat, setLat] = useState<number | null>(null);
   const [lng, setLng] = useState<number | null>(null);
   const [pincode, setPincode] = useState("");
   const [locality, setLocality] = useState("");
   const [city, setCity] = useState("");
   const [vendors, setVendors] = useState<any[]>([]);
-  const [productSearch, setProductSearch] = useState("");
+  const [productSearch, setProductSearch] = useState(initialProductSearch);
   const [cartByShop, setCartByShop] = useState<Record<string, Record<string, number>>>({});
   const [favorites, setFavorites] = useState<Record<string, boolean>>({});
   const [searchRadius, setSearchRadius] = useState<number | null>(null);
   const [expanded, setExpanded] = useState(false);
   const [loading, setLoading] = useState(false);
   const [leadSaving, setLeadSaving] = useState(false);
-  const [statusMessage, setStatusMessage] = useState("");
+  const [statusMessage, setStatusMessage] = useState(
+    pendingProduct
+      ? `Selected ${pendingQty > 0 ? `${pendingQty} x ` : ""}${pendingProduct}${pendingVariant ? ` (${pendingVariant})` : ""}${pendingPrice ? ` - Rs ${pendingPrice}` : ""}. Use your location or PIN/locality, then choose a verified nearby vendor. You can edit the final cart quantity before ordering.`
+      : ""
+  );
   const [errorMessage, setErrorMessage] = useState("");
 
   async function useCurrentLocation() {

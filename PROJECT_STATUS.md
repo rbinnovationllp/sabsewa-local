@@ -12,6 +12,22 @@ Production backend API URL: `https://api.sabsewa.in`
 
 Official support contact: `support@sabsewa.in`, `+91 8450092846`, `+91 8178113449`
 
+## 2026-08-23 - Homepage Product ADD Cart Intent Fix
+
+- Fixed the homepage showcase product-card `ADD` action. It no longer opens the generic `/customer/discover` page immediately.
+- The `ADD` action now:
+  - saves the selected cucumber item as a pending customer cart intent on the device,
+  - changes the button into `- 1 +` quantity controls,
+  - supports real selectable `500g` and `1 kg` variant buttons with dynamic selected state, displayed price and unit-price explanation,
+  - lets the customer tap the product image/card to activate the product selection panel instead of treating the image as an order instruction,
+  - shows `View Cart`,
+  - opens `/customer/discover` with category/product prefilled so the customer can choose a verified nearby vendor and add a real `vendor_items` catalogue row to the cart.
+- The final `/hyperlocal/cart` review remains customer-editable before ordering; customers can increase, decrease or remove quantities before placing the order.
+- This keeps the internal `vendor_id`, `terminal_id` and product id hidden from customers and avoids inventing IDs for the static homepage sample card. Checkout still uses the existing discovery/cart flow that reloads availability from Supabase and validates real vendor/product records before order placement.
+- Added `home.viewCart` translation key for English, Hindi and Kannada.
+- Added `npm run test:homepage-product-card` to guard the variant selector, pending cart intent, image/card selection and discovery handoff.
+- Pending manual validation: rebuild `mobile/dist`, deploy to Hostinger, then test `ADD -> quantity controls -> View Cart -> location/PIN -> verified vendor product -> /hyperlocal/cart`.
+
 ## 2026-08-23 - Vendor Login Loop Resolver and Safe Multi-Role Routing
 
 - Fixed the vendor OTP login loop where a verified vendor mobile could be treated as a non-vendor account when the same authenticated person also had customer/partner/admin context or when the vendor row was not linked to the current `auth.users.id`.

@@ -55,6 +55,7 @@ SabSewa Local is prepared for participation in the Gemini XPRIZE / AI Hackathon.
 ## Core Features
 
 - **Hyperlocal Discovery:** Nearby vendor discovery within 500 metres to 1 kilometre.
+- **Homepage Product Cart Intent:** The homepage showcase product supports selectable 500g/1kg variants, dynamic price display, image/card selection, pending cart intent, quantity controls and a verified-vendor catalogue handoff. The final cart remains editable before ordering. Real checkout still requires selecting a live verified vendor item so hidden vendor/product IDs are never invented or exposed.
 - **Unified Workflows:** Dedicated customer, vendor, rider and Company CRM interfaces.
 - **Catalogue & Inventory:** Vendor catalogue setup after registration with searchable multi-select master catalogue, image pending handling, and daily availability toggles.
 - **Order Fulfilment:** Full/partial order acceptance with customer details hidden until vendor accepts.

@@ -178,6 +178,7 @@ export const hiCommon: Record<CommonTranslationKey, string> = {
   "home.partnerBannerText": "अपने क्षेत्र में स्थानीय विक्रेताओं को जोड़ने और ग्राहकों में जागरूकता बढ़ाने में मदद करें।",
   "home.showcaseTitle": "आपके पास ताजा स्थानीय सामान",
   "home.add": "जोड़ें",
+  "home.viewCart": "कार्ट देखें",
   "customerOrder.title": "अपना ऑर्डर दें",
   "customerOrder.searchPlaceholder": "दुकान का नाम, श्रेणी या उत्पाद",
   "customerOrder.useMyLocation": "मेरी लोकेशन इस्तेमाल करें",

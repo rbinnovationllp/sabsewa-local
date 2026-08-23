@@ -178,6 +178,7 @@ export const knCommon: Record<CommonTranslationKey, string> = {
   "home.partnerBannerText": "ನಿಮ್ಮ ಪ್ರದೇಶದಲ್ಲಿ ಸ್ಥಳೀಯ ಮಾರಾಟಗಾರರನ್ನು ಸೇರಿಸಲು ಮತ್ತು ಗ್ರಾಹಕರಲ್ಲಿ ಜಾಗೃತಿ ಮೂಡಿಸಲು ಸಹಾಯ ಮಾಡಿ.",
   "home.showcaseTitle": "ನಿಮ್ಮ ಹತ್ತಿರ ತಾಜಾ ಸ್ಥಳೀಯ ಉತ್ಪನ್ನಗಳು",
   "home.add": "ಸೇರಿಸಿ",
+  "home.viewCart": "ಕಾರ್ಟ್ ನೋಡಿ",
   "customerOrder.title": "ನಿಮ್ಮ ಆರ್ಡರ್ ಮಾಡಿ",
   "customerOrder.searchPlaceholder": "ಅಂಗಡಿ ಹೆಸರು, ವರ್ಗ ಅಥವಾ ಉತ್ಪನ್ನ",
   "customerOrder.useMyLocation": "ನನ್ನ ಸ್ಥಳ ಬಳಸಿ",

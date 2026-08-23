@@ -1,6 +1,6 @@
 import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
-import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, Image } from "react-native";
+import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, Image } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
 import BrandHeader from "@/components/BrandHeader";
@@ -21,11 +21,38 @@ function sanitizeGreetingName(value?: string | null) {
   return name;
 }
 
+const SHOWCASE_PRODUCT_VARIANTS = [
+  {
+    key: "500g",
+    variantId: "home-demo-cucumber-500g",
+    label: "500g",
+    price: 20,
+    mrp: 30,
+    unitPriceLabel: "Rs 40 / kg",
+    packSize: 500,
+    packUnit: "g",
+    available: true,
+  },
+  {
+    key: "1kg",
+    variantId: "home-demo-cucumber-1kg",
+    label: "1 kg",
+    price: 38,
+    mrp: 55,
+    unitPriceLabel: "Rs 38 / kg",
+    packSize: 1,
+    packUnit: "kg",
+    available: true,
+  },
+];
+
 export default function HomeScreen() {
   const router = useRouter();
   const { user, loading, role, signOut } = useAuth();
   const { language, t, setLanguage, isLanguageAvailable } = useLanguage();
   const [profileName, setProfileName] = useState("");
+  const [showcaseQty, setShowcaseQty] = useState(0);
+  const [showcaseVariantKey, setShowcaseVariantKey] = useState("500g");
   const normalizedRole = String(role || "").toLowerCase();
   const isCustomer = normalizedRole === "customer";
   const isVendor = normalizedRole === "vendor";
@@ -53,6 +80,11 @@ export default function HomeScreen() {
     : displayName
     ? t("home.customerGreeting", { name: displayName })
     : t("home.customerGreetingGeneric");
+
+  const selectedShowcaseVariant = useMemo(
+    () => SHOWCASE_PRODUCT_VARIANTS.find((item) => item.key === showcaseVariantKey) || SHOWCASE_PRODUCT_VARIANTS[0],
+    [showcaseVariantKey]
+  );
 
   // Load language preference persistently
   useEffect(() => {
@@ -109,6 +141,81 @@ export default function HomeScreen() {
     router.push({ pathname: "/auth/Login", params: { role: "vendor", intent: "vendor_login" } } as any);
   }
 
+  function saveShowcaseCartIntent(nextQty: number, variant = selectedShowcaseVariant) {
+    const intent = {
+      source: "home_showcase_product",
+      shop_name: "Shree Ram Veggies",
+      product_name: "Crisp Fresh Cucumber",
+      category: "vegetables",
+      search_query: "cucumber",
+      variant_key: variant.key,
+      variant_id: variant.variantId,
+      variant_label: variant.label,
+      pack_size: variant.packSize,
+      pack_unit: variant.packUnit,
+      display_price: variant.price,
+      display_mrp: variant.mrp,
+      unit_price_label: variant.unitPriceLabel,
+      quantity: nextQty,
+      cart_line_text: `Crisp Fresh Cucumber - ${nextQty} x ${variant.label}`,
+      created_at: new Date().toISOString(),
+      requires_live_vendor_validation: true,
+    };
+    try {
+      globalThis.localStorage?.setItem("sabsewa_pending_customer_cart_intent", JSON.stringify(intent));
+    } catch {}
+  }
+
+  function updateShowcaseQty(nextQty: number) {
+    const boundedQty = Math.max(0, Math.min(99, Math.floor(Number(nextQty) || 0)));
+    setShowcaseQty(boundedQty);
+    if (boundedQty > 0) {
+      saveShowcaseCartIntent(boundedQty);
+      return;
+    }
+    try {
+      globalThis.localStorage?.removeItem("sabsewa_pending_customer_cart_intent");
+    } catch {}
+  }
+
+  function handleShowcaseAdd() {
+    updateShowcaseQty(1);
+    Alert.alert(
+      "Item selected",
+      `${selectedShowcaseVariant.label} Crisp Fresh Cucumber has been saved. Open View Cart to choose the verified nearby vendor, review the cart and edit quantities before ordering.`
+    );
+  }
+
+  function selectShowcaseVariant(variantKey: string) {
+    const variant = SHOWCASE_PRODUCT_VARIANTS.find((item) => item.key === variantKey);
+    if (!variant) return;
+    if (!variant.available) {
+      Alert.alert("Currently unavailable", `${variant.label} is currently unavailable.`);
+      return;
+    }
+    setShowcaseVariantKey(variant.key);
+    if (showcaseQty > 0) saveShowcaseCartIntent(showcaseQty, variant);
+  }
+
+  function handleShowcaseProductSelect() {
+    Alert.alert("Product selected", "Choose 500g or 1 kg, then press ADD or View Cart.");
+  }
+
+  function openShowcaseCart() {
+    if (showcaseQty <= 0) handleShowcaseAdd();
+    router.push({
+      pathname: "/customer/discover" as any,
+      params: {
+        category: "vegetables",
+        q: "cucumber",
+        pendingProduct: "Crisp Fresh Cucumber",
+        pendingVariant: selectedShowcaseVariant.label,
+        pendingPrice: String(selectedShowcaseVariant.price),
+        pendingQty: String(showcaseQty || 1),
+      },
+    });
+  }
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <BrandHeader subtitle={t("home.tagline")} />
@@ -160,9 +267,14 @@ export default function HomeScreen() {
 
       {/* Modern Blinkit/Zepto Showcase Item */}
       <View style={styles.showcaseSection}>
-        <Text style={styles.showcaseTitle}>Fresh Local Produce Near You</Text>
+        <Text style={styles.showcaseTitle}>{t("home.showcaseTitle")}</Text>
         <View style={styles.productCard}>
-          <View style={styles.imageContainer}>
+          <TouchableOpacity
+            style={styles.imageContainer}
+            onPress={handleShowcaseProductSelect}
+            accessibilityRole="button"
+            accessibilityLabel={`Crisp Fresh Cucumber product image. Selected variant ${selectedShowcaseVariant.label}.`}
+          >
             <Image 
               source={{ uri: "https://images.unsplash.com/photo-1604977042946-1eecc30f269e?q=80&w=600" }} 
               style={styles.productImage} 
@@ -174,29 +286,65 @@ export default function HomeScreen() {
             <TouchableOpacity style={styles.favoriteBtn}>
               <Ionicons name="heart-outline" size={18} color="#ef4444" />
             </TouchableOpacity>
-          </View>
+          </TouchableOpacity>
           <View style={styles.productDetails}>
-            <Text style={styles.vendorName}>Shree Ram Veggies • ⭐ 4.8</Text>
-            <Text style={styles.productTitle}>Crisp Fresh Cucumber (खीरा)</Text>
+            <TouchableOpacity onPress={handleShowcaseProductSelect} accessibilityRole="button" accessibilityLabel="Select Crisp Fresh Cucumber product card">
+              <Text style={styles.vendorName}>Shree Ram Veggies • ⭐ 4.8</Text>
+              <Text style={styles.productTitle}>Crisp Fresh Cucumber (खीरा)</Text>
+            </TouchableOpacity>
             <Text style={styles.freshnessTag}>🌱 Fresh Harvest Today</Text>
             
             <View style={styles.unitSelector}>
-              <TouchableOpacity style={[styles.unitChip, styles.activeUnitChip]}>
-                <Text style={styles.activeUnitText}>500g</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.unitChip}>
-                <Text style={styles.unitText}>1 kg</Text>
-              </TouchableOpacity>
+              {SHOWCASE_PRODUCT_VARIANTS.map((variant) => {
+                const isSelected = variant.key === selectedShowcaseVariant.key;
+                return (
+                  <TouchableOpacity
+                    key={variant.key}
+                    style={[
+                      styles.unitChip,
+                      isSelected && styles.activeUnitChip,
+                      !variant.available && styles.disabledUnitChip,
+                    ]}
+                    onPress={() => selectShowcaseVariant(variant.key)}
+                    disabled={!variant.available}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: isSelected, disabled: !variant.available }}
+                    accessibilityLabel={`${variant.label} cucumber variant${isSelected ? ", selected" : ""}${variant.available ? "" : ", currently unavailable"}`}
+                  >
+                    <Text style={isSelected ? styles.activeUnitText : styles.unitText}>
+                      {variant.label}{isSelected ? " ✓" : ""}
+                    </Text>
+                    {!variant.available ? <Text style={styles.unavailableText}>Unavailable</Text> : null}
+                  </TouchableOpacity>
+                );
+              })}
             </View>
 
             <View style={styles.priceRow}>
               <View>
-                <Text style={styles.price}>₹20 <Text style={styles.mrp}>₹30</Text></Text>
-                <Text style={styles.unitMeta}>₹40 / kg</Text>
+                <Text style={styles.price}>₹{selectedShowcaseVariant.price} <Text style={styles.mrp}>₹{selectedShowcaseVariant.mrp}</Text></Text>
+                <Text style={styles.unitMeta}>{selectedShowcaseVariant.unitPriceLabel}</Text>
               </View>
-              <TouchableOpacity style={styles.addToCartBtn} onPress={() => router.push("/customer/discover" as any)}>
-                <Text style={styles.addToCartText}>ADD</Text>
-              </TouchableOpacity>
+              {showcaseQty > 0 ? (
+                <View style={styles.showcaseActionStack}>
+                  <View style={styles.showcaseQtyControl}>
+                    <TouchableOpacity style={styles.showcaseQtyBtn} onPress={() => updateShowcaseQty(showcaseQty - 1)}>
+                      <Text style={styles.showcaseQtyText}>-</Text>
+                    </TouchableOpacity>
+                    <Text style={styles.showcaseQtyValue}>{showcaseQty}</Text>
+                    <TouchableOpacity style={styles.showcaseQtyBtn} onPress={() => updateShowcaseQty(showcaseQty + 1)}>
+                      <Text style={styles.showcaseQtyText}>+</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <TouchableOpacity style={styles.viewCartBtn} onPress={openShowcaseCart}>
+                    <Text style={styles.viewCartText}>{t("home.viewCart")}</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <TouchableOpacity style={styles.addToCartBtn} onPress={handleShowcaseAdd}>
+                  <Text style={styles.addToCartText}>{t("home.add").toUpperCase()}</Text>
+                </TouchableOpacity>
+              )}
             </View>
           </View>
         </View>
@@ -344,15 +492,24 @@ const styles = StyleSheet.create({
   freshnessTag: { fontSize: 11, color: "#16a34a", fontWeight: "700", marginTop: 2 },
   unitSelector: { flexDirection: "row", gap: 6, marginTop: 6 },
   unitChip: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4, borderWidth: 1, borderColor: "#cbd5e1" },
-  activeUnitChip: { backgroundColor: "#0f766e", borderColor: "#0f766e" },
+  activeUnitChip: { backgroundColor: "#0f766e", borderColor: "#052e2b", borderWidth: 2 },
+  disabledUnitChip: { opacity: 0.45, backgroundColor: "#f1f5f9" },
   unitText: { fontSize: 11, color: "#475569", fontWeight: "600" },
   activeUnitText: { fontSize: 11, color: "#fff", fontWeight: "700" },
+  unavailableText: { fontSize: 9, color: "#991b1b", fontWeight: "800", marginTop: 2 },
   priceRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end", marginTop: 6 },
   price: { fontSize: 16, fontWeight: "900", color: "#0f766e" },
   mrp: { fontSize: 12, color: "#9ca3af", textDecorationLine: "line-through" },
   unitMeta: { fontSize: 10, color: "#6b7280" },
   addToCartBtn: { backgroundColor: "#15803d", paddingHorizontal: 16, paddingVertical: 6, borderRadius: 6 },
   addToCartText: { color: "#fff", fontWeight: "900", fontSize: 13 },
+  showcaseActionStack: { alignItems: "flex-end", gap: 6 },
+  showcaseQtyControl: { flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: "#15803d", borderRadius: 6, overflow: "hidden" },
+  showcaseQtyBtn: { width: 28, height: 28, alignItems: "center", justifyContent: "center", backgroundColor: "#dcfce7" },
+  showcaseQtyText: { color: "#15803d", fontSize: 16, fontWeight: "900" },
+  showcaseQtyValue: { minWidth: 28, textAlign: "center", color: "#15803d", fontWeight: "900" },
+  viewCartBtn: { backgroundColor: "#1166ff", paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 },
+  viewCartText: { color: "#fff", fontSize: 12, fontWeight: "900" },
 
   panel: {
     borderWidth: 1,

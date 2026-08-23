@@ -21,6 +21,7 @@
     "deploy:archive": "node ./scripts/archive-web-build.js",
     "deploy:rollback": "node ./scripts/rollback-web-build.js",
     "test:localization": "node ./scripts/verify-multilingual-foundation.mjs",
+    "test:homepage-product-card": "node ./scripts/validate-homepage-product-card-cart-intent.mjs",
     "typecheck": "tsc --noEmit --pretty false"
   },
   "dependencies": {

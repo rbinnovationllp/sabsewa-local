@@ -240,6 +240,9 @@ declare
   pre_counts jsonb;
   run_id uuid;
   next_phone text;
+  vendor_phone_conditions text[] := '{}'::text[];
+  partner_phone_conditions text[] := '{}'::text[];
+  phone_where_sql text;
 begin
   if coalesce(array_length(p_test_user_ids, 1), 0) = 0
      and coalesce(array_length(p_test_vendor_ids, 1), 0) = 0
@@ -266,20 +269,48 @@ begin
     end if;
 
     if public.ssl_table_exists('vendors') then
-      execute '
-        select coalesce(array_agg(id), ''{}''::uuid[])
-        from public.vendors
-        where right(regexp_replace(coalesce(phone, ''''), ''\D'', '''', ''g''), 10) = any($1)
-           or right(regexp_replace(coalesce(phone_number, ''''), ''\D'', '''', ''g''), 10) = any($1)
-      ' using normalized_phones into candidate_vendor_ids;
+      vendor_phone_conditions := '{}'::text[];
+      if public.ssl_column_exists('vendors', 'phone') then
+        vendor_phone_conditions := array_append(vendor_phone_conditions, 'right(regexp_replace(coalesce(phone, ''''), ''\D'', '''', ''g''), 10) = any($1)');
+      end if;
+      if public.ssl_column_exists('vendors', 'phone_number') then
+        vendor_phone_conditions := array_append(vendor_phone_conditions, 'right(regexp_replace(coalesce(phone_number, ''''), ''\D'', '''', ''g''), 10) = any($1)');
+      end if;
+      if public.ssl_column_exists('vendors', 'mobile') then
+        vendor_phone_conditions := array_append(vendor_phone_conditions, 'right(regexp_replace(coalesce(mobile, ''''), ''\D'', '''', ''g''), 10) = any($1)');
+      end if;
+      if public.ssl_column_exists('vendors', 'mobile_number') then
+        vendor_phone_conditions := array_append(vendor_phone_conditions, 'right(regexp_replace(coalesce(mobile_number, ''''), ''\D'', '''', ''g''), 10) = any($1)');
+      end if;
+
+      if coalesce(array_length(vendor_phone_conditions, 1), 0) > 0 then
+        phone_where_sql := array_to_string(vendor_phone_conditions, ' or ');
+        execute format(
+          'select coalesce(array_agg(id), ''{}''::uuid[]) from public.vendors where %s',
+          phone_where_sql
+        ) using normalized_phones into candidate_vendor_ids;
+      end if;
     end if;
 
     if public.ssl_table_exists('partner_applications') then
-      execute '
-        select coalesce(array_agg(id), ''{}''::uuid[])
-        from public.partner_applications
-        where right(regexp_replace(coalesce(phone, ''''), ''\D'', '''', ''g''), 10) = any($1)
-      ' using normalized_phones into candidate_partner_ids;
+      partner_phone_conditions := '{}'::text[];
+      if public.ssl_column_exists('partner_applications', 'phone') then
+        partner_phone_conditions := array_append(partner_phone_conditions, 'right(regexp_replace(coalesce(phone, ''''), ''\D'', '''', ''g''), 10) = any($1)');
+      end if;
+      if public.ssl_column_exists('partner_applications', 'mobile') then
+        partner_phone_conditions := array_append(partner_phone_conditions, 'right(regexp_replace(coalesce(mobile, ''''), ''\D'', '''', ''g''), 10) = any($1)');
+      end if;
+      if public.ssl_column_exists('partner_applications', 'mobile_number') then
+        partner_phone_conditions := array_append(partner_phone_conditions, 'right(regexp_replace(coalesce(mobile_number, ''''), ''\D'', '''', ''g''), 10) = any($1)');
+      end if;
+
+      if coalesce(array_length(partner_phone_conditions, 1), 0) > 0 then
+        phone_where_sql := array_to_string(partner_phone_conditions, ' or ');
+        execute format(
+          'select coalesce(array_agg(id), ''{}''::uuid[]) from public.partner_applications where %s',
+          phone_where_sql
+        ) using normalized_phones into candidate_partner_ids;
+      end if;
     end if;
   end if;
 

@@ -41,6 +41,16 @@ assert.match(
 );
 assert.match(
   resetSql,
+  /ssl_column_exists\('vendors', 'phone_number'\)/,
+  "Vendor phone_number lookup must be guarded by a schema check"
+);
+assert.doesNotMatch(
+  executableSql,
+  /from public\.vendors[\s\S]{0,300}coalesce\(phone_number, ''''\)/,
+  "Vendor phone_number must not be referenced in an unconditional query"
+);
+assert.match(
+  resetSql,
   /Auth users and sessions are not deleted by SQL/,
   "Auth deletion must remain a manual protected service-role step"
 );

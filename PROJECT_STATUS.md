@@ -12,6 +12,25 @@ Production backend API URL: `https://api.sabsewa.in`
 
 Official support contact: `support@sabsewa.in`, `+91 8450092846`, `+91 8178113449`
 
+## 2026-08-23 - Controlled Test-Data Cleanup Framework
+
+- Replaced the unsafe untracked `supabase/RUN_SAFE_RESET_TEST_DATA.sql` draft that used broad `TRUNCATE ... CASCADE` logic with a controlled service-role-only cleanup framework.
+- New SQL creates:
+  - `test_data_cleanup_runs` audit/report table.
+  - `ssl_safe_test_reset_inventory()` for table-count inventory.
+  - `ssl_safe_test_reset_dry_run(...)` for explicit-scope candidate discovery, financial-conflict checks, deletion-plan reporting and cleanup-run logging.
+  - `ssl_safe_test_reset_execute(...)` for confirmed, scoped operational public-table cleanup only after backup reference and exact confirmation text.
+- The cleanup functions reject empty/unrestricted scope, preserve Admin/Master Admin/config/pricing/catalogue/system data, refuse execution when payment/wallet/commission conflicts are detected, and do not delete Supabase Auth users or storage objects directly.
+- Auth-user deletion/revocation and storage-object deletion remain manual protected service-role steps after dry-run review.
+- Added `npm run validate:safe-test-reset` in `mobile/server/package.json`.
+- Validation passed:
+  - `npm run validate:safe-test-reset`
+  - `npm run validate:vendor-login-routing`
+  - `npm run validate:master-admin-security`
+  - `npm run validate:onboarding`
+  - `npm run validate:billing`
+- Pending manual action: run the SQL in Supabase SQL Editor, run inventory/dry-run for the exact approved test phone/user/vendor/partner IDs, create/verify backup, then execute only after explicit approval.
+
 ## 2026-08-23 - Vendor Registration Must Not Open Company CRM
 
 - Fixed the vendor-registration OTP handoff path that could fall through to the Master Admin / Company CRM when the same browser still had an Admin/Master Admin session or metadata loaded.

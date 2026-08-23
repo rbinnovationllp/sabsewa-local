@@ -76,6 +76,7 @@ SabSewa Local is prepared for participation in the Gemini XPRIZE / AI Hackathon.
 - **Vendor Login Loop Protection:** Vendor OTP login uses a protected backend resolver (`POST /api/vendor/onboarding/resolve-login`) to normalize the verified mobile number, resolve or safely claim the matching vendor row, preserve legitimate multi-role accounts and route the vendor to KYC, onboarding, dashboard or status pages without opening Company CRM.
 - **Vendor Registration CRM Isolation:** Vendor registration and vendor-registration OTP handoff are isolated from Admin/Master Admin sessions. If a browser is still signed in as an Admin/Master Admin, vendor submission is blocked with a switch-account message, and `/auth/Login?registering=1&role=vendor` cannot fall through to `/company`.
 - **Safe Vendor Account Switching:** When a vendor-login attempt starts from a browser that already has a customer, partner or admin session, the app requires an explicit sign-out/switch step, clears stale CRM/session routing state, then restarts the vendor OTP flow so the backend can resolve the verified vendor mobile safely.
+- **Controlled Test-Data Cleanup:** Test customer/vendor/partner/KYC cleanup is handled through a service-role-only Supabase dry-run and scoped execution framework in `supabase/RUN_SAFE_RESET_TEST_DATA.sql`. It rejects empty scope, preserves Admin/Master Admin/config/pricing/catalogue/system data, checks payment/wallet/commission conflicts, and never performs broad table truncation.
 
 ---
 

@@ -18,6 +18,24 @@ Current new project URL:
 https://xodmazgfibftorrlbotk.supabase.co
 ```
 
+## Controlled Test-Data Cleanup - 2026-08-23
+
+Use this file only for reviewed test-data cleanup:
+
+```text
+C:\Users\HP\SabSewa-Local\supabase\RUN_SAFE_RESET_TEST_DATA.sql
+```
+
+It creates service-role-only inventory, dry-run and explicit-confirmation cleanup functions:
+
+- `public.ssl_safe_test_reset_inventory()`
+- `public.ssl_safe_test_reset_dry_run(...)`
+- `public.ssl_safe_test_reset_execute(...)`
+
+The cleanup framework rejects empty scope, does not use `TRUNCATE`, does not delete Auth users directly, does not delete storage objects directly, preserves Master/Admin/config/pricing/catalogue/system data, and blocks execution when scoped financial/payment/wallet/commission records are detected. Run inventory and dry-run first, create and verify a backup, then execute only for explicitly approved test phone/user/vendor/partner IDs.
+
+Auth-user revocation/deletion and KYC/S3 object cleanup must be performed separately through protected service-role admin tooling after the dry-run report confirms the scope is disposable test data.
+
 The earlier mistaken Alert name is not used for this project:
 
 ```text

@@ -283,6 +283,10 @@ export default function LoginScreen() {
 
       const profile = await res.json();
             let role = profile?.[0]?.role || mergedMetadata.role;
+      const requestedRegistrationRole = params.registering === "1" ? String(params.role || mergedMetadata.role || "").toLowerCase() : "";
+      if (requestedRegistrationRole === "vendor" && registrationResult?.role === "vendor") {
+        role = "vendor";
+      }
 
       if (!role && data.user?.id) {
         const { data: vendorProfile } = await supabase
@@ -348,6 +352,10 @@ export default function LoginScreen() {
           ]);
         }
         return;
+      }
+
+      if (params.registering === "1" && requestedRegistrationRole === "vendor") {
+        throw new Error("Vendor registration could not be completed securely. Please sign out and use a separate vendor mobile/account; Company CRM will not be opened from vendor registration.");
       }
 
       navigateTo(routeUser(role));

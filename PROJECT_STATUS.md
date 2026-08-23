@@ -12,6 +12,19 @@ Production backend API URL: `https://api.sabsewa.in`
 
 Official support contact: `support@sabsewa.in`, `+91 8450092846`, `+91 8178113449`
 
+## 2026-08-23 - Vendor Registration Must Not Open Company CRM
+
+- Fixed the vendor-registration OTP handoff path that could fall through to the Master Admin / Company CRM when the same browser still had an Admin/Master Admin session or metadata loaded.
+- `mobile/app/auth/Register.tsx` now detects active admin/master-admin sessions before vendor submission and blocks the submit with a clear message to switch/sign out and use a separate vendor account.
+- `mobile/providers/AuthProvider.tsx` now treats `/auth/Login?registering=1&role=vendor` as a protected vendor-registration OTP handoff and does not redirect it to `/company` merely because a previous master-admin session exists.
+- `mobile/app/auth/Login.tsx` now forces a successful vendor-registration completion to route only to Vendor KYC. If a vendor registration cannot complete as a vendor, it raises a secure error instead of falling through to `routeUser(master_admin)` / Company CRM.
+- Validation passed:
+  - `npm run deploy:validate`
+  - `npm run test:homepage-product-card`
+  - `npm run test:image-catalogue-cart`
+- Full TypeScript typecheck is still blocked in this local shell because `tsc` is not available in `mobile\node_modules` / PATH.
+- Production still requires rebuilding `mobile/dist` and uploading the refreshed Hostinger web build. No EC2 restart is required for this frontend routing-only fix.
+
 ## 2026-08-23 - Gemini Product Photo Suggestions and Admin Master Image Upload UI
 
 - Completed customer-uploaded unknown product image recognition using Gemini multimodal:

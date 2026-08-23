@@ -182,17 +182,21 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
     const isPublicVendorRegistrationRoute = pathname === "/vendor/register" || pathname === "/vendor-registration";
     const search = typeof window !== "undefined" ? window.location.search : "";
     const authParams = new URLSearchParams(search);
+    const requestedAuthRole = String(authParams.get("role") || "").trim().toLowerCase();
+    const requestedAuthIntent = String(authParams.get("intent") || "").trim().toLowerCase();
+    const isRegistrationOtpHandoff = authParams.get("registering") === "1";
     const activeRoleContext = getRoleSessionContext();
     const inVendorContext = activeRoleContext === "vendor";
     const isVendorAuthIntent =
       inAuthGroup &&
-      (authParams.get("role") === "vendor" || authParams.get("intent") === "vendor_login");
+      (requestedAuthRole === "vendor" || requestedAuthIntent === "vendor_login");
+    const isVendorRegistrationAuthIntent = inAuthGroup && isRegistrationOtpHandoff && requestedAuthRole === "vendor";
 
     if (isPublicVendorRegistrationRoute) {
       return;
     }
 
-    if (isVendorAuthIntent && normalizedRole !== "vendor") {
+    if ((isVendorAuthIntent || isVendorRegistrationAuthIntent) && normalizedRole !== "vendor") {
       if (typeof window !== "undefined") {
         window.sessionStorage.removeItem(MASTER_ADMIN_SESSION_STORAGE_KEY);
       }

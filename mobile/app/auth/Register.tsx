@@ -15,6 +15,7 @@ import { useAuth } from "@/providers/AuthProvider";
 import { getDeviceMetadata } from "@/lib/deviceIdentity";
 import * as Location from "expo-location";
 import { apiUrl } from "@/lib/backend";
+import { clearStaleAdminNavigationState } from "@/lib/vendorLoginRouting";
 import {
   SABSEWA_ACCEPTANCE_STATEMENT,
   SABSEWA_ACCEPTED_DOCUMENT_VERSIONS,
@@ -30,6 +31,19 @@ type RegistrationMethod = "phone" | "email_password" | "email_otp" | "google";
 const PHONE_AUTH_ENABLED = process.env.EXPO_PUBLIC_PHONE_AUTH_ENABLED === "true";
 const EMAIL_OTP_ENABLED = process.env.EXPO_PUBLIC_EMAIL_OTP_ENABLED === "true";
 const makeDiagnosticId = () => `SSL-AUTH-${Date.now().toString(36).toUpperCase()}`;
+const ADMIN_ROLES = new Set([
+  "admin",
+  "company_admin",
+  "super_admin",
+  "master_admin",
+  "national_admin",
+  "state_admin",
+  "district_admin",
+  "city_admin",
+  "kyc_reviewer",
+  "finance_admin",
+  "support_admin",
+]);
 
 export default function RegisterScreen() {
   const router = useRouter();
@@ -37,7 +51,7 @@ export default function RegisterScreen() {
   const { role, method: methodParam } = useLocalSearchParams();
   const requestedRole = Array.isArray(role) ? role[0] : role;
   const effectiveRole = requestedRole || (pathname === "/vendor/register" || pathname === "/vendor-registration" ? "vendor" : undefined);
-  const { session, role: currentRole, signInWithOtp, signUpWithEmailPassword, signInWithEmailOtp, signInWithGoogle } = useAuth();
+  const { session, role: currentRole, signOut, signInWithOtp, signUpWithEmailPassword, signInWithEmailOtp, signInWithGoogle } = useAuth();
   const requestedMethod =
     methodParam === "phone" || methodParam === "email_otp" || methodParam === "email_password" || methodParam === "google"
       ? methodParam
@@ -81,6 +95,14 @@ export default function RegisterScreen() {
   const [verifying, setVerifying] = useState<boolean>(false);
   const [verificationError, setVerificationError] = useState<string>("");
   const registeredVendorPhoneDisplay = registeredVendorPhone ? maskPhone(registeredVendorPhone) : "";
+  const activeSessionRole = String(
+    currentRole ||
+      session?.user?.user_metadata?.role ||
+      session?.user?.app_metadata?.role ||
+      ""
+  ).toLowerCase();
+  const signedInAdminDuringVendorRegistration =
+    effectiveRole === "vendor" && Boolean(session?.user?.id) && ADMIN_ROLES.has(activeSessionRole);
 
   const roleTitle =
     effectiveRole === "customer"
@@ -187,6 +209,10 @@ export default function RegisterScreen() {
 
   const handleRegister = async () => {
     if (submitting) return;
+    if (signedInAdminDuringVendorRegistration) {
+      clearStaleAdminNavigationState();
+      return setError("You are signed in with an Admin/Master Admin account. For security, sign out first and register the vendor with a separate vendor mobile/account.");
+    }
     if (!fullname) return setError(t("auth.errorFullName"));
     if (method === "phone" && !PHONE_AUTH_ENABLED) {
       return setError(t("auth.phoneRegistrationUnavailable"));
@@ -356,6 +382,30 @@ export default function RegisterScreen() {
       {/* HEADER */}
       <Text style={styles.heading}>{t("auth.registerTitle", { role: roleTitle })}</Text>
       <Text style={styles.subheading}>{t("auth.registerSubtitle")}</Text>
+
+      {signedInAdminDuringVendorRegistration ? (
+        <View style={styles.adminVendorBlock}>
+          <Text style={styles.adminVendorBlockTitle}>Admin account detected</Text>
+          <Text style={styles.adminVendorBlockText}>
+            This browser is currently signed in as an Admin/Master Admin. Vendor registration must use a separate vendor account and must never open Company CRM.
+          </Text>
+          <TouchableOpacity
+            style={styles.adminVendorBlockButton}
+            onPress={async () => {
+              clearStaleAdminNavigationState();
+              await AsyncStorage.removeItem("registered_vendor_phone");
+              await signOut();
+              if (typeof window !== "undefined" && window.location) {
+                window.location.href = "/vendor/register?fresh=1";
+                return;
+              }
+              router.replace("/vendor/register?fresh=1" as any);
+            }}
+          >
+            <Text style={styles.adminVendorBlockButtonText}>Switch to Vendor Login / Registration</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
 
       {effectiveRole === "vendor" && registeredVendorPhone ? (
         <View style={styles.alreadyRegisteredBox}>
@@ -785,6 +835,11 @@ const styles = StyleSheet.create({
   alreadyRegisteredNotice: { color: "#14532d", backgroundColor: "#f0fdf4", borderRadius: 8, padding: 9, marginTop: 10, lineHeight: 18 },
   supportButton: { borderWidth: 1, borderColor: "#b91c1c", borderRadius: 8, padding: 10, alignItems: "center", marginTop: 8, backgroundColor: "#fff7f7" },
   supportButtonText: { color: "#991b1b", fontWeight: "900", textAlign: "center" },
+  adminVendorBlock: { borderWidth: 1, borderColor: "#f59e0b", backgroundColor: "#fff7ed", borderRadius: 10, padding: 12, marginBottom: 18 },
+  adminVendorBlockTitle: { color: "#9a3412", fontWeight: "900", marginBottom: 6 },
+  adminVendorBlockText: { color: "#7c2d12", lineHeight: 19 },
+  adminVendorBlockButton: { backgroundColor: "#0f766e", borderRadius: 8, padding: 11, alignItems: "center", marginTop: 10 },
+  adminVendorBlockButtonText: { color: "#fff", fontWeight: "900", textAlign: "center" },
   methodBox: {
     borderWidth: 1,
     borderColor: "#dbeafe",

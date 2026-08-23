@@ -18,10 +18,14 @@ Official support contact: `support@sabsewa.in`, `+91 8450092846`, `+91 817811344
 - `mobile/app/auth/Register.tsx` now detects active admin/master-admin sessions before vendor submission and blocks the submit with a clear message to switch/sign out and use a separate vendor account.
 - `mobile/providers/AuthProvider.tsx` now treats `/auth/Login?registering=1&role=vendor` as a protected vendor-registration OTP handoff and does not redirect it to `/company` merely because a previous master-admin session exists.
 - `mobile/app/auth/Login.tsx` now forces a successful vendor-registration completion to route only to Vendor KYC. If a vendor registration cannot complete as a vendor, it raises a secure error instead of falling through to `routeUser(master_admin)` / Company CRM.
+- Follow-up fix: the vendor-login warning now clarifies that a stale non-vendor browser session is not proof that the mobile number lacks a vendor registration. The `Sign out and continue as Vendor` action now clears stale admin navigation state, role context, remembered vendor phone and the active session before opening a fresh vendor-login OTP flow.
 - Validation passed:
   - `npm run deploy:validate`
   - `npm run test:homepage-product-card`
   - `npm run test:image-catalogue-cart`
+  - `node mobile/server/scripts/validate-vendor-login-routing.mjs`
+  - `node mobile/server/scripts/validate-vendor-entity-branch-onboarding.mjs`
+  - `node mobile/server/scripts/validate-master-admin-security.mjs`
 - Full TypeScript typecheck is still blocked in this local shell because `tsc` is not available in `mobile\node_modules` / PATH.
 - Production still requires rebuilding `mobile/dist` and uploading the refreshed Hostinger web build. No EC2 restart is required for this frontend routing-only fix.
 

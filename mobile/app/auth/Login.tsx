@@ -20,7 +20,7 @@ import { getDeviceMetadata } from "@/lib/deviceIdentity";
 import { useLanguage } from "@/providers/LanguageProvider";
 import { completeRegistrationProfile } from "@/lib/registrationCompletion";
 import { authErrorKey, maskPhone, normalizeIndianPhone, validateIndianMobile } from "@/lib/phone";
-import { clearStaleAdminNavigationState, setVendorSessionContext, vendorDestinationForStatus } from "@/lib/vendorLoginRouting";
+import { clearRoleSessionContext, clearStaleAdminNavigationState, setVendorSessionContext, vendorDestinationForStatus } from "@/lib/vendorLoginRouting";
 
 const PHONE_AUTH_ENABLED = process.env.EXPO_PUBLIC_PHONE_AUTH_ENABLED === "true";
 const EMAIL_OTP_ENABLED = process.env.EXPO_PUBLIC_EMAIL_OTP_ENABLED === "true";
@@ -378,6 +378,12 @@ export default function LoginScreen() {
 
   async function switchToVendorLogin() {
     clearStaleAdminNavigationState();
+    clearRoleSessionContext();
+    setSavedPhone(null);
+    setPhone("");
+    setEmail("");
+    setOtpSent(false);
+    await AsyncStorage.removeItem("registered_vendor_phone");
     await signOut();
     if (Platform.OS === "web") {
       window.location.href = "/auth/Login?role=vendor&intent=vendor_login&fresh=1";
@@ -391,10 +397,10 @@ export default function LoginScreen() {
       <View style={styles.container}>
         <Text style={styles.title}>Vendor Login</Text>
         <View style={styles.warningBox}>
-          <Text style={styles.warningTitle}>You are currently signed in with a non-vendor account.</Text>
+          <Text style={styles.warningTitle}>This browser is currently signed in with a non-vendor session.</Text>
           <Text style={styles.warningText}>
-            For security, SabSewa Local will not open Company CRM or mix Master Admin/Admin and Vendor sessions.
-            Please sign out first, then login with the registered vendor mobile number.
+            This does not mean the mobile number has no vendor registration. For security, SabSewa Local will not mix Master Admin/Admin, customer, partner and vendor sessions.
+            Sign out from this browser session first, then enter the registered vendor mobile number and verify OTP.
           </Text>
         </View>
         <TouchableOpacity style={styles.button} onPress={switchToVendorLogin}>

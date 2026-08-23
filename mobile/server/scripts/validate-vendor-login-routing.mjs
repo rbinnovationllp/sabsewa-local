@@ -18,17 +18,27 @@ function mustNotInclude(file, pattern, label) {
 
 mustInclude(
   "mobile/app/auth/Login.tsx",
-  /async function openVerifiedVendorAccount\(authUserId: string\)/,
+  /async function openVerifiedVendorAccount\(authUserId: string, verifiedPhone\?: string, accessToken\?: string\)/,
   "Vendor-intent OTP resolver"
 );
 mustInclude(
   "mobile/app/auth/Login.tsx",
-  /\.from\("vendors"\)[\s\S]*\.eq\("owner_user_id", authUserId\)/,
-  "Vendor login verifies authenticated user owns vendor row"
+  /apiUrl\("\/api\/vendor\/onboarding\/resolve-login"\)/,
+  "Vendor login uses protected backend resolver"
+);
+mustInclude(
+  "mobile/server/vendor/onboardingRoutes.js",
+  /router\.post\("\/resolve-login", requireAuth/,
+  "Protected vendor login resolver route"
+);
+mustInclude(
+  "mobile/server/vendor/onboardingRoutes.js",
+  /vendor_login_profile_claimed_by_verified_phone/,
+  "Vendor login profile claiming is audited"
 );
 mustInclude(
   "mobile/app/auth/Login.tsx",
-  /if \(isVendorLoginIntent && params\.registering !== "1"\)[\s\S]*await openVerifiedVendorAccount\(data\.user\.id\);[\s\S]*return;/,
+  /if \(isVendorLoginIntent && params\.registering !== "1"\)[\s\S]*await openVerifiedVendorAccount\(data\.user\.id, normalizedPhone, data\.session\?\.access_token\);[\s\S]*return;/,
   "Vendor intent bypasses generic role redirect after OTP"
 );
 mustInclude(

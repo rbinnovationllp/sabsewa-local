@@ -68,6 +68,7 @@ SabSewa Local is prepared for participation in the Gemini XPRIZE / AI Hackathon.
 - **Monetization Structure:** Vendors can stay on category-based Pay As You Go pricing charged as base platform fee plus GST, or choose an optional monthly accepted-order plan. Covered monthly-plan orders are not also charged a category-based accepted-order fee; orders above the monthly allowance use the selected plan's configurable overage fee plus GST.
 - **Razorpay Payments:** Vendor onboarding payments are collected only after KYC approval/provisional clearance. The refundable Rs 5,000 security deposit is kept separate from the non-refundable onboarding/platform fee and GST. Standard wallet top-ups remain Rs 5,000.
 - **Web-Resilient Routing:** Hard browser fallback handlers (`window.location.href`) guaranteeing smooth state transitions after OTP verification on web builds.
+- **Vendor Login Loop Protection:** Vendor OTP login uses a protected backend resolver (`POST /api/vendor/onboarding/resolve-login`) to normalize the verified mobile number, resolve or safely claim the matching vendor row, preserve legitimate multi-role accounts and route the vendor to KYC, onboarding, dashboard or status pages without opening Company CRM.
 
 ---
 

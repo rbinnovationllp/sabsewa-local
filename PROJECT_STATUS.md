@@ -12,6 +12,26 @@ Production backend API URL: `https://api.sabsewa.in`
 
 Official support contact: `support@sabsewa.in`, `+91 8450092846`, `+91 8178113449`
 
+## 2026-08-23 - Vendor Login Loop Resolver and Safe Multi-Role Routing
+
+- Fixed the vendor OTP login loop where a verified vendor mobile could be treated as a non-vendor account when the same authenticated person also had customer/partner/admin context or when the vendor row was not linked to the current `auth.users.id`.
+- Added protected backend resolver `POST /api/vendor/onboarding/resolve-login`:
+  - Normalizes Indian mobile numbers to `+91XXXXXXXXXX` variants.
+  - Resolves vendor records by authenticated user and verified phone.
+  - Safely links matching vendor records to the authenticated user only when the phone match is verified and no conflicting ownership exists.
+  - Returns the authoritative vendor destination: KYC upload/status, onboarding payment, activation status, vendor dashboard, suspended status, or multi-business selector.
+  - Writes non-sensitive audit entries without logging OTPs, full phone numbers, tokens, KYC data or Master Admin secrets.
+- Updated Vendor Login so `role=vendor&intent=vendor_login` calls the backend resolver after OTP verification instead of relying only on `vendors.owner_user_id = authUserId` in the browser.
+- Prevented the non-vendor warning from re-rendering during OTP verification while vendor profile resolution is still in progress.
+- Updated `Sign out and continue as Vendor` to clear stale Master Admin/navigation session state and restart a fresh vendor-login URL.
+- Validation passed:
+  - `node --check mobile/server/vendor/onboardingRoutes.js`
+  - `npm run validate:vendor-login-routing`
+  - `npm run validate:onboarding`
+  - `npm run validate:billing`
+  - `npm run deploy:validate`
+- No new Supabase SQL is required for this fix. Production requires rebuilding `mobile/dist`, pushing code and restarting the EC2 backend.
+
 ## 2026-08-23 - Vendor Profile Editing and Trusted-Device Security Foundation
 
 - Added Vendor Dashboard entry `Edit Vendor Profile` with:

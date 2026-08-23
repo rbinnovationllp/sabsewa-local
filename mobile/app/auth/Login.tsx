@@ -20,7 +20,7 @@ import { getDeviceMetadata } from "@/lib/deviceIdentity";
 import { useLanguage } from "@/providers/LanguageProvider";
 import { completeRegistrationProfile } from "@/lib/registrationCompletion";
 import { authErrorKey, maskPhone, normalizeIndianPhone, validateIndianMobile } from "@/lib/phone";
-import { setVendorSessionContext, vendorDestinationForStatus } from "@/lib/vendorLoginRouting";
+import { clearStaleAdminNavigationState, setVendorSessionContext, vendorDestinationForStatus } from "@/lib/vendorLoginRouting";
 
 const PHONE_AUTH_ENABLED = process.env.EXPO_PUBLIC_PHONE_AUTH_ENABLED === "true";
 const EMAIL_OTP_ENABLED = process.env.EXPO_PUBLIC_EMAIL_OTP_ENABLED === "true";
@@ -37,7 +37,6 @@ export default function LoginScreen() {
   const { user, role, signOut, signInWithOtp, signInWithEmailOtp, verifyEmailOtp, verifyOtp } = useAuth();
   const { t } = useLanguage();
   const isVendorLoginIntent = String(params.role || "").toLowerCase() === "vendor" || String(params.intent || "").toLowerCase() === "vendor_login";
-  const signedInNonVendor = Boolean(user?.id && isVendorLoginIntent && String(role || "").toLowerCase() !== "vendor");
 
   const [phone, setPhone] = useState(params.phone ? String(params.phone) : "");
   const [email, setEmail] = useState(params.email ? String(params.email) : "");
@@ -56,6 +55,7 @@ export default function LoginScreen() {
 
   const [submitLoading, setSubmitLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const signedInNonVendor = Boolean(user?.id && isVendorLoginIntent && String(role || "").toLowerCase() !== "vendor" && !submitLoading);
 
   // Load remembered registered phone number on component load
   useEffect(() => {
@@ -99,7 +99,40 @@ export default function LoginScreen() {
     }
   };
 
-  async function openVerifiedVendorAccount(authUserId: string) {
+  async function openVerifiedVendorAccount(authUserId: string, verifiedPhone?: string, accessToken?: string) {
+    try {
+      const resolveResponse = await fetch(apiUrl("/api/vendor/onboarding/resolve-login"), {
+        method: "POST",
+        headers: await sabsewaClientHeaders({
+          "Content-Type": "application/json",
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        }),
+        body: JSON.stringify({
+          verified_phone: verifiedPhone || phone || null,
+          login_intent: "vendor_login",
+        }),
+      });
+      const resolvePayload = await resolveResponse.json().catch(() => ({}));
+      if (!resolveResponse.ok || resolvePayload?.success === false) {
+        throw new Error(resolvePayload?.error || "Unable to resolve vendor login securely.");
+      }
+
+      const resolvedVendors = Array.isArray(resolvePayload.vendors) ? resolvePayload.vendors : [];
+      if (!resolvedVendors.length) {
+        setError(resolvePayload?.message || "Your mobile number was verified, but we could not securely locate your vendor profile. Please contact support or resume registration.");
+        return;
+      }
+
+      setVendorSessionContext();
+      setStatusMessage("Vendor login successful. We are opening your vendor account.");
+      navigateTo(resolvePayload.destination || (resolvedVendors.length > 1 ? "/vendor/SelectBusiness" : vendorDestinationForStatus(resolvedVendors[0])));
+      return;
+    } catch (resolveError) {
+      console.warn("Vendor login backend resolution failed; falling back to direct owner lookup", {
+        message: (resolveError as any)?.message || String(resolveError || ""),
+      });
+    }
+
     const { data: vendors, error } = await supabase
       .from("vendors")
       .select("id, shop_name, vendor_name, owner_name, phone_number, phone, locality, city, category, kyc_status, onboarding_payment_status, lifecycle_status, status, created_at")
@@ -285,7 +318,7 @@ export default function LoginScreen() {
 
       if (isVendorLoginIntent && params.registering !== "1") {
         if (!data.user?.id) throw new Error("Authenticated vendor user was not returned after OTP verification.");
-        await openVerifiedVendorAccount(data.user.id);
+        await openVerifiedVendorAccount(data.user.id, normalizedPhone, data.session?.access_token);
         return;
       }
 
@@ -336,12 +369,13 @@ export default function LoginScreen() {
   }
 
   async function switchToVendorLogin() {
+    clearStaleAdminNavigationState();
     await signOut();
     if (Platform.OS === "web") {
-      window.location.href = "/auth/Login?role=vendor&intent=vendor_login";
+      window.location.href = "/auth/Login?role=vendor&intent=vendor_login&fresh=1";
       return;
     }
-    router.replace({ pathname: "/auth/Login", params: { role: "vendor", intent: "vendor_login" } } as any);
+    router.replace({ pathname: "/auth/Login", params: { role: "vendor", intent: "vendor_login", fresh: "1" } } as any);
   }
 
   if (signedInNonVendor) {

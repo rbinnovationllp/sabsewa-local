@@ -116,6 +116,92 @@ function normalizeContact(value) {
   return String(value || "").trim().toLowerCase();
 }
 
+function clean(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function phoneVariants(value) {
+  const raw = String(value || "").trim();
+  const digits = raw.replace(/\D/g, "");
+  let national = "";
+
+  if (digits.length === 10) national = digits;
+  if (digits.length === 12 && digits.startsWith("91")) national = digits.slice(2);
+
+  if (!/^[6-9]\d{9}$/.test(national)) {
+    return {
+      valid: false,
+      e164: "",
+      national: "",
+      variants: raw ? [normalizeContact(raw)] : [],
+    };
+  }
+
+  const e164 = `+91${national}`;
+  return {
+    valid: true,
+    e164,
+    national,
+    variants: Array.from(new Set([e164, national, `91${national}`, normalizeContact(raw)])),
+  };
+}
+
+function phonesMatch(left, right) {
+  const leftPhone = phoneVariants(left);
+  const rightPhone = phoneVariants(right);
+  if (!leftPhone.valid || !rightPhone.valid) return false;
+  return leftPhone.e164 === rightPhone.e164;
+}
+
+function backendVendorDestinationForStatus(vendor) {
+  const vendorId = String(vendor?.id || "");
+  if (!vendorId) return "/vendor/register";
+
+  const kycStatus = clean(vendor.kyc_status);
+  const paymentStatus = clean(vendor.onboarding_payment_status);
+  const lifecycleStatus = clean(vendor.lifecycle_status || vendor.status);
+  const publicStatus = clean(vendor.status);
+  const query = new URLSearchParams({ vendor: vendorId });
+
+  if (["suspended", "terminated", "revoked", "blocked"].includes(lifecycleStatus) || ["suspended", "terminated", "revoked", "blocked"].includes(publicStatus)) {
+    query.set("status", "suspended");
+    return `/vendor/Onboarding?${query.toString()}`;
+  }
+  if (publicStatus === "active" || lifecycleStatus === "active") return `/vendor/dashboard?${query.toString()}`;
+  if (["additional_information_required", "kyc_rejected", "resubmission_required"].includes(kycStatus)) {
+    query.set("resubmission", "1");
+    return `/vendor/KYC?${query.toString()}`;
+  }
+  if (["kyc_under_review", "kyc_submitted", "manual_review_pending"].includes(kycStatus)) {
+    query.set("status", "under_review");
+    return `/vendor/KYC?${query.toString()}`;
+  }
+  if (["kyc_verified", "kyc_provisionally_cleared", "provisional_approved"].includes(kycStatus)) {
+    if (["payment_completed", "paid", "confirmed"].includes(paymentStatus)) {
+      query.set("activation_pending", "1");
+      return `/vendor/Onboarding?${query.toString()}`;
+    }
+    if (["payment_processing", "processing", "created"].includes(paymentStatus)) {
+      query.set("payment_status", "processing");
+      return `/vendor/Onboarding?${query.toString()}`;
+    }
+    query.set("payment_pending", "1");
+    return `/vendor/Onboarding?${query.toString()}`;
+  }
+  return `/vendor/KYC?${query.toString()}`;
+}
+
+async function vendorOwnerPhone(ownerUserId) {
+  if (!ownerUserId) return null;
+  try {
+    const { data, error } = await supabase.auth.admin.getUserById(ownerUserId);
+    if (error) return null;
+    return data?.user?.phone || data?.user?.user_metadata?.phone || null;
+  } catch {
+    return null;
+  }
+}
+
 async function bestEffortSelect(table, select, queryBuilder) {
   const query = queryBuilder(supabase.from(table).select(select));
   const { data, error } = await query;
@@ -142,6 +228,152 @@ function publicVendorSummary(vendor) {
     created_at: vendor.created_at || null,
   };
 }
+
+router.post("/resolve-login", requireAuth, async (req, res) => {
+  try {
+    const authUser = req.auth?.user || {};
+    const authPhone = authUser.phone || authUser.user_metadata?.phone || null;
+    const requestedPhone = req.body?.verified_phone || authPhone;
+    const normalized = phoneVariants(requestedPhone);
+    const authNormalized = phoneVariants(authPhone);
+
+    if (!normalized.valid) {
+      return res.status(400).json({ success: false, error: "Vendor login requires a verified Indian mobile number." });
+    }
+    if (authNormalized.valid && authNormalized.e164 !== normalized.e164) {
+      return res.status(403).json({ success: false, error: "Verified mobile number does not match the active authenticated session." });
+    }
+
+    const selectFields = "id, public_vendor_id, owner_user_id, shop_name, vendor_name, owner_name, phone_number, phone, email, city, city_code, locality, locality_code, category, kyc_status, onboarding_payment_status, lifecycle_status, status, created_at";
+
+    const ownerMatches = await bestEffortSelect(
+      "vendors",
+      selectFields,
+      (query) => query.eq("owner_user_id", req.auth.user_id).order("created_at", { ascending: false }).limit(25)
+    );
+    const phoneMatches = await bestEffortSelect(
+      "vendors",
+      selectFields,
+      (query) => query.in("phone", normalized.variants).limit(25)
+    );
+    const phoneNumberMatches = await bestEffortSelect(
+      "vendors",
+      selectFields,
+      (query) => query.in("phone_number", normalized.variants).limit(25)
+    );
+
+    const vendorMap = new Map();
+    [...ownerMatches, ...phoneMatches, ...phoneNumberMatches].forEach((vendor) => vendorMap.set(vendor.id, vendor));
+    const matches = Array.from(vendorMap.values());
+
+    if (!matches.length) {
+      await supabase.from("audit_logs").insert({
+        actor_user_id: req.auth.user_id,
+        action: "vendor_login_no_profile_match",
+        entity_type: "vendors",
+        metadata: {
+          phone_last4: normalized.national.slice(-4),
+          login_intent: req.body?.login_intent || "vendor_login",
+        },
+      });
+      return res.status(404).json({
+        success: false,
+        error: "Your mobile number was verified successfully, but no vendor registration was found for this number. Please resume vendor registration or contact support.",
+      });
+    }
+
+    const conflicts = [];
+    const claimable = [];
+    for (const vendor of matches) {
+      if (!vendor.owner_user_id || vendor.owner_user_id === req.auth.user_id) {
+        claimable.push(vendor);
+        continue;
+      }
+
+      const currentOwnerPhone = await vendorOwnerPhone(vendor.owner_user_id);
+      if (phonesMatch(currentOwnerPhone, normalized.e164)) {
+        claimable.push(vendor);
+      } else {
+        conflicts.push(vendor);
+      }
+    }
+
+    if (conflicts.length && !claimable.length) {
+      await supabase.from("audit_logs").insert({
+        actor_user_id: req.auth.user_id,
+        action: "vendor_login_conflicting_profile_match",
+        entity_type: "vendors",
+        metadata: {
+          phone_last4: normalized.national.slice(-4),
+          conflict_count: conflicts.length,
+        },
+      });
+      return res.status(409).json({
+        success: false,
+        error: "Your mobile number was verified, but the vendor registration is linked to another account. Please contact support for secure account recovery.",
+      });
+    }
+
+    const claimIds = claimable.filter((vendor) => vendor.owner_user_id !== req.auth.user_id).map((vendor) => vendor.id);
+    if (claimIds.length) {
+      const { error: updateError } = await supabase
+        .from("vendors")
+        .update({ owner_user_id: req.auth.user_id, updated_at: new Date().toISOString() })
+        .in("id", claimIds);
+      if (updateError) throw updateError;
+
+      await supabase.from("audit_logs").insert({
+        actor_user_id: req.auth.user_id,
+        action: "vendor_login_profile_claimed_by_verified_phone",
+        entity_type: "vendors",
+        metadata: {
+          phone_last4: normalized.national.slice(-4),
+          claimed_count: claimIds.length,
+          conflict_count: conflicts.length,
+        },
+      });
+    }
+
+    const { data: resolvedVendors, error: reloadError } = await supabase
+      .from("vendors")
+      .select(selectFields)
+      .eq("owner_user_id", req.auth.user_id)
+      .order("created_at", { ascending: false })
+      .limit(25);
+    if (reloadError) throw reloadError;
+
+    const summaries = (resolvedVendors || []).map(publicVendorSummary);
+    const destination = summaries.length === 1
+      ? backendVendorDestinationForStatus(summaries[0])
+      : "/vendor/SelectBusiness";
+
+    await supabase.from("audit_logs").insert({
+      actor_user_id: req.auth.user_id,
+      action: "vendor_login_resolved",
+      entity_type: "vendors",
+      metadata: {
+        phone_last4: normalized.national.slice(-4),
+        vendor_count: summaries.length,
+        destination,
+      },
+    });
+
+    return res.json({
+      success: true,
+      vendors: summaries,
+      destination,
+      claimed_count: claimIds.length,
+      message: "Vendor login resolved successfully.",
+    });
+  } catch (error) {
+    console.error("Vendor login resolution failed", {
+      message: error?.message || String(error || ""),
+      code: error?.code || null,
+      details: error?.details || null,
+    });
+    return res.status(500).json({ success: false, error: "Unable to securely resolve vendor login right now. Please try again or contact support." });
+  }
+});
 
 router.get("/onboarding-plans", async (_req, res) => {
   try {

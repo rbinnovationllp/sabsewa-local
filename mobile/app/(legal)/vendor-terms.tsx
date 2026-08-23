@@ -40,6 +40,14 @@ export default function VendorTermsScreen() {
           title: "Vendor verification and neutrality",
           body: "Every vendor must complete business verification before appearing to customers, including lawful business identity, address, business-establishment/occupancy address proof for the declared shop or branch premises, authorised representative, category, licences where applicable, shop photographs, location verification and accuracy declarations. If any information, document, declaration, business detail, KYC information, licence or other information provided by a vendor is subsequently found to be false, incorrect, misleading, or materially inaccurate, SabSewa Local may temporarily suspend the vendor's access to the platform pending verification or investigation. After completion of the investigation, the vendor may be permitted to resume operations if the issue is satisfactorily resolved, or the vendor account may be terminated if the violation is established. SabSewa Local does not collect, investigate, rank or disclose a vendor's religion and will not treat a vendor differently because religion differs from religious or cultural wording in a shop name.",
         },
+        {
+          title: "Vendor profile changes",
+          body: "Vendors may update ordinary operational details such as shop description, business hours, delivery radius within permitted limits, price-display preference, catalogue availability, support-contact preference, language and notification settings after authenticated validation. Sensitive contact, authentication, legal, financial, address, bank, branch and KYC changes require step-up verification or Company review. Approved KYC, financial and legal records are not silently overwritten; previous and proposed values may be retained in profile-change and audit history.",
+        },
+        {
+          title: "Trusted devices",
+          body: "A trusted device may keep an authenticated vendor signed in for convenience, but it is not sufficient authority by itself for high-risk changes. SabSewa Local may require OTP, additional KYC evidence, cooling-off, manual review, session revocation or support review for mobile, email, password, bank, refund, legal, branch, terminal, KYC or suspicious account changes. Vendors must revoke devices they no longer control and report unauthorised changes immediately through Secure My Account or support.",
+        },
       ]}
     />
   );

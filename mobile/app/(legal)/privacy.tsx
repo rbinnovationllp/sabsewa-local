@@ -25,6 +25,10 @@ export default function PrivacyScreen() {
           body: "Vendor verification may collect lawful business details such as legal proprietor or entity name, public shop or trade name, business address, business-establishment or occupancy address proof for the declared shop/branch premises, verified business phone number, authorised representative, category, PAN or GSTIN where applicable, category-specific licences, shop photographs, location verification and accuracy declarations. Customer-facing profiles may show verified business information where legally appropriate and consented to, but private residential addresses, private numbers and unnecessary identity documents must not be displayed publicly.",
         },
         {
+          title: "Profile changes and trusted devices",
+          body: "Vendor profile edits, change requests, trusted-device registration, revocation, suspicious activity reports and account-recovery events may be recorded with device/session references, timestamps, masked previous/proposed values, verification status, reviewer decisions and notification status. Full OTPs, passwords and device secrets are not intended to be stored in ordinary browser storage or public logs.",
+        },
+        {
           title: "No religion-based verification",
           body: "SabSewa Local does not collect, investigate, rank or disclose a vendor's religion, and does not treat vendors differently because their religion differs from religious or cultural wording in a shop name. Religion is sensitive personal information and is irrelevant to product quality, marketplace eligibility and business verification.",
         },

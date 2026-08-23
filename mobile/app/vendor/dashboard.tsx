@@ -71,6 +71,12 @@ export default function VendorDashboard() {
     vendor?.onboarding_payment_status === "payment_completed";
   const actionCards = [
     {
+      title: "Edit Vendor Profile",
+      description: "Update shop operation details, submit sensitive profile-change requests and manage trusted devices.",
+      color: "#0f766e",
+      route: vendorLoaded ? `/vendor/Profile?vendor=${vendor.id}` : "",
+    },
+    {
       title: "Onboarding",
       description: "View KYC, fee summary, payment status and activation readiness.",
       color: "#9333ea",

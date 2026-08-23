@@ -79,6 +79,16 @@ The `vendor_security_*` table names are legacy internal names. In SabSewa Local 
 
 Run this SQL before testing additional branch/entity onboarding or the new split onboarding payment ledger:
 
+## Vendor Profile Editing and Trusted Devices - 2026-08-23
+
+Run this SQL before testing the Vendor Dashboard `Edit Vendor Profile` workflow, trusted-device revocation, secure-my-account action or Company CRM vendor profile change queue:
+
+```text
+C:\Users\HP\SabSewa-Local\supabase\RUN_ONLY_VENDOR_PROFILE_EDIT_AND_TRUSTED_DEVICE_SECURITY_2026_08_23.sql
+```
+
+This migration adds ordinary operational profile columns to `vendors`, creates `vendor_profile_change_requests`, creates `vendor_profile_change_audit`, and enables RLS for vendor-owned reads/inserts. Sensitive contact, legal, address, bank and KYC changes are stored as review requests; they should not directly overwrite approved Auth/KYC/financial records without the appropriate Company review workflow.
+
 ```text
 C:\Users\HP\SabSewa-Local\supabase\RUN_ONLY_VENDOR_ENTITY_BRANCH_ONBOARDING_FOUNDATION_2026_08_22.sql
 ```

@@ -158,6 +158,9 @@ Required output format:
 - Registration submission must be idempotent and must prevent repeated taps from creating duplicate profiles, duplicate addresses or duplicate policy-acceptance records.
 - Do not implement literal permanent login. Use Supabase refresh sessions, secure device storage, server-side device-session records, logout and device revocation.
 - The login screen must offer `Trust this device`. A trusted-device record is created only after OTP verification and user confirmation.
+- Trusted-device records must be bound to the authenticated backend user session; frontend-supplied `user_id` is not authority for registering, listing or revoking devices.
+- Fully onboarded vendors may use trusted-device convenience for ordinary dashboard access, orders, catalogue and wallet viewing, but sensitive contact, legal, bank, branch, KYC, refund, terminal and recovery actions must require step-up verification or Company review.
+- Vendor profile editing must separate ordinary operational fields from sensitive/legal/financial/KYC fields. Ordinary fields may update immediately after authenticated ownership validation; sensitive/legal/financial/KYC changes must create auditable profile-change requests and preserve previous approved values until review.
 - New vendor device/terminal activation must require OTP verification, terminal ownership validation, active/verified vendor status, device limits and audit logging.
 
 ### 4.5.0A Installable Web/PWA Requirements

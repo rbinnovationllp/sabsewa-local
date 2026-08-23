@@ -160,6 +160,9 @@ export default function CompanyCrmHome() {
       <TouchableOpacity style={styles.button} onPress={() => router.push("/company/VendorDirectory" as any)}>
         <Text style={styles.buttonText}>Vendor Directory</Text>
       </TouchableOpacity>
+      <TouchableOpacity style={styles.button} onPress={() => router.push("/company/VendorProfileChangeRequests" as any)}>
+        <Text style={styles.buttonText}>Vendor Profile Change Requests</Text>
+      </TouchableOpacity>
       <TouchableOpacity style={styles.button} onPress={() => router.push("/company/AdminDirectory" as any)}>
         <Text style={styles.buttonText}>Admin Directory</Text>
       </TouchableOpacity>

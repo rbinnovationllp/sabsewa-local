@@ -15,7 +15,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useAuth } from "@/providers/AuthProvider";
 import { routeUser } from "@/src/utils/roleRouter";
 import { supabase } from "@/lib/supabase";
-import { apiUrl } from "@/lib/backend";
+import { apiUrl, sabsewaClientHeaders } from "@/lib/backend";
 import { getDeviceMetadata } from "@/lib/deviceIdentity";
 import { useLanguage } from "@/providers/LanguageProvider";
 import { completeRegistrationProfile } from "@/lib/registrationCompletion";
@@ -267,9 +267,11 @@ export default function LoginScreen() {
           const device = await getDeviceMetadata();
           await fetch(apiUrl("/api/auth/trusted-device"), {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: await sabsewaClientHeaders({
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${data.session.access_token}`,
+            }),
             body: JSON.stringify({
-              user_id: data.session.user.id,
               device_id: device.device_id,
               device_name: device.device_name,
               platform: device.platform,

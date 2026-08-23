@@ -235,6 +235,12 @@ Direct aliases such as `/admin/crm`, `/master-admin/crm` and `/company-crm` are 
 
 Vendor login URLs such as `/auth/Login?role=vendor&intent=vendor_login` use a vendor-scoped post-OTP resolver. After OTP verification the app confirms the authenticated user owns a `vendors.owner_user_id` row, clears stale Master Admin redirect/session state, and routes by vendor onboarding status: KYC upload/status, onboarding payment/status, activation status, suspension view or active Vendor Dashboard. If multiple vendor businesses are linked, `/vendor/SelectBusiness` lets the user choose the correct shop/branch. Run `cd mobile/server && npm run validate:vendor-login-routing` after login or role-routing changes.
 
+### Vendor Profile Editing And Trusted Devices
+
+Fully authenticated vendors can open `Vendor Dashboard > Edit Vendor Profile` to update ordinary operational fields such as shop description, business hours, delivery radius, price-display preference, support-contact preference, preferred language and notification settings. Sensitive contact, legal, business-address, bank, KYC and account-recovery changes are submitted as profile-change requests; approved KYC/financial/legal records are not silently overwritten.
+
+Trusted-device access is convenience only. Device registration, listing and revocation are authenticated through the backend using the Supabase bearer token; the browser does not get to choose `user_id`. Vendors can view/revoke trusted devices and use `This Was Not Me - Secure My Account` to revoke active trusted-device sessions. Company CRM includes `Vendor Profile Change Requests` for review decisions. Run `supabase/RUN_ONLY_VENDOR_PROFILE_EDIT_AND_TRUSTED_DEVICE_SECURITY_2026_08_23.sql` before testing this workflow, then run `cd mobile/server && npm run validate:vendor-profile-edit-security`.
+
 ## Partner Program
 
 SabSewa Local includes a Partner With Us program for eligible customers, vendors, independent individuals, local promoters and organizations who can help build active hyperlocal marketplaces. Partners are expected to help onboard suitable local vendors and also create customer awareness around those vendors so nearby people know they can order through SabSewa Local.

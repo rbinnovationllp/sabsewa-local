@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { apiUrl } from "@/lib/backend";
+import { authenticatedFetch } from "@/lib/backend";
 import { useAuth } from "@/providers/AuthProvider";
 
 export default function RecognisedDevicesScreen() {
@@ -16,7 +16,7 @@ export default function RecognisedDevicesScreen() {
     if (!user?.id) return;
     setLoading(true);
     try {
-      const response = await fetch(apiUrl(`/api/auth/trusted-devices/${user.id}`));
+      const response = await authenticatedFetch("/api/auth/me/trusted-devices");
       const json = await response.json();
       if (!response.ok || !json.success) throw new Error(json.error || "Unable to load devices.");
       setDevices(json.devices || []);
@@ -30,10 +30,10 @@ export default function RecognisedDevicesScreen() {
   async function revokeDevice(deviceId: string) {
     if (!user?.id) return;
     try {
-      const response = await fetch(apiUrl("/api/auth/revoke-device"), {
+      const response = await authenticatedFetch("/api/auth/me/revoke-device", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ user_id: user.id, device_session_id: deviceId }),
+        body: JSON.stringify({ device_session_id: deviceId }),
       });
       const json = await response.json();
       if (!response.ok || !json.success) throw new Error(json.error || "Unable to revoke device.");

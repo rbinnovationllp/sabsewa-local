@@ -193,6 +193,85 @@ router.get("/kyc/queue", ...requireKycReviewer, async (req, res) => {
   }
 });
 
+router.get("/vendor-profile-change-requests", ...requireAnyCompanyAdmin, async (req, res) => {
+  try {
+    const status = String(req.query.status || "pending").trim();
+    let query = supabase
+      .from("vendor_profile_change_requests")
+      .select(`
+        id,
+        vendor_id,
+        actor_user_id,
+        change_category,
+        field_changes,
+        supporting_document_ids,
+        verification_status,
+        review_status,
+        submitted_at,
+        reviewed_at,
+        reviewer_id,
+        reviewer_reason,
+        vendors:vendor_id (id, shop_name, owner_name, vendor_name, phone, phone_number, locality, city, status, kyc_status)
+      `)
+      .order("submitted_at", { ascending: false })
+      .limit(100);
+
+    if (status && status !== "all") query = query.eq("review_status", status);
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    await writeAdminAudit({ req, action: "vendor_profile_change_queue_view", entityType: "vendor_profile_change_requests", metadata: { status, count: data?.length || 0 } });
+    return res.json({ success: true, requests: data || [] });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+router.post("/vendor-profile-change-requests/:request_id/decision", ...requireAnyCompanyAdmin, async (req, res) => {
+  try {
+    const decision = String(req.body?.decision || "").trim();
+    const reason = String(req.body?.reason || "").trim();
+    if (!["approved", "rejected", "more_information_required"].includes(decision)) {
+      return res.status(400).json({ success: false, error: "Unsupported profile-change decision." });
+    }
+    if (decision !== "approved" && !reason) {
+      return res.status(400).json({ success: false, error: "A reason is required for rejection or further enquiry." });
+    }
+
+    const now = nowIso();
+    const { data, error } = await supabase
+      .from("vendor_profile_change_requests")
+      .update({
+        review_status: decision,
+        reviewed_at: now,
+        reviewer_id: req.auth.user_id,
+        reviewer_reason: reason || null,
+      })
+      .eq("id", req.params.request_id)
+      .select("id, vendor_id, change_category, review_status")
+      .single();
+    if (error) throw error;
+
+    await supabase.from("vendor_profile_change_audit").insert({
+      vendor_id: data.vendor_id,
+      actor_user_id: req.auth.user_id,
+      change_category: data.change_category,
+      field_changes: { decision, reason: reason || null },
+      verification_status: "admin_review",
+      review_status: decision,
+      reviewer_id: req.auth.user_id,
+      reviewer_reason: reason || null,
+      effective_at: decision === "approved" ? now : null,
+    });
+
+    await writeAdminAudit({ req, action: `vendor_profile_change_${decision}`, entityType: "vendor_profile_change_requests", entityId: data.id, metadata: { vendor_id: data.vendor_id, change_category: data.change_category } });
+    return res.json({ success: true, request: data });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 router.get("/admins/auth-user-lookup", ...requireAdminManager, async (req, res) => {
   try {
     const search = String(req.query.search || "").trim().toLowerCase();

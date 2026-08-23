@@ -12,6 +12,26 @@ Production backend API URL: `https://api.sabsewa.in`
 
 Official support contact: `support@sabsewa.in`, `+91 8450092846`, `+91 8178113449`
 
+## 2026-08-23 - Vendor Profile Editing and Trusted-Device Security Foundation
+
+- Added Vendor Dashboard entry `Edit Vendor Profile` with:
+  - View Profile
+  - ordinary operational edit fields: shop description, business hours, delivery radius, price-display preference, support-contact preference, preferred language and notification settings
+  - sensitive/legal/address/bank/KYC/account-recovery change-request submission
+  - trusted-device list and revoke action
+  - `This Was Not Me - Secure My Account` action that revokes trusted device sessions
+  - profile change history
+- Added authenticated backend route `/api/vendor/profile/:vendor_id/profile`, `/operational`, `/change-requests` and `/secure-account`. Backend verifies `vendors.owner_user_id = authenticated user id` and does not accept Vendor ID or user ID as authority by itself.
+- Hardened trusted-device APIs so device registration/list/revocation derive the user from the Supabase bearer token. The login screen no longer sends frontend-controlled `user_id` when creating a trusted device.
+- Added Company CRM `Vendor Profile Change Requests` queue and decision endpoint for pending/approved/rejected/further-enquiry profile change requests.
+- Added Supabase SQL: `supabase/RUN_ONLY_VENDOR_PROFILE_EDIT_AND_TRUSTED_DEVICE_SECURITY_2026_08_23.sql`.
+  - Adds ordinary operational columns to `vendors`.
+  - Creates `vendor_profile_change_requests`.
+  - Creates `vendor_profile_change_audit`.
+  - Enables RLS for vendor-owned reads/inserts.
+- Added validation: `npm run validate:vendor-profile-edit-security`.
+- Important limitation: full Supabase Auth mobile/email atomic update and bank/KYC document replacement workflows remain review-gated foundations. The current implementation records sensitive changes as Company-review requests and does not silently overwrite approved Auth/KYC/bank values.
+
 ## 2026-08-23 - Vendor Registration to Company CRM Routing and Role-Isolation Fix
 
 - Investigated the critical case where vendor registration could open the Company Master CRM. The root causes were a combination of stale/auth metadata role handling, `last_module` routing that could honor a previous `/company` destination, and vendor post-registration routing that went to the vendor dashboard instead of the KYC upload stage.

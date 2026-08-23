@@ -10,12 +10,13 @@ import {
   View,
 } from "react-native";
 import * as Location from "expo-location";
+import * as ImagePicker from "expo-image-picker";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useAuth } from "@/providers/AuthProvider";
 import { useLanguage } from "@/providers/LanguageProvider";
 import { apiUrl } from "@/lib/backend";
 import { supabase } from "@/lib/supabase";
-import { parseOrderWithGemini } from "@/services/gemini";
+import { parseOrderWithGemini, recognizeCustomerProductImageWithGemini } from "@/services/gemini";
 
 const CATEGORIES = [
   { key: "kirana", label: "Grocery/Kirana" },
@@ -66,6 +67,8 @@ export default function GeminiOrderScreen() {
   const [orderText, setOrderText] = useState("2 kg atta, 1 packet namak, aur doodh");
   const [languageHint, setLanguageHint] = useState("Hinglish");
   const [loading, setLoading] = useState(false);
+  const [imageRecognizing, setImageRecognizing] = useState(false);
+  const [imageSuggestion, setImageSuggestion] = useState<any>(null);
   const [result, setResult] = useState<any>(null);
   const [cartNotice, setCartNotice] = useState("");
 
@@ -232,6 +235,53 @@ export default function GeminiOrderScreen() {
       setCartNotice(error instanceof Error ? `Order preparation failed: ${error.message}` : "Order preparation failed.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function recognizeItemPhoto() {
+    setCartNotice("");
+    setImageSuggestion(null);
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      setCartNotice("Photo permission was not granted. You can still type the item name.");
+      return;
+    }
+
+    const picked = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      quality: 0.65,
+      base64: true,
+    });
+
+    if (picked.canceled || !picked.assets?.[0]) return;
+    const asset = picked.assets[0];
+    if (!asset.base64) {
+      setCartNotice("Could not read this image. Please try another image or type the item name.");
+      return;
+    }
+
+    setImageRecognizing(true);
+    try {
+      const json = await recognizeCustomerProductImageWithGemini({
+        imageBase64: asset.base64,
+        mimeType: asset.mimeType || "image/jpeg",
+        languageHint,
+        categoryHint: category,
+        userId: user?.id,
+        vendorId: selectedShop?.id,
+      });
+      if (!json.success) throw new Error(json.error || "Image recognition failed.");
+      setImageSuggestion(json.data);
+      const suggestedText = String(json.data?.suggested_order_text || "").trim();
+      if (suggestedText) {
+        setOrderText((current) => current.trim() ? `${current.trim()}\n${suggestedText}` : suggestedText);
+      }
+      setCartNotice("Gemini suggested item names from the photo. Please review/edit them before creating the cart.");
+    } catch (error) {
+      setCartNotice(error instanceof Error ? `Image recognition failed: ${error.message}` : "Image recognition failed.");
+    } finally {
+      setImageRecognizing(false);
     }
   }
 
@@ -475,6 +525,25 @@ export default function GeminiOrderScreen() {
 
       <Text style={styles.label}>Language</Text>
       <TextInput style={styles.input} value={languageHint} onChangeText={setLanguageHint} placeholder="English / Hindi / local language" accessibilityLabel="Language" />
+      <View style={styles.imageAssistBox}>
+        <Text style={styles.panelTitle}>Have a product photo?</Text>
+        <Text style={styles.meta}>
+          Upload an item photo only to get Gemini suggestions. The suggestion is not treated as stock, price or an approved catalogue image.
+        </Text>
+        <TouchableOpacity style={styles.secondaryBlueBtn} onPress={recognizeItemPhoto} disabled={imageRecognizing}>
+          <Text style={styles.secondaryBlueText}>{imageRecognizing ? "Recognizing item..." : "Upload Product Photo for Suggestion"}</Text>
+        </TouchableOpacity>
+        {imageSuggestion?.items?.length ? (
+          <View style={styles.suggestionBox}>
+            <Text style={styles.suggestionTitle}>Review Gemini Suggestions</Text>
+            {imageSuggestion.items.slice(0, 5).map((item: any, index: number) => (
+              <Text key={`${item.name}-${index}`} style={styles.meta}>
+                {item.local_name || item.name} | {item.category || "category unknown"} | confidence {item.confidence ?? "review"}
+              </Text>
+            ))}
+          </View>
+        ) : null}
+      </View>
       <Text style={styles.label}>Your Order</Text>
       <TextInput
         style={[styles.input, styles.textArea]}
@@ -551,6 +620,11 @@ const styles = StyleSheet.create({
   emptyText: { color: "#7c2d12", lineHeight: 20, marginBottom: 10 },
   requestBtn: { backgroundColor: "#9a3412", padding: 13, borderRadius: 10, alignItems: "center" },
   errorText: { color: "#991b1b", fontWeight: "800", marginBottom: 12, lineHeight: 20 },
+  imageAssistBox: { borderWidth: 1, borderColor: "#bfdbfe", backgroundColor: "#eff6ff", borderRadius: 10, padding: 12, marginBottom: 14 },
+  secondaryBlueBtn: { borderWidth: 1, borderColor: "#2563eb", padding: 12, borderRadius: 10, alignItems: "center", marginTop: 10, backgroundColor: "#fff" },
+  secondaryBlueText: { color: "#1d4ed8", fontWeight: "900" },
+  suggestionBox: { marginTop: 10, borderTopWidth: 1, borderTopColor: "#bfdbfe", paddingTop: 10 },
+  suggestionTitle: { fontWeight: "900", color: "#1e3a8a", marginBottom: 4 },
   shopCard: { borderWidth: 1, borderColor: "#e5e7eb", borderRadius: 10, padding: 14, marginBottom: 12, backgroundColor: "#fff" },
   shopHeader: { flexDirection: "row", justifyContent: "space-between", gap: 12 },
   shopName: { flex: 1, fontSize: 17, fontWeight: "900" },

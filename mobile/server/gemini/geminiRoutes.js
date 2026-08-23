@@ -170,6 +170,99 @@ Language hint: ${languageHint || "unknown"}`;
   }
 });
 
+router.post("/order/image-recognize", async (req, res) => {
+  try {
+    const {
+      imageBase64,
+      mimeType = "image/jpeg",
+      languageHint = "auto",
+      categoryHint = "",
+      userId,
+      vendorId,
+    } = req.body || {};
+
+    if (!imageBase64 || String(imageBase64).length < 100) {
+      return res.status(400).json({ success: false, error: "Product image is required." });
+    }
+
+    const prompt = `You are the Gemini image-recognition assistant for SabSewa Local customer ordering.
+The customer uploaded an image of an unknown product or local item they may want to order.
+Return strict JSON only:
+{
+  "items": [
+    {
+      "name": "normalized English product name",
+      "local_name": "visible/local name if any",
+      "category": "kirana|vegetables|fruits|dairy|bakery|medical|restaurant|tiffin|other",
+      "quantity": 1,
+      "unit": "kg|gram|liter|piece|packet|box|other",
+      "confidence": number,
+      "needs_customer_review": true,
+      "review_reason": "short reason"
+    }
+  ],
+  "suggested_order_text": "short customer-editable order text",
+  "warning": "These are suggestions only. The customer must review before ordering."
+}
+Rules:
+- Do not invent brand, price, availability, stock, vendor, shop or pack size.
+- If the image is unclear, return the safest broad item name and mark needs_customer_review true.
+- These suggestions must later be matched only against a selected verified vendor's live catalogue.
+- Never approve this image for public catalogue use.
+Customer language hint: ${languageHint}
+Category hint: ${categoryHint || "unknown"}`;
+
+    const response = await genAI.models.generateContent({
+      model: geminiModel,
+      contents: [
+        {
+          role: "user",
+          parts: [
+            { text: prompt },
+            { inlineData: { mimeType, data: imageBase64 } },
+          ],
+        },
+      ],
+      config: { temperature: 0.1, maxOutputTokens: 1024 },
+    });
+
+    const result = extractJsonObject(response.text || "{}");
+    const auditLogId = await writeGeminiAuditLog({
+      agentType: "customer_unknown_product_image",
+      inputType: "image",
+      inputSummary: `Customer product image recognition; mime type ${mimeType}; category hint ${categoryHint || "none"}`,
+      model: geminiModel,
+      responseJson: {
+        item_count: Array.isArray(result.items) ? result.items.length : 0,
+        suggested_order_text: result.suggested_order_text || null,
+      },
+      userId,
+      vendorId,
+      metadata: {
+        no_public_catalogue_publication: true,
+        requires_customer_review: true,
+      },
+    });
+
+    return res.json({
+      success: true,
+      data: {
+        ...result,
+        source: "customer_uploaded_image_gemini_suggestion",
+        requires_customer_review: true,
+        publication_status: "not_published",
+      },
+      audit_log_id: auditLogId,
+      model: geminiModel,
+    });
+  } catch (error) {
+    return res.status(400).json({
+      success: false,
+      error: error instanceof Error ? error.message : "Gemini product image recognition failed.",
+    });
+  }
+});
+
 router.post("/rejection/message", async (req, res) => {
   try {
     const {

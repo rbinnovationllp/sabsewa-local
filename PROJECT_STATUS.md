@@ -12,6 +12,52 @@ Production backend API URL: `https://api.sabsewa.in`
 
 Official support contact: `support@sabsewa.in`, `+91 8450092846`, `+91 8178113449`
 
+## 2026-08-23 - Gemini Product Photo Suggestions and Admin Master Image Upload UI
+
+- Completed customer-uploaded unknown product image recognition using Gemini multimodal:
+  - `mobile/server/gemini/geminiRoutes.js` now exposes `POST /api/gemini/order/image-recognize`.
+  - `mobile/services/gemini.ts` connects the frontend to the backend endpoint.
+  - `mobile/app/customer/GeminiOrder.tsx` now lets a customer upload a product photo for suggestions on the `Place Your Order` page.
+- Gemini image recognition returns customer-review suggestions only. It must not invent product price, stock, vendor, shop, brand or availability, and it returns `publication_status = not_published` so customer-uploaded photos cannot become public catalogue images.
+- Gemini image-recognition calls write privacy-safe audit evidence using `agentType = customer_unknown_product_image`.
+- Completed the Company CRM master catalogue image upload UI:
+  - `mobile/app/company/MasterCatalogueReview.tsx` now provides product search, rights declaration, image picker, optimisation/thumbnail generation and admin upload flow.
+  - `mobile/app/company/index.tsx` links Master Admin to `Master Catalogue Review`.
+- Completed protected backend upload/review support:
+  - `mobile/server/storage/s3Routes.js` now exposes protected admin routes for listing recent master images and presigning master-catalogue image uploads.
+  - Master images are uploaded to private S3, require an explicit rights declaration, enforce compressed main/thumbnail size limits, reject duplicate checksums, write admin audit logs and expose only a controlled thumbnail delivery URL.
+- Validation passed:
+  - `npm run test:image-catalogue-cart`
+  - `npm run test:homepage-product-card`
+  - `npm run deploy:validate`
+  - `node --check mobile/server/gemini/geminiRoutes.js`
+  - `node --check mobile/server/storage/s3Routes.js`
+  - `node --check mobile/server/hyperlocal/placeOrder.js`
+  - `npm run validate:onboarding`
+  - `npm run validate:billing`
+- Full TypeScript typecheck is still blocked in this local shell because `tsc` is not available in `mobile\node_modules` / PATH.
+- No new SQL was added by this patch. Production still requires rebuilding `mobile/dist`, deploying the web build, pulling backend code on EC2 and restarting PM2.
+
+## 2026-08-23 - Image-Based Catalogue Selection and Structured Cart Handoff
+
+- Connected live customer discovery product image cards to the real cart/order pipeline instead of treating them as visual-only product cards.
+- `/customer/discover` now stores selected live `vendor_items` as structured cart selections with `master_product_id`, `vendor_catalogue_item_id`, `vendor_id`, `terminal_id`, selected variant/unit, customer-selected language, price snapshot, product-name snapshot and `order_input_source = catalogue_image`.
+- The product card/image is selectable, shows selected state, supports `ADD` and quantity controls, and tells the customer that final quantities remain editable before ordering.
+- `/hyperlocal/cart` now reads both old quantity-only carts and the new structured catalogue-image cart format, displays the source and selected variant, lets the customer edit quantity and add item instructions, and sends structured source metadata to the backend.
+- `POST /api/order/place` now preserves catalogue source metadata in the order item JSON and rejects stale non-quote catalogue prices with `PRICE_CHANGED_CONFIRM_REQUIRED` if the vendor price changed after the customer selected the item.
+- Company CRM now exposes the existing `Master Catalogue Review` screen so admins can review master catalogue image/status work from the CRM.
+- Added `npm run test:image-catalogue-cart` to verify catalogue image selection, structured cart handoff, backend price-change validation and the CRM review link.
+- Validation passed:
+  - `npm run test:image-catalogue-cart`
+  - `npm run test:homepage-product-card`
+  - `npm run deploy:validate`
+  - `node --check mobile/server/hyperlocal/placeOrder.js`
+  - `npm run validate:onboarding`
+  - `npm run validate:billing`
+- TypeScript full typecheck could not be confirmed in this local shell because `tsc` is not available in `mobile\node_modules` / PATH.
+- No new SQL is required for this patch. It reuses `master_product_catalog`, `master_product_images`, `vendor_items` and the existing order item JSON.
+- Follow-up completed on 2026-08-23: customer-uploaded unknown product image recognition through Gemini multimodal and the polished admin upload UI for master images are now implemented. Production `mobile/dist` rebuild and deployment are still required.
+
 ## 2026-08-23 - Homepage Product ADD Cart Intent Fix
 
 - Fixed the homepage showcase product-card `ADD` action. It no longer opens the generic `/customer/discover` page immediately.

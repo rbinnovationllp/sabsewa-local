@@ -144,6 +144,22 @@ router.post("/place", async (req, res) => {
 
       const priceDisplayMode = item.price_display_mode || "show_price";
       const requiresQuote = priceDisplayMode === "hide_price" || priceDisplayMode === "market_price" || dailyStatus === "available_on_request";
+      const currentPrice = requiresQuote ? null : price;
+      const frontendPriceSnapshot = requested.price_snapshot ?? requested.price;
+      if (!requiresQuote && frontendPriceSnapshot !== undefined && frontendPriceSnapshot !== null && Number(frontendPriceSnapshot) !== currentPrice) {
+        return res.status(409).json({
+          success: false,
+          code: "PRICE_CHANGED_CONFIRM_REQUIRED",
+          message: `The vendor's price for ${item.item_name} has changed from Rs ${Number(frontendPriceSnapshot).toFixed(2)} to Rs ${currentPrice.toFixed(2)}. Please refresh the cart and confirm the revised price.`,
+          item_id: item.id,
+          old_price: Number(frontendPriceSnapshot),
+          new_price: currentPrice,
+        });
+      }
+
+      const inputSource = ["catalogue_image", "typed_order", "voice_order", "typed_or_catalogue"].includes(requested.order_input_source)
+        ? requested.order_input_source
+        : "typed_or_catalogue";
       verifiedItems.push({
         item_id: item.id,
         item_name: item.item_name,
@@ -160,6 +176,12 @@ router.post("/place", async (req, res) => {
         master_product_id: item.master_product_id || null,
         product_brand_id: item.product_brand_id || null,
         product_variant_id: item.product_variant_id || null,
+        selected_variant: requested.selected_variant || item.variant_name || null,
+        unit: requested.unit || item.pack_unit || item.price_unit_label || null,
+        order_input_source: inputSource,
+        customer_selected_language: requested.customer_selected_language || null,
+        customer_note: requested.customer_note || null,
+        selection_snapshot: requested.selection_snapshot || null,
         substitution_policy: item.substitution_policy || "customer_approval_required",
         daily_availability_status: dailyStatus,
         qty: requestedQty,

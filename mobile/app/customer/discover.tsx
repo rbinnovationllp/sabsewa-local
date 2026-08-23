@@ -36,6 +36,20 @@ const DEFAULT_MASTER_IMAGES: Record<string, string> = {
   default: "https://images.unsplash.com/photo-1542838132-92c53300491e?q=80&w=600",
 };
 
+type CartSelection = {
+  qty: number;
+  order_input_source: "catalogue_image";
+  master_product_id: string | null;
+  vendor_catalogue_item_id: string;
+  vendor_id: string;
+  terminal_id: string;
+  selected_variant: string | null;
+  unit: string | null;
+  customer_selected_language: string;
+  price_snapshot: number | null;
+  product_name_snapshot: string;
+};
+
 function normalizeSearchText(value: string) {
   return String(value || "")
     .toLowerCase()
@@ -70,7 +84,7 @@ export default function CustomerVendorDiscoveryScreen() {
   const [city, setCity] = useState("");
   const [vendors, setVendors] = useState<any[]>([]);
   const [productSearch, setProductSearch] = useState(initialProductSearch);
-  const [cartByShop, setCartByShop] = useState<Record<string, Record<string, number>>>({});
+  const [cartByShop, setCartByShop] = useState<Record<string, Record<string, CartSelection>>>({});
   const [favorites, setFavorites] = useState<Record<string, boolean>>({});
   const [searchRadius, setSearchRadius] = useState<number | null>(null);
   const [expanded, setExpanded] = useState(false);
@@ -227,15 +241,40 @@ export default function CustomerVendorDiscoveryScreen() {
     return `${vendor.id}:${vendor.terminal_id}`;
   }
 
-  function setProductQty(vendor: any, productId: string, nextQty: number) {
+  function productVariantLabel(product: any) {
+    return [product.variant_name, product.pack_size && product.pack_unit ? `${product.pack_size} ${product.pack_unit}` : "", product.pack_unit && !product.pack_size ? product.pack_unit : ""]
+      .filter(Boolean)
+      .join(" - ") || null;
+  }
+
+  function setProductQty(vendor: any, product: any, nextQty: number) {
     const boundedQty = Math.max(0, Math.min(99, Math.floor(Number(nextQty) || 0)));
     setCartByShop((current) => {
       const key = shopKey(vendor);
       const shopCart = { ...(current[key] || {}) };
-      if (boundedQty <= 0) delete shopCart[productId];
-      else shopCart[productId] = boundedQty;
+      if (boundedQty <= 0) {
+        delete shopCart[product.id];
+      } else {
+        shopCart[product.id] = {
+          qty: boundedQty,
+          order_input_source: "catalogue_image",
+          master_product_id: product.master_product_id || null,
+          vendor_catalogue_item_id: product.id,
+          vendor_id: vendor.id,
+          terminal_id: vendor.terminal_id,
+          selected_variant: productVariantLabel(product),
+          unit: product.pack_unit || product.price_unit_label || product.unit || null,
+          customer_selected_language: language,
+          price_snapshot: product.price == null ? null : Number(product.price),
+          product_name_snapshot: localizedProductTitle(product),
+        };
+      }
       return { ...current, [key]: shopCart };
     });
+    if (boundedQty > 0) {
+      const variant = productVariantLabel(product);
+      setStatusMessage(`${variant ? `${variant} ` : ""}${localizedProductTitle(product)} added to your cart. You can edit quantity before ordering.`);
+    }
   }
 
   function toggleFavorite(productId: string) {
@@ -376,12 +415,29 @@ export default function CustomerVendorDiscoveryScreen() {
               const isFav = Boolean(favorites[product.id]);
 
               return (
-                <View key={product.id} style={styles.productRowCard}>
+                <TouchableOpacity
+                  key={product.id}
+                  style={[styles.productRowCard, qty > 0 && styles.productRowSelected]}
+                  activeOpacity={0.88}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: qty > 0 }}
+                  accessibilityLabel={`Select ${localizedProductTitle(product)} from ${vendor.shop_name}. ${product.price_label || ""}`}
+                  onPress={() => setProductQty(vendor, product, Math.max(1, qty || 1))}
+                >
                   <View style={styles.imageBox}>
-                    <Image source={{ uri: resolveProductImage(product) }} style={styles.productImg} />
+                    <Image
+                      source={{ uri: resolveProductImage(product) }}
+                      style={styles.productImg}
+                      accessibilityLabel={`${localizedProductTitle(product)} product image`}
+                    />
                     <TouchableOpacity style={styles.favBadge} onPress={() => toggleFavorite(product.id)}>
                       <Ionicons name={isFav ? "heart" : "heart-outline"} size={16} color={isFav ? "#ef4444" : "#64748b"} />
                     </TouchableOpacity>
+                    {qty > 0 ? (
+                      <View style={styles.selectedBadge}>
+                        <Ionicons name="checkmark" size={13} color="#fff" />
+                      </View>
+                    ) : null}
                   </View>
 
                   <View style={styles.productDetails}>
@@ -403,22 +459,22 @@ export default function CustomerVendorDiscoveryScreen() {
 
                       {qty > 0 ? (
                         <View style={styles.qtyControl}>
-                          <TouchableOpacity style={styles.qtyBtn} onPress={() => setProductQty(vendor, product.id, qty - 1)}>
+                          <TouchableOpacity style={styles.qtyBtn} onPress={() => setProductQty(vendor, product, qty - 1)}>
                             <Text style={styles.qtyBtnText}>-</Text>
                           </TouchableOpacity>
                           <Text style={styles.qtyValue}>{qty}</Text>
-                          <TouchableOpacity style={styles.qtyBtn} onPress={() => setProductQty(vendor, product.id, qty + 1)}>
+                          <TouchableOpacity style={styles.qtyBtn} onPress={() => setProductQty(vendor, product, qty + 1)}>
                             <Text style={styles.qtyBtnText}>+</Text>
                           </TouchableOpacity>
                         </View>
                       ) : (
-                        <TouchableOpacity style={styles.addBtn} onPress={() => setProductQty(vendor, product.id, 1)}>
+                        <TouchableOpacity style={styles.addBtn} onPress={() => setProductQty(vendor, product, 1)}>
                           <Text style={styles.addBtnText}>{t("home.add").toUpperCase()}</Text>
                         </TouchableOpacity>
                       )}
                     </View>
                   </View>
-                </View>
+                </TouchableOpacity>
               );
             })}
           </View>
@@ -503,9 +559,11 @@ const styles = StyleSheet.create({
     padding: 10,
     gap: 12,
   },
+  productRowSelected: { borderColor: "#16a34a", backgroundColor: "#f0fdf4" },
   imageBox: { position: "relative", width: 85, height: 85 },
   productImg: { width: "100%", height: "100%", borderRadius: 8 },
   favBadge: { position: "absolute", top: 2, right: 2, backgroundColor: "rgba(255,255,255,0.9)", borderRadius: 10, padding: 3 },
+  selectedBadge: { position: "absolute", left: 3, bottom: 3, width: 22, height: 22, borderRadius: 11, backgroundColor: "#16a34a", alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: "#fff" },
   productDetails: { flex: 1, justifyContent: "space-between" },
   itemTitle: { fontSize: 15, fontWeight: "800", color: "#0f172a" },
   localLangName: { fontSize: 12, color: "#64748b" },

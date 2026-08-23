@@ -30,6 +30,23 @@ export async function parseOrderWithGemini(input: {
   return response.json();
 }
 
+export async function recognizeCustomerProductImageWithGemini(input: {
+  imageBase64: string;
+  mimeType: string;
+  languageHint?: string;
+  categoryHint?: string;
+  userId?: string;
+  vendorId?: string;
+}) {
+  const response = await fetch(apiUrl("/api/gemini/order/image-recognize"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+
+  return response.json();
+}
+
 export async function createSmartRejectionMessage(input: {
   orderId: string;
   vendorId?: string;

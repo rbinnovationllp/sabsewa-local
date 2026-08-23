@@ -15,6 +15,7 @@ The hackathon-facing AI workflows must be powered by Gemini / Google Cloud:
 1. Gemini multimodal inventory capture.
 2. Gemini conversational ordering in Indian languages.
 3. Gemini smart rejection, support, and alternative-shop reasoning.
+4. Gemini customer product-photo suggestions for unknown items, always routed through customer review and live vendor-catalogue matching.
 
 These Gemini workflows must be visible in the demo video and backed by logs, screenshots, or database audit records.
 
@@ -92,6 +93,8 @@ SabSewa Local will launch first in Bengaluru, Karnataka with functional support 
 - Display item image, name, price, availability, and quantity controls.
 - Add/remove items from cart.
 - Homepage showcase product cards may save a pending customer cart intent, support selectable pack-size/weight variants, update displayed price/unit-price text, support image/card selection and show quantity controls, but final cart creation must still route through verified vendor discovery/catalogue selection so the real vendor, terminal and product records are backend-validatable.
+- Live discovery catalogue image cards must be selectable ordering inputs, not just pictures. Selecting or adding a card must carry the internal master product, vendor item, vendor, terminal, variant/unit, selected language, price snapshot and source metadata into the customer cart without displaying raw internal IDs.
+- Product-image selections, typed orders and voice orders must converge into the same final cart review and order-validation path. Unknown customer-uploaded product images are processed by Gemini only as customer-review suggestions and must not create public catalogue images or permanent master entries without authorization.
 - The final cart review must allow the customer to edit quantities, remove items and review totals before placing the order.
 - Show cart total, delivery address, phone, and notes.
 - Place order against selected vendor and terminal.
@@ -103,6 +106,7 @@ SabSewa Local will launch first in Bengaluru, Karnataka with functional support 
 - Customer-facing ordering screens must never require or display raw `vendor_id` or `terminal_id`; these identifiers remain internal, hidden, non-editable and backend-validated.
 - Customer-facing copy should say: `Select a nearby shop and type or speak what you need. We will prepare a cart for your review before placing the order.`
 - Gemini converts request into structured cart JSON.
+- Gemini may also inspect a customer-uploaded product photo and return editable item-name suggestions. The app must display these as suggestions only, append them into the customer-editable order request, and require live vendor-catalogue validation before cart/order creation.
 - App shows extracted items for customer confirmation.
 - Customer can edit quantities before placing order.
 - Gemini must match requested items only against the selected shop's currently active and available-today catalogue, identify unavailable items, and never invent products, prices, stock or availability.
@@ -141,6 +145,7 @@ Required output format:
 - SabSewa Local must maintain a rights-compliant master product catalogue for kirana/general stores, vegetable shops and fruit shops. The master catalogue may store standard product titles, category/subcategory, common Indian-language names, units, brand/pack size where applicable, keywords, spelling variants and an image status field.
 - Master catalogue entries must not include copied descriptions, photos, logos or other copyrighted material from Amazon, Flipkart, BigBasket, Zepto, Blinkit or any other third-party commercial website unless Rashi Bhartiya Innovation LLP has documented commercial-use permission.
 - Master product images may be accepted only from vendor-contributed images with explicit shared-use consent, manufacturer/distributor permission, properly licensed commercial-reuse images, or SabSewa-commissioned photography.
+- Company CRM must provide a controlled Master Catalogue Review upload screen where authorised admins select the master product, confirm image rights, upload only compressed square images and thumbnails, and trigger backend audit logging before a customer-safe thumbnail path is attached to the master catalogue.
 - The vendor shared-image consent checkbox must remain unchecked by default. Consent records must store vendor/user ID, vendor ID, consent timestamp, terms version, original filename, checksum and declared ownership.
 - Approved master images must be private S3 objects served through CloudFront or time-limited presigned URLs. Other vendors may reference approved master images without creating another S3 copy and without consuming their 100 MB vendor product-image quota.
 - If no authorised image is available, the product must show a neutral placeholder and remain `image_pending`. The system must never silently substitute or copy an unauthorised third-party image.

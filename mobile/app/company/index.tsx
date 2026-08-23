@@ -190,6 +190,9 @@ export default function CompanyCrmHome() {
       <TouchableOpacity style={styles.button} onPress={() => router.push("/company/VendorBulkUpload" as any)}>
         <Text style={styles.buttonText}>Bulk Catalogue Upload</Text>
       </TouchableOpacity>
+      <TouchableOpacity style={styles.button} onPress={() => router.push("/company/MasterCatalogueReview" as any)}>
+        <Text style={styles.buttonText}>Master Catalogue Review</Text>
+      </TouchableOpacity>
       <TouchableOpacity style={styles.button} onPress={() => router.push("/company/DataRecovery" as any)}>
         <Text style={styles.buttonText}>Data Recovery</Text>
       </TouchableOpacity>

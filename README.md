@@ -22,8 +22,9 @@ SabSewa Local uses Gemini as the AI operating layer for small local vendors:
 
 1. **Multimodal vendor inventory capture:** Gemini reads shelf photos, invoices and handwritten product lists, then returns structured catalogue drafts for vendor review.
 2. **Multilingual customer ordering:** Gemini parses English, Hindi, Hinglish and local-language order requests into structured carts.
-3. **Gemini Flash dynamic translation:** Dynamic vendor/customer text is translated only through the secure backend with privacy redaction, cache reuse and cost telemetry.
-4. **Human-in-the-loop audit logging:** Gemini outputs are validated by the app workflow and logged in Supabase `gemini_agent_logs` for transparency and submission evidence.
+3. **Customer product-photo suggestions:** Gemini can inspect a customer-uploaded unknown product image and return editable item-name suggestions for review. It does not create public catalogue images, prices, stock, shops or availability.
+4. **Gemini Flash dynamic translation:** Dynamic vendor/customer text is translated only through the secure backend with privacy redaction, cache reuse and cost telemetry.
+5. **Human-in-the-loop audit logging:** Gemini outputs are validated by the app workflow and logged in Supabase `gemini_agent_logs` for transparency and submission evidence.
 
 ---
 
@@ -56,6 +57,9 @@ SabSewa Local is prepared for participation in the Gemini XPRIZE / AI Hackathon.
 
 - **Hyperlocal Discovery:** Nearby vendor discovery within 500 metres to 1 kilometre.
 - **Homepage Product Cart Intent:** The homepage showcase product supports selectable 500g/1kg variants, dynamic price display, image/card selection, pending cart intent, quantity controls and a verified-vendor catalogue handoff. The final cart remains editable before ordering. Real checkout still requires selecting a live verified vendor item so hidden vendor/product IDs are never invented or exposed.
+- **Image-Based Catalogue Ordering:** Live discovery product cards now act as real selectable catalogue entries. When a customer taps an approved product image/card or presses `ADD`, the cart stores the real master product, vendor item, vendor, terminal, variant, language, price snapshot and `catalogue_image` source. The final cart remains editable and the backend revalidates live price, availability, vendor, terminal and item records before order creation.
+- **Gemini Image-Assisted Ordering:** On the customer `Place Your Order` page, customers can upload a product photo to get Gemini item-name suggestions. Suggestions are customer-review text only, feed into the editable order request, and must still be matched against a selected verified vendor's live catalogue before ordering.
+- **Master Catalogue Image Governance:** Company CRM includes a Master Catalogue Review screen for rights-confirmed product-image upload. Approved images are uploaded to private S3 through protected admin presign routes, audited, compressed into controlled thumbnails, and referenced from the master catalogue without exposing raw S3 paths.
 - **Unified Workflows:** Dedicated customer, vendor, rider and Company CRM interfaces.
 - **Catalogue & Inventory:** Vendor catalogue setup after registration with searchable multi-select master catalogue, image pending handling, and daily availability toggles.
 - **Order Fulfilment:** Full/partial order acceptance with customer details hidden until vendor accepts.

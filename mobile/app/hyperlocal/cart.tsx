@@ -30,6 +30,7 @@ type VendorItem = {
   variant_name?: string;
   pack_size?: number;
   pack_unit?: string;
+  master_product_id?: string;
   product_variant_id?: string;
   price_display_mode?: "show_price" | "hide_price" | "market_price";
   price_unit_label?: string;
@@ -40,6 +41,11 @@ type CartLine = VendorItem & {
   total: number;
   price_quote_required?: boolean;
   price_label?: string;
+  order_input_source?: string;
+  selected_variant?: string | null;
+  customer_selected_language?: string | null;
+  customer_note?: string;
+  selection_snapshot?: any;
 };
 
 export default function SabSewaLocalCartScreen() {
@@ -125,14 +131,18 @@ export default function SabSewaLocalCartScreen() {
   async function loadCartItems() {
     setLoading(true);
 
-    let cart: Record<string, number> = {};
+    let cart: Record<string, any> = {};
     try {
       cart = JSON.parse(rawCartData);
     } catch {
       cart = {};
     }
 
-    const itemIds = Object.keys(cart).filter((id) => cart[id] > 0);
+    const itemIds = Object.keys(cart).filter((id) => {
+      const value = cart[id];
+      const qty = typeof value === "object" && value !== null ? Number(value.qty || value.quantity || 0) : Number(value || 0);
+      return qty > 0;
+    });
     if (itemIds.length === 0) {
       setLines([]);
       setLoading(false);
@@ -141,7 +151,7 @@ export default function SabSewaLocalCartScreen() {
 
     const { data, error } = await supabase
       .from("vendor_items")
-      .select("id, item_name, price, item_pic, is_available, available_today, stock_status, daily_availability_status, expected_restock_at, generic_product_name, brand_name, variant_name, pack_size, pack_unit, product_variant_id, price_display_mode, price_unit_label")
+      .select("id, item_name, price, item_pic, is_available, available_today, stock_status, daily_availability_status, expected_restock_at, generic_product_name, brand_name, variant_name, pack_size, pack_unit, master_product_id, product_variant_id, price_display_mode, price_unit_label")
       .in("id", itemIds)
       .eq("is_available", true)
       .eq("available_today", true)
@@ -163,13 +173,28 @@ export default function SabSewaLocalCartScreen() {
 
     setLines(
       (data || []).map((item: VendorItem) => {
-        const qty = Number(cart[item.id] || 0);
+        const selection = cart[item.id];
+        const qty = typeof selection === "object" && selection !== null
+          ? Number(selection.qty || selection.quantity || 0)
+          : Number(selection || 0);
         const quoteRequired = item.price_display_mode === "hide_price" || item.price_display_mode === "market_price" || item.daily_availability_status === "available_on_request";
         const price = quoteRequired ? 0 : Number(item.price);
         const priceLabel = quoteRequired
           ? "Price pending - vendor confirmation required"
           : `Rs ${price.toFixed(2)}${item.price_unit_label ? `/${item.price_unit_label}` : ""}`;
-        return { ...item, price, qty, total: price * qty, price_quote_required: quoteRequired, price_label: priceLabel };
+        return {
+          ...item,
+          price,
+          qty,
+          total: price * qty,
+          price_quote_required: quoteRequired,
+          price_label: priceLabel,
+          order_input_source: typeof selection === "object" && selection !== null ? selection.order_input_source || "catalogue_image" : "typed_or_catalogue",
+          selected_variant: typeof selection === "object" && selection !== null ? selection.selected_variant || null : null,
+          customer_selected_language: typeof selection === "object" && selection !== null ? selection.customer_selected_language || null : null,
+          selection_snapshot: typeof selection === "object" && selection !== null ? selection : null,
+          customer_note: "",
+        };
       })
     );
     setLoading(false);
@@ -243,6 +268,13 @@ export default function SabSewaLocalCartScreen() {
           price: line.price,
           price_quote_required: line.price_quote_required,
           product_variant_id: line.product_variant_id || null,
+          master_product_id: line.master_product_id || null,
+          selected_variant: line.selected_variant || null,
+          unit: line.pack_unit || line.price_unit_label || null,
+          order_input_source: line.order_input_source || "typed_or_catalogue",
+          customer_selected_language: line.customer_selected_language || null,
+          customer_note: line.customer_note?.trim() || null,
+          selection_snapshot: line.selection_snapshot || null,
         })),
         customer_address: address.trim(),
         customer_name: customerName.trim(),
@@ -323,6 +355,9 @@ export default function SabSewaLocalCartScreen() {
             <Text style={styles.muted}>
               {[line.brand_name, line.variant_name, line.pack_size && line.pack_unit ? `${line.pack_size} ${line.pack_unit}` : ""].filter(Boolean).join(" - ") || line.generic_product_name || "Vendor listing"}
             </Text>
+            <Text style={styles.sourceText}>
+              Source: {line.order_input_source === "catalogue_image" ? "Selected from product image" : "Cart item"}{line.selected_variant ? ` | Variant: ${line.selected_variant}` : ""}
+            </Text>
             <Text style={styles.muted}>{line.price_label || `Rs ${line.price.toFixed(2)} each`}</Text>
 
             <View style={styles.qtyRow}>
@@ -340,6 +375,16 @@ export default function SabSewaLocalCartScreen() {
                 <Text style={styles.qtyText}>+</Text>
               </TouchableOpacity>
             </View>
+            <TextInput
+              style={styles.itemInstructionInput}
+              value={line.customer_note || ""}
+              onChangeText={(value) =>
+                setLines((current) =>
+                  current.map((entry) => entry.id === line.id ? { ...entry, customer_note: value } : entry)
+                )
+              }
+              placeholder="Optional item instruction, e.g. fresh, small size, ripe"
+            />
           </View>
         ))
       )}
@@ -454,6 +499,7 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 10 },
   heading: { fontSize: 26, fontWeight: "900", marginBottom: 18 },
   muted: { color: "#666" },
+  sourceText: { color: "#0f766e", fontSize: 12, fontWeight: "800", marginTop: 4 },
   emptyCard: {
     borderWidth: 1,
     borderColor: "#dbeafe",
@@ -508,6 +554,7 @@ const styles = StyleSheet.create({
   },
   qtyText: { fontSize: 20, fontWeight: "900" },
   qtyValue: { minWidth: 44, textAlign: "center", fontSize: 16, fontWeight: "800" },
+  itemInstructionInput: { borderWidth: 1, borderColor: "#d1d5db", borderRadius: 8, padding: 10, marginTop: 10 },
   summary: {
     marginTop: 8,
     marginBottom: 20,

@@ -3,6 +3,8 @@ import express from "express";
 import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { supabase } from "../connection.js";
+import { requireUserJwt } from "../security/apiSecurity.js";
+import { requireCompanyAdmin, writeAdminAudit } from "../company/adminProfileService.js";
 
 const router = express.Router();
 const MB = 1024 * 1024;
@@ -155,6 +157,226 @@ async function presignPrivateReadUrl(objectKey) {
   });
   return getSignedUrl(client, command, { expiresIn: 900 });
 }
+
+router.get("/master-product-images/:image_id/thumbnail", async (req, res) => {
+  try {
+    const { data: image, error } = await supabase
+      .from("master_product_images")
+      .select("id, thumbnail_object_key, moderation_status, takedown_status")
+      .eq("id", req.params.image_id)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!image || image.moderation_status !== "approved" || image.takedown_status !== "none") {
+      return res.status(404).json({ success: false, error: "Master catalogue image is not available." });
+    }
+
+    return res.redirect(await presignPrivateReadUrl(image.thumbnail_object_key));
+  } catch (err) {
+    return res.status(err.statusCode || 500).json({ success: false, error: err.message });
+  }
+});
+
+router.get(
+  "/admin/master-product-images",
+  requireUserJwt(supabase),
+  requireCompanyAdmin("vendors.manage"),
+  async (req, res) => {
+    try {
+      const status = String(req.query.status || "").trim();
+      const search = String(req.query.search || "").trim();
+      let query = supabase
+        .from("master_product_images")
+        .select("id, product_id, product_title, category, subcategory, thumbnail_object_key, source_type, moderation_status, takedown_status, created_at, approved_at, metadata")
+        .order("created_at", { ascending: false })
+        .limit(60);
+
+      if (status) query = query.eq("moderation_status", status);
+      if (search) query = query.ilike("product_title", `%${search}%`);
+
+      const { data, error } = await query;
+      if (error) throw error;
+
+      const images = await Promise.all((data || []).map(async (image) => ({
+        ...image,
+        thumbnail_url: image.thumbnail_object_key ? await presignPrivateReadUrl(image.thumbnail_object_key) : null,
+      })));
+
+      return res.json({ success: true, images });
+    } catch (err) {
+      return res.status(err.statusCode || 500).json({ success: false, error: err.message });
+    }
+  }
+);
+
+router.post(
+  "/admin/presign-master-catalog-image",
+  requireUserJwt(supabase),
+  requireCompanyAdmin("vendors.manage"),
+  async (req, res) => {
+    try {
+      const {
+        productId,
+        fileName,
+        mainFileSize,
+        thumbnailFileSize,
+        contentChecksum,
+        perceptualHash,
+        productTitle,
+        category,
+        subcategory,
+        rightsConfirmed,
+        rightsConfirmationText,
+        sourceType = "sabsewa_commissioned",
+        metadataRemoved = true,
+        squareCrop = true,
+        moderationStatus = "approved",
+      } = req.body || {};
+
+      if (!productId || !fileName || !productTitle || !category || !subcategory) {
+        return res.status(400).json({ success: false, error: "Product, filename, title, category and subcategory are required." });
+      }
+      if (!["manufacturer_distributor_permission", "commercial_reuse_licence", "sabsewa_commissioned"].includes(sourceType)) {
+        return res.status(400).json({ success: false, error: "Unsupported admin master-image source type." });
+      }
+      if (!rightsConfirmed || rightsConfirmationText !== MASTER_IMAGE_RIGHTS_TEXT) {
+        return res.status(400).json({
+          success: false,
+          error: "Master catalogue image rights declaration is required before upload.",
+          required_confirmation: MASTER_IMAGE_RIGHTS_TEXT,
+        });
+      }
+      if (!metadataRemoved || !squareCrop) {
+        return res.status(400).json({ success: false, error: "Images must be metadata-stripped and square-cropped before upload." });
+      }
+
+      const mainSize = Number(mainFileSize || 0);
+      const thumbSize = Number(thumbnailFileSize || 0);
+      if (!mainSize || mainSize > MAX_PRODUCT_IMAGE_BYTES) {
+        return res.status(413).json({ success: false, error: "Master image main WebP must be 100-200 KB after optimization." });
+      }
+      if (!thumbSize || thumbSize > MAX_MASTER_THUMBNAIL_BYTES) {
+        return res.status(413).json({ success: false, error: "Master image thumbnail WebP must be 40 KB or smaller." });
+      }
+      if (!contentChecksum) {
+        return res.status(400).json({ success: false, error: "Content checksum is required." });
+      }
+
+      const { data: product, error: productError } = await supabase
+        .from("master_product_catalog")
+        .select("id, standard_title, category, subcategory")
+        .eq("id", productId)
+        .maybeSingle();
+      if (productError) throw productError;
+      if (!product) return res.status(404).json({ success: false, error: "Master product was not found." });
+
+      const { data: duplicate, error: duplicateError } = await supabase
+        .from("master_product_images")
+        .select("id, moderation_status, takedown_status")
+        .eq("content_checksum", contentChecksum)
+        .maybeSingle();
+      if (duplicateError) throw duplicateError;
+      if (duplicate) {
+        return res.status(409).json({ success: false, error: "This master catalogue image appears to have already been submitted.", existing_image: duplicate });
+      }
+
+      const imageUuid = crypto.randomUUID();
+      const safeCategory = slugify(category || product.category);
+      const safeSubcategory = slugify(subcategory || product.subcategory);
+      const safeProduct = slugify(productTitle || product.standard_title);
+      const baseKey = `master-catalog/${safeCategory}/${safeSubcategory}/${safeProduct}/${imageUuid}`;
+      const mainKey = `${baseKey}/main.webp`;
+      const thumbnailKey = `${baseKey}/thumbnail.webp`;
+
+      const client = getS3Client();
+      const [mainUploadUrl, thumbnailUploadUrl] = await Promise.all([
+        getSignedUrl(client, new PutObjectCommand({
+          Bucket: process.env.AWS_S3_BUCKET,
+          Key: mainKey,
+          ContentType: "image/webp",
+          Metadata: {
+            product_id: String(productId),
+            storage_purpose: "sabsewa_local_master_catalogue_main",
+            uploaded_by_admin: String(req.adminProfile?.admin_id || req.auth?.user_id || ""),
+          },
+        }), { expiresIn: 300 }),
+        getSignedUrl(client, new PutObjectCommand({
+          Bucket: process.env.AWS_S3_BUCKET,
+          Key: thumbnailKey,
+          ContentType: "image/webp",
+          Metadata: {
+            product_id: String(productId),
+            storage_purpose: "sabsewa_local_master_catalogue_thumbnail",
+            uploaded_by_admin: String(req.adminProfile?.admin_id || req.auth?.user_id || ""),
+          },
+        }), { expiresIn: 300 }),
+      ]);
+
+      const approved = moderationStatus === "approved";
+      const { data: image, error: imageError } = await supabase
+        .from("master_product_images")
+        .insert({
+          product_id: productId,
+          product_title: productTitle || product.standard_title,
+          category: category || product.category,
+          subcategory: subcategory || product.subcategory,
+          s3_object_key: mainKey,
+          thumbnail_object_key: thumbnailKey,
+          source_type: sourceType,
+          source_user_id: req.auth?.user_id || null,
+          original_filename: fileName,
+          content_checksum: contentChecksum,
+          perceptual_hash: perceptualHash || null,
+          moderation_status: approved ? "approved" : "pending",
+          approval_administrator: approved ? req.auth?.user_id || null : null,
+          approved_at: approved ? new Date().toISOString() : null,
+          metadata: {
+            uploaded_from: "company_crm_master_catalogue_review",
+            rights_confirmation_text: MASTER_IMAGE_RIGHTS_TEXT,
+            metadata_removed: true,
+            square_crop: true,
+          },
+        })
+        .select()
+        .single();
+      if (imageError) throw imageError;
+
+      if (approved) {
+        await supabase
+          .from("master_product_catalog")
+          .update({
+            image_status: "approved_shared_image",
+            generic_image_url: `/api/storage/s3/master-product-images/${image.id}/thumbnail`,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", productId);
+      }
+
+      await writeAdminAudit({
+        req,
+        action: approved ? "master_catalogue_image_uploaded_approved" : "master_catalogue_image_uploaded_pending",
+        entityType: "master_product_image",
+        entityId: image.id,
+        metadata: { product_id: productId, source_type: sourceType },
+      });
+
+      return res.json({
+        success: true,
+        master_image_id: image.id,
+        main_upload_url: mainUploadUrl,
+        thumbnail_upload_url: thumbnailUploadUrl,
+        s3_object_key: mainKey,
+        thumbnail_object_key: thumbnailKey,
+        moderation_status: image.moderation_status,
+        customer_safe_thumbnail_path: `/api/storage/s3/master-product-images/${image.id}/thumbnail`,
+        required_confirmation: MASTER_IMAGE_RIGHTS_TEXT,
+        expires_in_seconds: 300,
+      });
+    } catch (err) {
+      return res.status(err.statusCode || 500).json({ success: false, error: err.message });
+    }
+  }
+);
 
 router.post("/presign-product-image", async (req, res) => {
   try {

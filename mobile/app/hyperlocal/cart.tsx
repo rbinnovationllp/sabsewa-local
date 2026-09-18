@@ -336,13 +336,13 @@ export default function SabSewaLocalCartScreen() {
         <View style={styles.emptyCard}>
           <Text style={styles.emptyTitle}>Your cart is empty</Text>
           <Text style={styles.emptyText}>
-            Select a nearby vendor and available-today products before placing an order. Customer payment remains directly between you and the vendor.
+            Search or speak what you need, choose a nearby verified shop and add available-today products before placing an order.
           </Text>
           <TouchableOpacity style={styles.findBtn} onPress={() => router.push("/customer/discover" as any)}>
-            <Text style={styles.placeText}>Find Nearby Vendors</Text>
+            <Text style={styles.placeText}>Search nearby products</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.aiBtn} onPress={() => router.push("/customer/GeminiOrder" as any)}>
-            <Text style={styles.placeText}>Place Your Order</Text>
+            <Text style={styles.placeText}>Speak a shopping list</Text>
           </TouchableOpacity>
         </View>
       ) : (

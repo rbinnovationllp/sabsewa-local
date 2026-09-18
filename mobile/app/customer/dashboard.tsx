@@ -84,6 +84,14 @@ export default function CustomerDashboard() {
           <Text style={styles.complaintText}>Raise a Complaint</Text>
         </TouchableOpacity>
       </View>
+
+      <View style={styles.bottomNav} accessibilityRole="tablist">
+        <CustomerNavItem icon="home" label="Home" active onPress={() => router.push("/customer/dashboard" as any)} />
+        <CustomerNavItem icon="search" label="Search" onPress={() => openDiscovery()} />
+        <CustomerNavItem icon="cart" label="Cart" onPress={() => router.push("/hyperlocal/cart" as any)} />
+        <CustomerNavItem icon="receipt" label="Orders" onPress={() => router.push("/customer/OrderHistory" as any)} />
+        <CustomerNavItem icon="person" label="Me" onPress={() => router.push("/customer/profile" as any)} />
+      </View>
     </ScrollView>
   );
 }
@@ -94,6 +102,30 @@ function ActionCard({ icon, title, text, onPress }: { icon: string; title: strin
       <Ionicons name={icon as any} size={20} color="#0f766e" />
       <Text style={styles.actionTitle}>{title}</Text>
       <Text style={styles.actionText}>{text}</Text>
+    </TouchableOpacity>
+  );
+}
+
+function CustomerNavItem({
+  icon,
+  label,
+  active,
+  onPress,
+}: {
+  icon: string;
+  label: string;
+  active?: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <TouchableOpacity
+      accessibilityRole="tab"
+      accessibilityState={{ selected: Boolean(active) }}
+      style={[styles.navItem, active && styles.navItemActive]}
+      onPress={onPress}
+    >
+      <Ionicons name={icon as any} size={19} color={active ? "#0f766e" : "#64748b"} />
+      <Text style={[styles.navText, active && styles.navTextActive]}>{label}</Text>
     </TouchableOpacity>
   );
 }
@@ -155,4 +187,24 @@ const styles = StyleSheet.create({
   supportButtonText: { color: "#ffffff", fontWeight: "900" },
   complaintButton: { borderWidth: 1, borderColor: "#dc2626", borderRadius: 8, padding: 14, alignItems: "center" },
   complaintText: { color: "#b91c1c", fontWeight: "900" },
+  bottomNav: {
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    borderRadius: 8,
+    backgroundColor: "#ffffff",
+    padding: 8,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 4,
+  },
+  navItem: {
+    flex: 1,
+    minHeight: 48,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 8,
+  },
+  navItemActive: { backgroundColor: "#ecfeff" },
+  navText: { color: "#64748b", fontSize: 11, fontWeight: "800", marginTop: 3 },
+  navTextActive: { color: "#0f766e" },
 });

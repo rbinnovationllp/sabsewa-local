@@ -3,6 +3,13 @@ import { StyleSheet, TouchableOpacity, Text, View, Alert, Platform, Modal, Activ
 import { Ionicons } from '@expo/vector-icons';
 import { useLanguage } from '@/providers/LanguageProvider';
 
+declare global {
+  interface Window {
+    SpeechRecognition?: any;
+    webkitSpeechRecognition?: any;
+  }
+}
+
 // PREREQUISITE: npx expo install @react-native-voice/voice (must be run inside /mobile)
 let NativeVoice: any;
 if (Platform.OS === 'ios' || Platform.OS === 'android') {

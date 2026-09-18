@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, View, Platform } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useLanguage } from "../providers/LanguageProvider";
+import { useLanguage } from "@/providers/LanguageProvider";
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;

@@ -240,3 +240,7 @@ Run `RUN_FIX_VENDOR_BUSINESS_ESTABLISHMENT_ADDRESS_PROOF_2026_08_23.sql` before 
 The Partner and Vendor KYC review UI depends on the existing partner_applications, partner_kyc_documents, partner_admin_audit_logs, vendors, vendor_kyc_documents, vendor_status_history and vendor_notifications structures. Apply the latest dated RUN_ONLY/RUN_FIX SQL files before production use.
 
 Partner KYC CRM counters are served by `GET /api/partner/admin/kyc/summary` and require the Partner KYC/compliance SQL to have added `partner_applications.kyc_status`, `partner_applications.kyc_submitted_at`, `partner_kyc_documents` and `partner_admin_audit_logs`. If the Company CRM shows zero Partner KYC pending while a partner has submitted documents, first verify those tables/columns and confirm the application row has `kyc_status` of `documents_submitted` or `under_review`.
+
+### Safe Test Reset SQL Repair - 2026-08-23
+
+`RUN_SAFE_RESET_TEST_DATA.sql` now counts Partner commission, statement and referred-vendor records through `partner_application_id` UUIDs instead of the display `partner_id` text column. Re-run the full SQL file in Supabase before using `ssl_safe_test_reset_dry_run` or `ssl_safe_test_reset_execute` for controlled test-data cleanup.

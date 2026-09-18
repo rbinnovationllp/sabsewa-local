@@ -4,11 +4,15 @@
   "private": true,
   "description": "SabSewa Local Hyperlocal Marketplace monorepo workspace",
   "scripts": {
+    "start": "npm --prefix mobile start",
+    "web": "npm --prefix mobile run web",
     "dev:backend": "npm --prefix backend run dev",
     "dev:mobile": "npm --prefix mobile start",
+    "build": "npm --prefix mobile run build:web",
     "build:backend": "npm --prefix backend run build",
-    "build:mobile:web": "npm --prefix mobile run build",
-    "build:hostinger": "npm --prefix mobile run export:web:hostinger"
+    "build:mobile:web": "npm --prefix mobile run build:web",
+    "build:hostinger": "npm --prefix mobile run export:web:hostinger",
+    "deploy:validate": "node ./scripts/validate-deployment.js"
   },
   "keywords": [
     "hyperlocal",

@@ -411,7 +411,8 @@ export default function CustomerVendorDiscoveryScreen() {
           {/* Modern Blinkit / Zepto Product Showcase Cards */}
           <View style={styles.productsList}>
             {(vendor.available_products || []).map((product: any) => {
-              const qty = cartByShop[shopKey(vendor)]?.[product.id] || 0;
+              const cartSelection = cartByShop[shopKey(vendor)]?.[product.id];
+              const qty = Number(cartSelection?.qty || 0);
               const isFav = Boolean(favorites[product.id]);
 
               return (

@@ -1,6 +1,6 @@
 import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
-import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, Image } from "react-native";
+import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View, Image } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
 import BrandHeader from "@/components/BrandHeader";
@@ -133,6 +133,18 @@ export default function HomeScreen() {
     router.push("/vendor/register" as any);
   }
 
+  function openCustomerExperience() {
+    router.push("/customer/dashboard" as any);
+  }
+
+  function openVendorExperience() {
+    if (isVendor) {
+      router.push("/vendor/dashboard" as any);
+      return;
+    }
+    openVendorRegistration();
+  }
+
   function openVendorLogin() {
     if (typeof window !== "undefined" && window.location) {
       window.location.href = "/auth/Login?role=vendor&intent=vendor_login";
@@ -221,20 +233,45 @@ export default function HomeScreen() {
       <BrandHeader subtitle={t("home.tagline")} />
 
       <View style={styles.hero}>
-        <View style={styles.topNav}>
-          <TouchableOpacity
-            accessibilityRole="button"
-            accessibilityLabel={t("home.partnerWithUs")}
-            style={styles.partnerNavButton}
-            onPress={() => router.push("/partner" as any)}
-          >
-            <Text style={styles.partnerNavText}>{t("home.partnerWithUs")}</Text>
-          </TouchableOpacity>
-        </View>
         <Text style={styles.brandTitle}>{t("home.title")}</Text>
         <Text style={styles.tagline}>{t("home.tagline")}</Text>
-        <TextInput style={styles.input} placeholder={t("home.locationPlaceholder")} accessibilityLabel={t("home.locationPlaceholder")} />
-        <TextInput style={styles.input} placeholder={t("home.searchPlaceholder")} accessibilityLabel={t("home.searchPlaceholder")} />
+        <Text style={styles.heroSupport}>
+          Choose what you want to do. SabSewa will open the correct Customer, Vendor or Partner workspace without sending you to Company CRM.
+        </Text>
+        <View style={styles.entryGrid}>
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel="Shop from nearby verified stores"
+            style={styles.entryButton}
+            onPress={openCustomerExperience}
+          >
+            <Ionicons name="cart" size={20} color="#ffffff" />
+            <View style={styles.entryCopy}>
+              <Text style={styles.entryButtonText}>Shop Nearby</Text>
+              <Text style={styles.entryButtonSubText}>Search, cart and order</Text>
+            </View>
+          </TouchableOpacity>
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel={isVendor ? "Open Vendor Dashboard" : "Register Your Shop"}
+            style={[styles.entryButton, styles.vendorEntryButton]}
+            onPress={openVendorExperience}
+          >
+            <Ionicons name="storefront" size={20} color="#ffffff" />
+            <View style={styles.entryCopy}>
+              <Text style={styles.entryButtonText}>{isVendor ? "Open Vendor CRM" : "Register Your Shop"}</Text>
+              <Text style={styles.entryButtonSubText}>{isVendor ? "Orders, items, delivery" : "Start vendor onboarding"}</Text>
+            </View>
+          </TouchableOpacity>
+        </View>
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel={t("home.partnerWithUs")}
+          style={styles.partnerInlineButton}
+          onPress={() => router.push("/partner" as any)}
+        >
+          <Text style={styles.partnerInlineText}>{t("home.partnerWithUs")}</Text>
+        </TouchableOpacity>
         <LanguageSelector />
       </View>
 
@@ -426,11 +463,31 @@ const styles = StyleSheet.create({
     backgroundColor: "#f8fbff",
   },
   brandTitle: { fontSize: 28, fontWeight: "900", color: "#0f766e" },
-  topNav: { flexDirection: "row", justifyContent: "flex-end", marginBottom: 12 },
-  partnerNavButton: { backgroundColor: "#f97316", borderRadius: 8, paddingVertical: 10, paddingHorizontal: 14 },
-  partnerNavText: { color: "#fff", fontWeight: "900" },
-  tagline: { color: "#f97316", fontSize: 16, fontWeight: "900", marginTop: 4, marginBottom: 14 },
-  input: { borderWidth: 1, borderColor: "#cbd5e1", borderRadius: 8, padding: 12, marginBottom: 10, backgroundColor: "#fff" },
+  tagline: { color: "#f97316", fontSize: 16, fontWeight: "900", marginTop: 4, marginBottom: 8 },
+  heroSupport: { color: "#475569", lineHeight: 20, marginBottom: 14 },
+  entryGrid: { gap: 10, marginBottom: 10 },
+  entryButton: {
+    backgroundColor: "#1166ff",
+    borderRadius: 8,
+    padding: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  vendorEntryButton: { backgroundColor: "#0f766e" },
+  entryCopy: { flex: 1 },
+  entryButtonText: { color: "#fff", fontSize: 16, fontWeight: "900" },
+  entryButtonSubText: { color: "#e0f2fe", fontSize: 12, marginTop: 2 },
+  partnerInlineButton: {
+    borderWidth: 1,
+    borderColor: "#fdba74",
+    borderRadius: 8,
+    padding: 12,
+    alignItems: "center",
+    marginBottom: 12,
+    backgroundColor: "#fff7ed",
+  },
+  partnerInlineText: { color: "#9a3412", fontWeight: "900" },
   categoryRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 14 },
   categoryChip: { borderWidth: 1, borderColor: "#99f6e4", backgroundColor: "#ecfeff", borderRadius: 999, paddingVertical: 9, paddingHorizontal: 12 },
   categoryText: { color: "#0f766e", fontWeight: "900" },

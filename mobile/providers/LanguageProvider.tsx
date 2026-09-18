@@ -115,8 +115,8 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
       setLanguage: persistLanguage,
       isLanguageAvailable: (code: SabSewaLanguageCode) => FUNCTIONAL_LANGUAGES.includes(code),
       t: (key: CommonTranslationKey | string, replacements?: Record<string, string | number>) => {
-        const dictionary = BUNDLED_TRANSLATIONS[language] || enCommon;
-        let translated = dictionary[key] || enCommon[key as CommonTranslationKey] || key;
+        const dictionary = (BUNDLED_TRANSLATIONS[language] || enCommon) as Record<string, string>;
+        let translated = dictionary[String(key)] || (enCommon as Record<string, string>)[String(key)] || String(key);
         if (translated === key && !missingKeysRef.current.has(`${language}:${key}`)) {
           missingKeysRef.current.add(`${language}:${key}`);
           console.warn("Missing SabSewa translation key", { language, key });

@@ -3,13 +3,20 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
+type VendorTerminal = {
+  id: string;
+  vendor_id: string;
+  terminal_name?: string | null;
+  address?: string | null;
+};
+
 export default function TerminalSelector() {
   const params: any = useLocalSearchParams();
   const router = useRouter();
 
   const terminalId = params.terminal;
 
-  const [terminal, setTerminal] = useState(null);
+  const [terminal, setTerminal] = useState<VendorTerminal | null>(null);
 
   useEffect(() => {
     if (terminalId) loadTerminal();
@@ -22,7 +29,7 @@ export default function TerminalSelector() {
       .eq("id", terminalId)
       .single();
 
-    if (!error) setTerminal(data);
+    if (!error) setTerminal(data as VendorTerminal);
   }
 
   if (!terminal) {

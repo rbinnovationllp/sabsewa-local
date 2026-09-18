@@ -1,120 +1,158 @@
-﻿import { useRouter } from "expo-router";
-import React from "react";
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
+import React, { useState } from "react";
+import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+
 import BrandHeader from "@/components/BrandHeader";
+
+const CATEGORIES = [
+  { label: "Grocery", value: "kirana" },
+  { label: "Vegetables", value: "vegetables" },
+  { label: "Fruits", value: "fruits" },
+  { label: "Dairy", value: "dairy" },
+  { label: "Medical", value: "medical" },
+  { label: "Tiffin", value: "restaurant" },
+];
 
 export default function CustomerDashboard() {
   const router = useRouter();
+  const [query, setQuery] = useState("");
+
+  function openDiscovery(params: Record<string, string> = {}) {
+    router.push({ pathname: "/customer/discover", params } as any);
+  }
+
+  function submitSearch() {
+    const q = query.trim();
+    openDiscovery(q ? { q } : {});
+  }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={{ padding: 20, paddingTop: 10 }}>
-      <BrandHeader subtitle="Order nearby products and local services from verified vendors" />
+    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      <BrandHeader subtitle="Shop nearby verified stores" />
 
-      {/* Quick Home Redirect */}
-      <TouchableOpacity 
-        style={styles.homeBanner}
-        onPress={() => router.push("/" as any)}
-      >
-        <Ionicons name="storefront-sharp" size={18} color="#0f766e" />
-        <Text style={styles.homeBannerText}>Browse Marketplace Home</Text>
-      </TouchableOpacity>
-
-      {/* SERVICE CARDS */}
-      <View style={styles.grid}>
-        <TouchableOpacity
-          style={[styles.card, { backgroundColor: "#2962ff" }]}
-          onPress={() => router.push("/customer/discover")}
-        >
-          <Text style={styles.cardTitle}>Find Vendors</Text>
-          <Text style={styles.cardText}>Search within 1 km</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.card, { backgroundColor: "#0f766e" }]}
-          onPress={() => router.push("/customer/GeminiOrder")}
-        >
-          <Text style={styles.cardTitle}>Place Order</Text>
-          <Text style={styles.cardText}>Type or speak items</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.card, { backgroundColor: "#ff8f00" }]}
-          onPress={() => router.push("/hyperlocal/cart")}
-        >
-          <Text style={styles.cardTitle}>Cart</Text>
-          <Text style={styles.cardText}>Review items and pay</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.card, { backgroundColor: "#2e7d32" }]}
-          onPress={() => router.push("/customer/track")}
-        >
-          <Text style={styles.cardTitle}>Track Order</Text>
-          <Text style={styles.cardText}>Follow delivery status</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.card, { backgroundColor: "#512da8" }]}
-          onPress={() => router.push("/customer/support")}
-        >
-          <Text style={styles.cardTitle}>Help & Support</Text>
-          <Text style={styles.cardText}>Get Assistance</Text>
+      <View style={styles.hero}>
+        <Text style={styles.eyebrow}>Customer Home</Text>
+        <Text style={styles.title}>What do you need today?</Text>
+        <Text style={styles.support}>Search products, choose a verified nearby vendor, then review and edit your final cart before ordering.</Text>
+        <View style={styles.searchRow}>
+          <TextInput
+            value={query}
+            onChangeText={setQuery}
+            onSubmitEditing={submitSearch}
+            returnKeyType="search"
+            style={styles.searchInput}
+            placeholder="Search atta, cucumber, milk, medicine..."
+            accessibilityLabel="Search for nearby products"
+          />
+          <TouchableOpacity accessibilityRole="button" style={styles.searchButton} onPress={submitSearch}>
+            <Ionicons name="search" size={20} color="#ffffff" />
+          </TouchableOpacity>
+        </View>
+        <TouchableOpacity style={styles.voiceButton} onPress={() => router.push("/customer/GeminiOrder" as any)}>
+          <Ionicons name="mic" size={18} color="#ffffff" />
+          <Text style={styles.voiceText}>Type or speak a full order</Text>
         </TouchableOpacity>
       </View>
 
-      <TouchableOpacity style={styles.complaintBtn} onPress={() => router.push("/customer/complaint")}>
-        <Text style={styles.complaintText}>Raise a Complaint</Text>
-      </TouchableOpacity>
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Shop by Category</Text>
+        <View style={styles.categoryRow}>
+          {CATEGORIES.map((category) => (
+            <TouchableOpacity key={category.value} style={styles.categoryChip} onPress={() => openDiscovery({ category: category.value })}>
+              <Text style={styles.categoryText}>{category.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
 
-      <TouchableOpacity style={styles.profileBtn} onPress={() => router.push("/customer/profile")}>
-        <Text style={styles.profileText}>My Profile</Text>
-      </TouchableOpacity>
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Quick Actions</Text>
+        <View style={styles.actionGrid}>
+          <ActionCard icon="storefront" title="Nearby Stores" text="Use location or PIN" onPress={() => openDiscovery()} />
+          <ActionCard icon="cart" title="Cart" text="Edit items before order" onPress={() => router.push("/hyperlocal/cart" as any)} />
+          <ActionCard icon="navigate" title="Track Order" text="Follow live status" onPress={() => router.push("/customer/track" as any)} />
+          <ActionCard icon="person" title="My Profile" text="Account and address" onPress={() => router.push("/customer/profile" as any)} />
+        </View>
+      </View>
+
+      <View style={styles.section}>
+        <TouchableOpacity style={styles.supportButton} onPress={() => router.push("/customer/support" as any)}>
+          <Text style={styles.supportButtonText}>Help & Support</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.complaintButton} onPress={() => router.push("/customer/complaint" as any)}>
+          <Text style={styles.complaintText}>Raise a Complaint</Text>
+        </TouchableOpacity>
+      </View>
     </ScrollView>
+  );
+}
+
+function ActionCard({ icon, title, text, onPress }: { icon: string; title: string; text: string; onPress: () => void }) {
+  return (
+    <TouchableOpacity style={styles.actionCard} onPress={onPress}>
+      <Ionicons name={icon as any} size={20} color="#0f766e" />
+      <Text style={styles.actionTitle}>{title}</Text>
+      <Text style={styles.actionText}>{text}</Text>
+    </TouchableOpacity>
   );
 }
 
 const styles = StyleSheet.create({
   container: { backgroundColor: "#ffffff" },
-  homeBanner: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    backgroundColor: "#ecfeff",
+  content: { padding: 16, paddingTop: 10, paddingBottom: 48 },
+  hero: {
     borderWidth: 1,
-    borderColor: "#99f6e4",
-    padding: 12,
-    borderRadius: 10,
+    borderColor: "#bfdbfe",
+    backgroundColor: "#eff6ff",
+    borderRadius: 8,
+    padding: 16,
     marginBottom: 16,
   },
-  homeBannerText: { color: "#0f766e", fontWeight: "800", fontSize: 14 },
-  grid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between" },
-
-  card: {
+  eyebrow: { color: "#0f766e", fontWeight: "900", marginBottom: 6 },
+  title: { color: "#0f172a", fontSize: 24, fontWeight: "900" },
+  support: { color: "#475569", lineHeight: 20, marginTop: 8, marginBottom: 14 },
+  searchRow: { flexDirection: "row", gap: 8, alignItems: "center" },
+  searchInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    backgroundColor: "#ffffff",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+  },
+  searchButton: { width: 48, height: 48, borderRadius: 8, backgroundColor: "#1166ff", alignItems: "center", justifyContent: "center" },
+  voiceButton: {
+    backgroundColor: "#0f766e",
+    borderRadius: 8,
+    padding: 13,
+    marginTop: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  voiceText: { color: "#ffffff", fontWeight: "900" },
+  section: { marginBottom: 16 },
+  sectionTitle: { color: "#0f172a", fontSize: 18, fontWeight: "900", marginBottom: 10 },
+  categoryRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  categoryChip: { borderWidth: 1, borderColor: "#99f6e4", backgroundColor: "#ecfeff", borderRadius: 999, paddingVertical: 9, paddingHorizontal: 12 },
+  categoryText: { color: "#0f766e", fontWeight: "900" },
+  actionGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  actionCard: {
     width: "48%",
-    padding: 16,
-    borderRadius: 14,
-    marginBottom: 15,
-  },
-  cardTitle: { color: "#fff", fontSize: 18, fontWeight: "800" },
-  cardText: { color: "#e3f2fd", marginTop: 5, fontSize: 12 },
-
-  complaintBtn: {
-    backgroundColor: "#c62828",
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    borderRadius: 8,
+    backgroundColor: "#ffffff",
     padding: 14,
-    borderRadius: 14,
-    alignItems: "center",
-    marginTop: 20,
+    minHeight: 112,
   },
-  complaintText: { color: "#fff", fontWeight: "800" },
-
-  profileBtn: {
-    backgroundColor: "#eeeeee",
-    padding: 14,
-    borderRadius: 14,
-    alignItems: "center",
-    marginTop: 15,
-    marginBottom: 50,
-  },
-  profileText: { color: "#424242", fontWeight: "800" },
+  actionTitle: { color: "#0f172a", fontSize: 16, fontWeight: "900", marginTop: 8 },
+  actionText: { color: "#64748b", marginTop: 4, lineHeight: 18 },
+  supportButton: { backgroundColor: "#1166ff", borderRadius: 8, padding: 14, alignItems: "center", marginBottom: 10 },
+  supportButtonText: { color: "#ffffff", fontWeight: "900" },
+  complaintButton: { borderWidth: 1, borderColor: "#dc2626", borderRadius: 8, padding: 14, alignItems: "center" },
+  complaintText: { color: "#b91c1c", fontWeight: "900" },
 });

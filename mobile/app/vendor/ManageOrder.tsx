@@ -4,11 +4,16 @@ import { supabase } from "@/lib/supabase";
 import { useUser } from "@/contexts/UserContext";
 import { apiUrl } from "@/lib/backend";
 
-export default function ManageOrder({ order }) {
+type ManagedOrder = {
+  id: string;
+  status: string;
+};
+
+export default function ManageOrder({ order }: { order: ManagedOrder }) {
   const { user } = useUser();
   const [status, setStatus] = useState(order.status);
 
-  async function updateStatus(type) {
+  async function updateStatus(type: string) {
     const payload = {
       order_id: order.id,
       vendor_id: user.id,

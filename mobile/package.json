@@ -1,5 +1,5 @@
 {
-  "name": "sabsewa-local-mobile",
+  "name": "mobile",
   "version": "1.0.0",
   "private": true,
   "main": "expo-router/entry",
@@ -8,6 +8,7 @@
     "start": "expo start",
     "dev": "expo start --web",
     "build": "expo export --platform web",
+    "build:web": "npx expo export --platform web",
     "build:hostinger": "node ./scripts/export-web-hostinger.cjs",
     "preview": "npx serve dist",
     "reset-project": "node ./scripts/reset-project.js",
@@ -16,7 +17,7 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "export:web": "expo export --platform web",
-    "export:web:hostinger": "node ./scripts/export-web-hostinger.cjs",
+    "export:web:hostinger": "npx expo export --platform web && node ../scripts/prepare-hostinger.js",
     "deploy:validate": "node ./scripts/validate-production-web-build.js",
     "deploy:archive": "node ./scripts/archive-web-build.js",
     "deploy:rollback": "node ./scripts/rollback-web-build.js",
@@ -25,6 +26,7 @@
     "test:image-catalogue-cart": "node ./scripts/validate-image-catalogue-cart-flow.mjs",
     "typecheck": "tsc --noEmit --pretty false"
   },
+
   "dependencies": {
     "@expo/cli": "^54.0.19",
     "@expo/metro-runtime": "~6.1.2",

@@ -166,10 +166,49 @@ export default function VendorDashboard() {
       route: vendorLoaded ? `/vendor/ExitAndRefund?vendor=${vendor.id}` : "",
     },
   ];
+  const findAction = (title: string) => actionCards.find((action) => action.title === title);
+  const actionGroups = [
+    {
+      title: "Start Here",
+      description: "Use these first when your shop is new, blocked or being updated.",
+      actions: ["Onboarding", "Edit Vendor Profile", "Payment Information"],
+    },
+    {
+      title: "Orders",
+      description: "Receive, accept, partially fulfil, reject and track customer orders.",
+      actions: ["Orders"],
+    },
+    {
+      title: "Products & Availability",
+      description: "Add products, update prices, control stock and manage today's sellable items.",
+      actions: ["Catalogue Setup", "Add One Item", "Gemini Inventory Capture", "Manage Items & Prices", "Today's Availability", "Storage Usage"],
+    },
+    {
+      title: "Delivery",
+      description: "Choose self delivery, one delivery staff or a delivery team for your terminal.",
+      actions: ["Delivery Settings", "Delivery Team"],
+    },
+    {
+      title: "Money, Credit & Billing",
+      description: "Manage customer Udhaar, platform billing, wallet/top-up and closure/refund records.",
+      actions: ["Customer Credits", "Billing & Subscription", "Vendor Advance Balance", "Exit & Refund"],
+    },
+  ]
+    .map((group) => ({
+      ...group,
+      actions: group.actions.map(findAction).filter(Boolean),
+    }))
+    .filter((group) => group.actions.length);
 
   function openVendorRoute(route: string) {
     if (!route) return;
     router.push(route as any);
+  }
+
+  function actionStatus(action: any) {
+    if (!vendorLoaded) return "Unlocks after vendor login";
+    if (action.title === "Onboarding" || onboardingComplete) return "Open";
+    return "Requires onboarding";
   }
 
   const activeSummary = crmSummary?.ranges?.[summaryRange] || {};
@@ -303,26 +342,39 @@ export default function VendorDashboard() {
 
       <Text style={styles.sectionTitle}>Vendor Operations</Text>
 
-      <View style={styles.actionGrid}>
-        {actionCards.map((action) => (
-          <TouchableOpacity
-            key={action.title}
-            style={[
-              styles.actionCard,
-              { borderTopColor: action.color },
-              !vendorLoaded && styles.actionDisabled,
-            ]}
-            onPress={() => openVendorRoute(action.route)}
-            disabled={!vendorLoaded}
-          >
-            <Text style={styles.actionTitle}>{action.title}</Text>
-            <Text style={styles.actionText}>{action.description}</Text>
-          <Text style={[styles.actionStatus, { color: vendorLoaded ? action.color : "#6b7280" }]}>
-              {vendorLoaded ? (action.title === "Onboarding" || onboardingComplete ? "Open" : "Requires onboarding") : "Unlocks after vendor login"}
-          </Text>
-          </TouchableOpacity>
-        ))}
+      <View style={styles.guidancePanel}>
+        <Text style={styles.guidanceTitle}>Simple shop mode</Text>
+        <Text style={styles.guidanceText}>
+          A one-person shop can start with Orders, Today's Availability and Payment Information. Delivery Team is optional unless you add staff.
+        </Text>
       </View>
+
+      {actionGroups.map((group) => (
+        <View key={group.title} style={styles.operationGroup}>
+          <Text style={styles.groupTitle}>{group.title}</Text>
+          <Text style={styles.groupText}>{group.description}</Text>
+          <View style={styles.actionGrid}>
+            {group.actions.map((action: any) => (
+              <TouchableOpacity
+                key={action.title}
+                style={[
+                  styles.actionCard,
+                  { borderTopColor: action.color },
+                  !vendorLoaded && styles.actionDisabled,
+                ]}
+                onPress={() => openVendorRoute(action.route)}
+                disabled={!vendorLoaded}
+              >
+                <Text style={styles.actionTitle}>{action.title}</Text>
+                <Text style={styles.actionText}>{action.description}</Text>
+                <Text style={[styles.actionStatus, { color: vendorLoaded ? action.color : "#6b7280" }]}>
+                  {actionStatus(action)}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+      ))}
     </ScrollView>
   );
 }
@@ -500,6 +552,37 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 12,
+  },
+  guidancePanel: {
+    borderWidth: 1,
+    borderColor: "#99f6e4",
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 14,
+    backgroundColor: "#ecfeff",
+  },
+  guidanceTitle: {
+    color: "#0f766e",
+    fontWeight: "900",
+    marginBottom: 4,
+  },
+  guidanceText: {
+    color: "#134e4a",
+    lineHeight: 19,
+  },
+  operationGroup: {
+    marginBottom: 18,
+  },
+  groupTitle: {
+    color: "#111827",
+    fontSize: 17,
+    fontWeight: "900",
+  },
+  groupText: {
+    color: "#6b7280",
+    marginTop: 4,
+    marginBottom: 10,
+    lineHeight: 19,
   },
   actionCard: {
     width: "48%",

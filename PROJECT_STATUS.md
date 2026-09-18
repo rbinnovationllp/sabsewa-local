@@ -1611,6 +1611,16 @@ Manual Supabase action required:
 - [x] **Core Language Support (en-IN, hi-IN, kn-IN):** Integrated into Speech Recognition matrix. Devanagari and Kannada scripts displayed correctly.
 - [ ] **Native Mobile Permissions (Android/iOS):** Setup native listeners for `@react-native-voice/voice`.
 - [x] **In-Page Transcription Matrix:** Modal flow added for [Edit] [Speak Again] [Confirm] loop before submission.
+## 2026-09-18 - Role-First Public Home and Customer Dashboard UX Pass
+
+- Audited the existing SabSewa Local role surfaces before changing code: public home, customer dashboard/discovery/cart, vendor CRM dashboard, rider terminal and Company CRM/Master Admin guards.
+- Confirmed the project already has separate reusable modules for customer discovery/cart/order tracking, vendor operations, delivery staff terminal and Company CRM; no duplicate database tables or replacement CRM modules were added.
+- Simplified the public home first decision area into Customer, Vendor and Partner entry choices so ordinary user flows do not look like or route through Company CRM.
+- Reworked Customer Dashboard into a search-first "What do you need today?" page that routes into the existing live discovery, category search, Gemini order assistant, editable cart, tracking, support, complaint and profile screens.
+- Grouped Vendor Dashboard operations into Start Here, Orders, Products & Availability, Delivery, and Money/Credit/Billing while preserving all existing routes.
+- Repaired mobile TypeScript validation by fixing malformed `mobile/tsconfig.json` and narrow typing issues in customer discovery cart selection, vendor KYC/Profile/Terminal/ManageOrder screens, web speech typing, language dictionary lookup and the PWA install prompt import.
+- Current scope is a safe frontend UX/navigation pass. Rider terminal UX polish and deeper regression automation remain separate follow-up phases.
+
 - [x] **Backend Gemini Flash Service:** Secure route deployed on EC2 for structured cart additions.
 - [ ] **Accessibility (ARIA/Screen Reader):** Verify microphne state announcements and transcription focus.
 - [ ] **Privacy Consent & Policy Update:** drafting localized privacy notice.
@@ -1685,3 +1695,9 @@ Remaining production validation: test real vendor device behavior for PWA open/b
 - Added `/vendor/SelectBusiness` for accounts that own multiple vendor businesses or branches, and updated Vendor Dashboard/Onboarding to respect the selected `vendor` query parameter.
 - OTP inputs are masked to avoid exposing live OTP values in screenshots/support recordings.
 - Added `mobile/server/scripts/validate-vendor-login-routing.mjs` and `npm run validate:vendor-login-routing` to prevent this regression.
+
+## 2026-08-23 - Safe Test Reset SQL Repair
+
+- Repaired `supabase/RUN_SAFE_RESET_TEST_DATA.sql` after production dry-run exposed a schema mismatch where Partner commission tables store display `partner_id` as text while cleanup scope uses Partner application UUIDs.
+- Partner commission, monthly statement and referred-vendor cleanup checks now use `partner_application_id` UUID columns where available, avoiding unsafe `text = uuid` comparisons.
+- Added validator coverage in `mobile/server/scripts/validate-safe-test-reset.mjs`; `npm run validate:safe-test-reset` passes.

@@ -44,6 +44,16 @@ assert.match(
   /ssl_column_exists\('vendors', 'phone_number'\)/,
   "Vendor phone_number lookup must be guarded by a schema check"
 );
+assert.match(
+  resetSql,
+  /ssl_count_by_uuid_column\('partner_commission_events', 'partner_application_id', candidate_partner_ids\)/,
+  "Partner commission conflict checks must use partner_application_id UUIDs, not display partner_id text"
+);
+assert.doesNotMatch(
+  executableSql,
+  /ssl_count_by_uuid_column\('partner_(?:commission_events|monthly_commission_statements|referred_vendors)', 'partner_id', candidate_partner_ids\)/,
+  "Partner cleanup must not compare text partner_id columns against UUID arrays"
+);
 assert.doesNotMatch(
   executableSql,
   /from public\.vendors[\s\S]{0,300}coalesce\(phone_number, ''''\)/,

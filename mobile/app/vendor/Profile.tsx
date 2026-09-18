@@ -195,12 +195,12 @@ export default function VendorProfileScreen() {
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Ordinary Operational Fields</Text>
         <Text style={styles.help}>These may be updated immediately after authenticated validation.</Text>
-        <Input label="Shop Description" value={operational.shop_description} onChangeText={(value) => setOperational({ ...operational, shop_description: value })} multiline />
-        <Input label="Business Hours" value={operational.business_hours} onChangeText={(value) => setOperational({ ...operational, business_hours: value })} />
-        <Input label="Delivery Radius (metres, max 5000)" value={operational.delivery_radius_meters} onChangeText={(value) => setOperational({ ...operational, delivery_radius_meters: value.replace(/[^0-9]/g, "") })} keyboardType="number-pad" />
-        <Input label="Price Display Preference" value={operational.price_display_preference} onChangeText={(value) => setOperational({ ...operational, price_display_preference: value })} />
-        <Input label="Shop Support Contact Preference" value={operational.shop_support_contact_preference} onChangeText={(value) => setOperational({ ...operational, shop_support_contact_preference: value })} />
-        <Input label="Preferred Language" value={operational.preferred_language} onChangeText={(value) => setOperational({ ...operational, preferred_language: value })} />
+        <Input label="Shop Description" value={operational.shop_description} onChangeText={(value: string) => setOperational({ ...operational, shop_description: value })} multiline />
+        <Input label="Business Hours" value={operational.business_hours} onChangeText={(value: string) => setOperational({ ...operational, business_hours: value })} />
+        <Input label="Delivery Radius (metres, max 5000)" value={operational.delivery_radius_meters} onChangeText={(value: string) => setOperational({ ...operational, delivery_radius_meters: value.replace(/[^0-9]/g, "") })} keyboardType="number-pad" />
+        <Input label="Price Display Preference" value={operational.price_display_preference} onChangeText={(value: string) => setOperational({ ...operational, price_display_preference: value })} />
+        <Input label="Shop Support Contact Preference" value={operational.shop_support_contact_preference} onChangeText={(value: string) => setOperational({ ...operational, shop_support_contact_preference: value })} />
+        <Input label="Preferred Language" value={operational.preferred_language} onChangeText={(value: string) => setOperational({ ...operational, preferred_language: value })} />
         <TouchableOpacity style={styles.primaryBtn} onPress={saveOperationalProfile} disabled={saving}>
           <Text style={styles.primaryText}>{saving ? "Saving..." : "Save Operational Profile"}</Text>
         </TouchableOpacity>

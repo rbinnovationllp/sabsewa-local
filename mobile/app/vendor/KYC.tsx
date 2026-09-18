@@ -199,7 +199,7 @@ function upsertDocument(documents: KycDocument[], next: KycDocument) {
 
 export default function VendorKycScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ vendor?: string }>();
+  const params = useLocalSearchParams<{ vendor?: string; registrationSubmitted?: string; reference?: string }>();
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [uploadingSectionId, setUploadingSectionId] = useState<string | null>(null);

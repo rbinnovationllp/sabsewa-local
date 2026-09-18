@@ -364,8 +364,8 @@ begin
     'vendor_onboarding_payment_ledger', public.ssl_count_by_uuid_column('vendor_onboarding_payment_ledger', 'vendor_id', candidate_vendor_ids),
     'vendor_wallets', public.ssl_count_by_uuid_column('vendor_wallets', 'vendor_id', candidate_vendor_ids),
     'vendor_wallet_ledger', public.ssl_count_by_uuid_column('vendor_wallet_ledger', 'vendor_id', candidate_vendor_ids),
-    'partner_commission_events', public.ssl_count_by_uuid_column('partner_commission_events', 'partner_id', candidate_partner_ids),
-    'partner_monthly_commission_statements', public.ssl_count_by_uuid_column('partner_monthly_commission_statements', 'partner_id', candidate_partner_ids)
+    'partner_commission_events', public.ssl_count_by_uuid_column('partner_commission_events', 'partner_application_id', candidate_partner_ids),
+    'partner_monthly_commission_statements', public.ssl_count_by_uuid_column('partner_monthly_commission_statements', 'partner_application_id', candidate_partner_ids)
   );
 
   deletion_plan := jsonb_build_object(
@@ -388,7 +388,7 @@ begin
     'partner_scoped_records', jsonb_build_object(
       'partner_kyc_documents', public.ssl_count_by_uuid_column('partner_kyc_documents', 'partner_application_id', candidate_partner_ids),
       'partner_payment_details', public.ssl_count_by_uuid_column('partner_payment_details', 'partner_application_id', candidate_partner_ids),
-      'partner_referred_vendors', public.ssl_count_by_uuid_column('partner_referred_vendors', 'partner_id', candidate_partner_ids),
+      'partner_referred_vendors', public.ssl_count_by_uuid_column('partner_referred_vendors', 'partner_application_id', candidate_partner_ids),
       'partner_applications', coalesce(array_length(candidate_partner_ids, 1), 0)
     ),
     'auth_cleanup_required_manual_review', jsonb_build_object(
@@ -574,7 +574,7 @@ begin
   report := report || jsonb_build_object('partner_kyc_documents_metadata_only', deleted_count);
   deleted_count := public.ssl_delete_by_uuid_column('partner_payment_details', 'partner_application_id', candidate_partner_ids);
   report := report || jsonb_build_object('partner_payment_details', deleted_count);
-  deleted_count := public.ssl_delete_by_uuid_column('partner_referred_vendors', 'partner_id', candidate_partner_ids);
+  deleted_count := public.ssl_delete_by_uuid_column('partner_referred_vendors', 'partner_application_id', candidate_partner_ids);
   report := report || jsonb_build_object('partner_referred_vendors', deleted_count);
   deleted_count := public.ssl_delete_by_uuid_column('partner_applications', 'id', candidate_partner_ids);
   report := report || jsonb_build_object('partner_applications', deleted_count);

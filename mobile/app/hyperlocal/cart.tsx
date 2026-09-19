@@ -85,7 +85,7 @@ export default function SabSewaLocalCartScreen() {
   const totalPayable = total + deliveryFee;
   const deliveryWindow = deliverySettings
     ? `${deliverySettings.estimated_delivery_min_minutes ?? 30}-${deliverySettings.estimated_delivery_max_minutes ?? 60} minutes`
-    : "Vendor estimate pending";
+    : t("cart.vendorEstimatePending");
 
   useEffect(() => {
     loadCartItems();
@@ -159,7 +159,7 @@ export default function SabSewaLocalCartScreen() {
       .not("daily_availability_status", "in", "(temporarily_unavailable,out_of_stock)");
 
     if (error) {
-      Alert.alert("Cart error", error.message);
+      Alert.alert(t("cart.errorTitle"), error.message);
       setLines([]);
       setLoading(false);
       return;
@@ -168,7 +168,7 @@ export default function SabSewaLocalCartScreen() {
     const availableIds = new Set((data || []).map((item: VendorItem) => item.id));
     const removedCount = itemIds.filter((id) => !availableIds.has(id)).length;
     if (removedCount > 0) {
-      Alert.alert("Cart updated", "Some items are not available from this vendor today and were removed.");
+      Alert.alert(t("cart.updatedTitle"), t("cart.itemsRemoved"));
     }
 
     setLines(
@@ -180,7 +180,7 @@ export default function SabSewaLocalCartScreen() {
         const quoteRequired = item.price_display_mode === "hide_price" || item.price_display_mode === "market_price" || item.daily_availability_status === "available_on_request";
         const price = quoteRequired ? 0 : Number(item.price);
         const priceLabel = quoteRequired
-          ? "Price pending - vendor confirmation required"
+          ? t("cart.pricePendingVendor")
           : `Rs ${price.toFixed(2)}${item.price_unit_label ? `/${item.price_unit_label}` : ""}`;
         return {
           ...item,
@@ -219,38 +219,38 @@ export default function SabSewaLocalCartScreen() {
     setNotice("");
 
     if (!user?.id) {
-      setNotice("Please login before placing an order. This protects order history, delivery details and credit records.");
-      Alert.alert("Login required", "Please login before placing an order.");
+      setNotice(t("cart.loginRequiredNotice"));
+      Alert.alert(t("cart.loginRequiredTitle"), t("cart.loginRequiredAlert"));
       return;
     }
 
     if (!vendorId || !terminalId) {
-      setNotice("Please select a nearby vendor first. The cart must be linked to one verified shop and terminal.");
-      Alert.alert("Missing shop", "Please select a vendor and terminal again.");
+      setNotice(t("cart.missingShopNotice"));
+      Alert.alert(t("cart.missingShopTitle"), t("cart.missingShopAlert"));
       return;
     }
 
     if (lines.length === 0) {
-      setNotice("Your cart is empty. Find a nearby vendor or place an order to add items first.");
-      Alert.alert("Empty cart", "Please add at least one item.");
+      setNotice(t("cart.emptyNotice"));
+      Alert.alert(t("cart.emptyTitle"), t("cart.emptyAlert"));
       return;
     }
 
     if (minimumDeliveryOrderValue > 0 && total < minimumDeliveryOrderValue) {
-      setNotice(`This vendor accepts delivery orders from Rs ${minimumDeliveryOrderValue.toFixed(2)}. Add Rs ${amountForMinimumDelivery.toFixed(2)} more to place this delivery order.`);
-      Alert.alert("Minimum delivery order", `Please add Rs ${amountForMinimumDelivery.toFixed(2)} more to meet this vendor's delivery minimum.`);
+      setNotice(t("cart.minimumDeliveryNotice", { minimum: `Rs ${minimumDeliveryOrderValue.toFixed(2)}`, amount: `Rs ${amountForMinimumDelivery.toFixed(2)}` }));
+      Alert.alert(t("cart.minimumDeliveryTitle"), t("cart.minimumDeliveryAlert", { amount: `Rs ${amountForMinimumDelivery.toFixed(2)}` }));
       return;
     }
 
     if (!address.trim() || !phone.trim()) {
-      setNotice("Enter delivery address and phone number before placing the order.");
-      Alert.alert("Delivery details required", "Please enter address and phone.");
+      setNotice(t("cart.deliveryDetailsNotice"));
+      Alert.alert(t("cart.deliveryDetailsTitle"), t("cart.deliveryDetailsAlert"));
       return;
     }
 
     if (!addressConfirmed) {
-      setNotice("Please confirm the delivery address before placing this order.");
-      Alert.alert("Confirm delivery address", "Review the selected delivery address and tick confirmation before placing the order.");
+      setNotice(t("cart.confirmAddressNotice"));
+      Alert.alert(t("cart.confirmAddressTitle"), t("cart.confirmAddressAlert"));
       return;
     }
 
@@ -296,24 +296,24 @@ export default function SabSewaLocalCartScreen() {
       const json = await response.json();
 
       if (!response.ok || !json.success) {
-        throw new Error(json.error || json.message || "Order failed");
+        throw new Error(json.error || json.message || t("cart.orderFailed"));
       }
 
       Alert.alert(
-        "Order placed",
+        t("cart.orderPlacedTitle"),
         paymentMethod === "credit"
-          ? "Your vendor-credit order has been sent to the vendor."
+          ? t("cart.creditOrderSent")
           : hasQuoteItems
-            ? "Your request has been sent to the vendor. The vendor must quote the hidden/market price before final acceptance."
-            : "Your order has been sent to the vendor. Pay the vendor directly using the payment method accepted by that vendor."
+            ? t("cart.quoteOrderSent")
+            : t("cart.directOrderSent")
       );
       router.replace({
         pathname: "/customer/track",
         params: { order_id: json.order?.id || json.order_id },
       });
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "Order failed. Please try again.");
-      Alert.alert("Order failed", error instanceof Error ? error.message : "Unknown error");
+      setNotice(error instanceof Error ? error.message : t("cart.orderFailedRetry"));
+      Alert.alert(t("cart.orderFailed"), error instanceof Error ? error.message : t("discovery.unknownError"));
     } finally {
       setPlacing(false);
     }
@@ -323,26 +323,26 @@ export default function SabSewaLocalCartScreen() {
     return (
       <View style={styles.center}>
         <ActivityIndicator />
-        <Text style={styles.muted}>Loading cart...</Text>
+        <Text style={styles.muted}>{t("cart.loading")}</Text>
       </View>
     );
   }
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.heading}>SabSewa Local Cart</Text>
+      <Text style={styles.heading}>{t("cart.title")}</Text>
 
       {lines.length === 0 ? (
         <View style={styles.emptyCard}>
-          <Text style={styles.emptyTitle}>Your cart is empty</Text>
+          <Text style={styles.emptyTitle}>{t("cart.emptyTitle")}</Text>
           <Text style={styles.emptyText}>
-            Search or speak what you need, choose a nearby verified shop and add available-today products before placing an order.
+            {t("cart.emptyText")}
           </Text>
           <TouchableOpacity style={styles.findBtn} onPress={() => router.push("/customer/discover" as any)}>
-            <Text style={styles.placeText}>Search nearby products</Text>
+            <Text style={styles.placeText}>{t("cart.searchNearbyProducts")}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.aiBtn} onPress={() => router.push("/customer/GeminiOrder" as any)}>
-            <Text style={styles.placeText}>Speak a shopping list</Text>
+            <Text style={styles.placeText}>{t("cart.speakShoppingList")}</Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -350,13 +350,13 @@ export default function SabSewaLocalCartScreen() {
           <View key={line.id} style={styles.line}>
             <View style={styles.lineHeader}>
               <Text style={styles.itemName}>{line.item_name}</Text>
-              <Text style={styles.price}>{line.price_quote_required ? "Price pending" : `Rs ${line.total.toFixed(2)}`}</Text>
+              <Text style={styles.price}>{line.price_quote_required ? t("cart.pricePending") : `Rs ${line.total.toFixed(2)}`}</Text>
             </View>
             <Text style={styles.muted}>
-              {[line.brand_name, line.variant_name, line.pack_size && line.pack_unit ? `${line.pack_size} ${line.pack_unit}` : ""].filter(Boolean).join(" - ") || line.generic_product_name || "Vendor listing"}
+              {[line.brand_name, line.variant_name, line.pack_size && line.pack_unit ? `${line.pack_size} ${line.pack_unit}` : ""].filter(Boolean).join(" - ") || line.generic_product_name || t("cart.vendorListing")}
             </Text>
             <Text style={styles.sourceText}>
-              Source: {line.order_input_source === "catalogue_image" ? "Selected from product image" : "Cart item"}{line.selected_variant ? ` | Variant: ${line.selected_variant}` : ""}
+              {t("cart.source")}: {line.order_input_source === "catalogue_image" ? t("cart.selectedFromProductImage") : t("cart.cartItem")}{line.selected_variant ? ` | ${t("cart.variant")}: ${line.selected_variant}` : ""}
             </Text>
             <Text style={styles.muted}>{line.price_label || `Rs ${line.price.toFixed(2)} each`}</Text>
 
@@ -383,15 +383,15 @@ export default function SabSewaLocalCartScreen() {
                   current.map((entry) => entry.id === line.id ? { ...entry, customer_note: value } : entry)
                 )
               }
-              placeholder="Optional item instruction, e.g. fresh, small size, ripe"
+              placeholder={t("cart.itemInstructionPlaceholder")}
             />
           </View>
         ))
       )}
 
       <View style={styles.summary}>
-        <Text style={styles.summaryLabel}>Order Total</Text>
-        <Text style={styles.summaryTotal}>{hasQuoteItems ? `Known: Rs ${total.toFixed(2)}` : `Rs ${total.toFixed(2)}`}</Text>
+        <Text style={styles.summaryLabel}>{t("cart.orderTotal")}</Text>
+        <Text style={styles.summaryTotal}>{hasQuoteItems ? `${t("cart.knownTotal")}: Rs ${total.toFixed(2)}` : `Rs ${total.toFixed(2)}`}</Text>
       </View>
       <View style={styles.deliveryBox}>
         <View style={styles.deliveryRow}>
@@ -408,12 +408,12 @@ export default function SabSewaLocalCartScreen() {
         </View>
         {minimumDeliveryOrderValue > 0 && amountForMinimumDelivery > 0 ? (
           <Text style={styles.minimumHint}>
-            Current cart value is Rs {total.toFixed(2)}. This vendor accepts delivery orders from Rs {minimumDeliveryOrderValue.toFixed(2)}. Add Rs {amountForMinimumDelivery.toFixed(2)} more to place this delivery order.
+            {t("cart.minimumHint", { total: `Rs ${total.toFixed(2)}`, minimum: `Rs ${minimumDeliveryOrderValue.toFixed(2)}`, amount: `Rs ${amountForMinimumDelivery.toFixed(2)}` })}
           </Text>
         ) : null}
         {amountForFreeDelivery > 0 ? (
           <Text style={styles.freeHint}>
-            Your current order value is Rs {total.toFixed(2)}. This vendor offers free delivery on orders of Rs {freeDeliveryMin.toFixed(2)} or above. A delivery charge of Rs {deliveryFee.toFixed(2)} may apply. {t("delivery.amountForFree", { amount: `Rs ${amountForFreeDelivery.toFixed(2)}` })}
+            {t("cart.freeDeliveryHint", { total: `Rs ${total.toFixed(2)}`, threshold: `Rs ${freeDeliveryMin.toFixed(2)}`, fee: `Rs ${deliveryFee.toFixed(2)}` })} {t("delivery.amountForFree", { amount: `Rs ${amountForFreeDelivery.toFixed(2)}` })}
           </Text>
         ) : null}
         <View style={styles.deliveryRow}>
@@ -422,7 +422,7 @@ export default function SabSewaLocalCartScreen() {
         </View>
         <View style={styles.deliveryRow}>
           <Text style={styles.deliveryLabel}>{t("delivery.provider")}</Text>
-          <Text style={styles.deliveryValue}>{deliverySettings?.delivery_provider_type === "authorised_provider" ? "Authorised provider" : t("delivery.vendorProvider")}</Text>
+          <Text style={styles.deliveryValue}>{deliverySettings?.delivery_provider_type === "authorised_provider" ? t("delivery.authorisedProvider") : t("delivery.vendorProvider")}</Text>
         </View>
         <View style={styles.deliveryRow}>
           <Text style={styles.deliveryLabel}>{t("delivery.totalPayable")}</Text>
@@ -432,7 +432,7 @@ export default function SabSewaLocalCartScreen() {
       </View>
       {hasQuoteItems ? (
         <Text style={styles.quoteNote}>
-          Some items need vendor quotation. The vendor will enter the proposed price, and you must approve it before the order becomes final.
+          {t("cart.quoteNote")}
         </Text>
       ) : null}
 
@@ -442,34 +442,34 @@ export default function SabSewaLocalCartScreen() {
         </View>
       ) : null}
 
-      <Text style={styles.label}>Delivery Address</Text>
+      <Text style={styles.label}>{t("cart.deliveryAddress")}</Text>
       <View style={styles.confirmBox}>
-        <Text style={styles.confirmTitle}>Deliver to:</Text>
-        <Text style={styles.confirmText}>{address.trim() || "No saved address selected"}</Text>
-        <Text style={styles.confirmHelp}>Change address below if this is not correct.</Text>
+        <Text style={styles.confirmTitle}>{t("cart.deliverTo")}</Text>
+        <Text style={styles.confirmText}>{address.trim() || t("cart.noSavedAddress")}</Text>
+        <Text style={styles.confirmHelp}>{t("cart.changeAddressHelp")}</Text>
       </View>
       <TextInput
         style={[styles.input, styles.textArea]}
         multiline
         value={address}
         onChangeText={setAddress}
-        placeholder="House number, street, landmark"
+        placeholder={t("cart.addressPlaceholder")}
       />
 
-      <Text style={styles.label}>Phone Number</Text>
+      <Text style={styles.label}>{t("auth.phoneNumber")}</Text>
       <TextInput
         style={styles.input}
         value={phone}
         onChangeText={setPhone}
         keyboardType="phone-pad"
-        placeholder="Customer phone number"
+        placeholder={t("cart.customerPhonePlaceholder")}
       />
 
       <TouchableOpacity style={styles.confirmRow} onPress={() => setAddressConfirmed((value) => !value)}>
         <View style={[styles.checkbox, addressConfirmed && styles.checkboxChecked]}>
           {addressConfirmed ? <Text style={styles.checkboxText}>OK</Text> : null}
         </View>
-        <Text style={styles.confirmRowText}>I confirm this delivery address and contact number for this order.</Text>
+        <Text style={styles.confirmRowText}>{t("cart.confirmDeliveryContact")}</Text>
       </TouchableOpacity>
 
       <TouchableOpacity
@@ -477,7 +477,7 @@ export default function SabSewaLocalCartScreen() {
         onPress={() => placeOrder("prepaid")}
         disabled={placing}
       >
-        <Text style={styles.placeText}>{placing ? "Placing..." : "Place Direct-Payment Order"}</Text>
+        <Text style={styles.placeText}>{placing ? t("cart.placing") : t("cart.placeDirectPaymentOrder")}</Text>
       </TouchableOpacity>
 
       <TouchableOpacity
@@ -485,10 +485,10 @@ export default function SabSewaLocalCartScreen() {
         onPress={() => placeOrder("credit")}
         disabled={placing}
       >
-        <Text style={styles.placeText}>Use Vendor-Approved Credit</Text>
+        <Text style={styles.placeText}>{t("cart.useVendorCredit")}</Text>
       </TouchableOpacity>
       <Text style={styles.creditNote}>
-        Order payment is a direct transaction between you and the selected vendor. SabSewa Local does not collect, settle, refund, or recover the order amount. Credit is offered only by the selected vendor; the app records the ledger only.
+        {t("cart.directPaymentDisclaimer")}
       </Text>
     </ScrollView>
   );

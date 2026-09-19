@@ -33,7 +33,7 @@ assertMatch("structured cart data is passed to final cart", discovery, /cartData
 
 assertMatch("final cart reads structured cart values", cart, /typeof selection === "object"/);
 assertMatch("final cart fetches master product id", cart, /master_product_id/);
-assertMatch("final cart displays image-selection source", cart, /Selected from product image/);
+assertMatch("final cart displays image-selection source", cart, /selectedFromProductImage/);
 assertMatch("final cart allows customer item instruction", cart, /customer_note/);
 assertMatch("final cart passes source to order API", cart, /order_input_source:\s*line\.order_input_source/);
 

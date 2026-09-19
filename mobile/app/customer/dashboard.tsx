@@ -4,18 +4,20 @@ import React, { useState } from "react";
 import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 
 import BrandHeader from "@/components/BrandHeader";
+import { useLanguage } from "@/providers/LanguageProvider";
 
 const CATEGORIES = [
-  { label: "Grocery", value: "kirana" },
-  { label: "Vegetables", value: "vegetables" },
-  { label: "Fruits", value: "fruits" },
-  { label: "Dairy", value: "dairy" },
-  { label: "Medical", value: "medical" },
-  { label: "Tiffin", value: "restaurant" },
+  { labelKey: "category.grocery", value: "kirana" },
+  { labelKey: "category.vegetables", value: "vegetables" },
+  { labelKey: "category.fruits", value: "fruits" },
+  { labelKey: "category.dairy", value: "dairy" },
+  { labelKey: "category.medical", value: "medical" },
+  { labelKey: "category.tiffin", value: "restaurant" },
 ];
 
 export default function CustomerDashboard() {
   const router = useRouter();
+  const { t } = useLanguage();
   const [query, setQuery] = useState("");
 
   function openDiscovery(params: Record<string, string> = {}) {
@@ -29,12 +31,12 @@ export default function CustomerDashboard() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <BrandHeader subtitle="Shop nearby verified stores" />
+      <BrandHeader subtitle={t("customerDashboard.brandSubtitle")} />
 
       <View style={styles.hero}>
-        <Text style={styles.eyebrow}>Customer Home</Text>
-        <Text style={styles.title}>What do you need today?</Text>
-        <Text style={styles.support}>Search products, choose a verified nearby vendor, then review and edit your final cart before ordering.</Text>
+        <Text style={styles.eyebrow}>{t("customerDashboard.eyebrow")}</Text>
+        <Text style={styles.title}>{t("customerDashboard.title")}</Text>
+        <Text style={styles.support}>{t("customerDashboard.support")}</Text>
         <View style={styles.searchRow}>
           <TextInput
             value={query}
@@ -42,8 +44,8 @@ export default function CustomerDashboard() {
             onSubmitEditing={submitSearch}
             returnKeyType="search"
             style={styles.searchInput}
-            placeholder="Search atta, cucumber, milk, medicine..."
-            accessibilityLabel="Search for nearby products"
+            placeholder={t("customerDashboard.searchPlaceholder")}
+            accessibilityLabel={t("customerDashboard.searchAccessibility")}
           />
           <TouchableOpacity accessibilityRole="button" style={styles.searchButton} onPress={submitSearch}>
             <Ionicons name="search" size={20} color="#ffffff" />
@@ -51,46 +53,46 @@ export default function CustomerDashboard() {
         </View>
         <TouchableOpacity style={styles.voiceButton} onPress={() => router.push("/customer/GeminiOrder" as any)}>
           <Ionicons name="mic" size={18} color="#ffffff" />
-          <Text style={styles.voiceText}>Type or speak a full order</Text>
+          <Text style={styles.voiceText}>{t("customerDashboard.voiceOrder")}</Text>
         </TouchableOpacity>
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Shop by Category</Text>
+        <Text style={styles.sectionTitle}>{t("customerDashboard.shopByCategory")}</Text>
         <View style={styles.categoryRow}>
           {CATEGORIES.map((category) => (
             <TouchableOpacity key={category.value} style={styles.categoryChip} onPress={() => openDiscovery({ category: category.value })}>
-              <Text style={styles.categoryText}>{category.label}</Text>
+              <Text style={styles.categoryText}>{t(category.labelKey)}</Text>
             </TouchableOpacity>
           ))}
         </View>
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Quick Actions</Text>
+        <Text style={styles.sectionTitle}>{t("customerDashboard.quickActions")}</Text>
         <View style={styles.actionGrid}>
-          <ActionCard icon="storefront" title="Nearby Stores" text="Use location or PIN" onPress={() => openDiscovery()} />
-          <ActionCard icon="cart" title="Cart" text="Edit items before order" onPress={() => router.push("/hyperlocal/cart" as any)} />
-          <ActionCard icon="navigate" title="Track Order" text="Follow live status" onPress={() => router.push("/customer/track" as any)} />
-          <ActionCard icon="person" title="My Profile" text="Account and address" onPress={() => router.push("/customer/profile" as any)} />
+          <ActionCard icon="storefront" title={t("customerDashboard.nearbyStores")} text={t("customerDashboard.useLocationPin")} onPress={() => openDiscovery()} />
+          <ActionCard icon="cart" title={t("customerDashboard.cart")} text={t("customerDashboard.editItems")} onPress={() => router.push("/hyperlocal/cart" as any)} />
+          <ActionCard icon="navigate" title={t("customerDashboard.trackOrder")} text={t("customerDashboard.followStatus")} onPress={() => router.push("/customer/track" as any)} />
+          <ActionCard icon="person" title={t("customerDashboard.myProfile")} text={t("customerDashboard.accountAddress")} onPress={() => router.push("/customer/profile" as any)} />
         </View>
       </View>
 
       <View style={styles.section}>
         <TouchableOpacity style={styles.supportButton} onPress={() => router.push("/customer/support" as any)}>
-          <Text style={styles.supportButtonText}>Help & Support</Text>
+          <Text style={styles.supportButtonText}>{t("customerDashboard.helpSupport")}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.complaintButton} onPress={() => router.push("/customer/complaint" as any)}>
-          <Text style={styles.complaintText}>Raise a Complaint</Text>
+          <Text style={styles.complaintText}>{t("customerDashboard.raiseComplaint")}</Text>
         </TouchableOpacity>
       </View>
 
       <View style={styles.bottomNav} accessibilityRole="tablist">
-        <CustomerNavItem icon="home" label="Home" active onPress={() => router.push("/customer/dashboard" as any)} />
-        <CustomerNavItem icon="search" label="Search" onPress={() => openDiscovery()} />
-        <CustomerNavItem icon="cart" label="Cart" onPress={() => router.push("/hyperlocal/cart" as any)} />
-        <CustomerNavItem icon="receipt" label="Orders" onPress={() => router.push("/customer/OrderHistory" as any)} />
-        <CustomerNavItem icon="person" label="Me" onPress={() => router.push("/customer/profile" as any)} />
+        <CustomerNavItem icon="home" label={t("common.home")} active onPress={() => router.push("/customer/dashboard" as any)} />
+        <CustomerNavItem icon="search" label={t("common.search")} onPress={() => openDiscovery()} />
+        <CustomerNavItem icon="cart" label={t("customerDashboard.cart")} onPress={() => router.push("/hyperlocal/cart" as any)} />
+        <CustomerNavItem icon="receipt" label={t("customerDashboard.orders")} onPress={() => router.push("/customer/OrderHistory" as any)} />
+        <CustomerNavItem icon="person" label={t("customerDashboard.me")} onPress={() => router.push("/customer/profile" as any)} />
       </View>
     </ScrollView>
   );

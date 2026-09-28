@@ -2,6 +2,7 @@
 import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { useAuth } from "@/providers/AuthProvider";
 import { apiUrl } from "@/lib/backend";
+import { supabase } from "@/lib/supabase";
 
 export default function CustomerCreditLedgerScreen() {
   const { user } = useAuth();
@@ -12,6 +13,13 @@ export default function CustomerCreditLedgerScreen() {
   const [references, setReferences] = useState<Record<string, string>>({});
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState<string | null>(null);
+
+  async function authenticatedHeaders() {
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    if (!token) throw new Error("Your customer session has expired. Please sign in again.");
+    return { "Content-Type": "application/json", Authorization: `Bearer ${token}` };
+  }
 
   useEffect(() => {
     loadCredit();
@@ -24,7 +32,9 @@ export default function CustomerCreditLedgerScreen() {
     }
     setLoading(true);
     try {
-      const response = await fetch(apiUrl(`/api/settlement/customer/${user.id}/credit`));
+      const response = await fetch(apiUrl(`/api/settlement/customer/${user.id}/credit`), {
+        headers: await authenticatedHeaders(),
+      });
       const json = await response.json();
       if (!response.ok || !json.success) throw new Error(json.error || "Unable to load credit ledger.");
       setAccounts(json.accounts || []);
@@ -46,7 +56,7 @@ export default function CustomerCreditLedgerScreen() {
     try {
       const response = await fetch(apiUrl(`/api/settlement/customer/${user?.id}/credit/${account.id}/repayment`), {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: await authenticatedHeaders(),
         body: JSON.stringify({
           amount: enteredAmount,
           payment_method: "vendor_qr",
@@ -91,6 +101,7 @@ export default function CustomerCreditLedgerScreen() {
           <View key={account.id} style={styles.card}>
             <Text style={styles.vendorName}>{account.vendor?.shop_name || account.vendor?.vendor_name || "Vendor"}</Text>
             <Text style={styles.amount}>Outstanding: Rs {Number(account.outstanding_balance || 0).toFixed(2)}</Text>
+            <Text style={styles.advance}>Advance with this vendor: Rs {Number(account.advance_balance || 0).toFixed(2)}</Text>
             <Text style={styles.muted}>Due date: {account.due_date || "Not set"}</Text>
 
             {account.qr_code?.public_url ? (
@@ -151,6 +162,7 @@ const styles = StyleSheet.create({
   card: { borderWidth: 1, borderColor: "#e5e7eb", borderRadius: 8, padding: 14, marginBottom: 16, backgroundColor: "#fff" },
   vendorName: { fontSize: 18, fontWeight: "900", color: "#111827" },
   amount: { fontSize: 20, fontWeight: "900", color: "#166534", marginTop: 8 },
+  advance: { fontSize: 16, fontWeight: "800", color: "#047857", marginTop: 4 },
   muted: { color: "#6b7280", marginTop: 5 },
   qrBox: { alignItems: "center", backgroundColor: "#ecfdf5", borderRadius: 8, padding: 12, marginVertical: 12 },
   qrImage: { width: 220, height: 220, backgroundColor: "#fff" },

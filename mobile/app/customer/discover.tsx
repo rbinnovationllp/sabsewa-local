@@ -16,6 +16,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { apiUrl } from "@/lib/backend";
 import { useAuth } from "@/providers/AuthProvider";
 import { useLanguage } from "@/providers/LanguageProvider";
+import { ONLINE_PHYSICAL_STORE_LABEL } from "@/lib/storeTerminology";
 
 const CATEGORIES = [
   { key: "kirana", labelKey: "category.groceryKirana" },
@@ -395,6 +396,7 @@ export default function CustomerVendorDiscoveryScreen() {
             )}
             <View style={{ flex: 1 }}>
               <Text style={styles.shopName}>{vendor.shop_name}</Text>
+              <Text style={styles.storeModeLabel}>{ONLINE_PHYSICAL_STORE_LABEL}</Text>
               <Text style={styles.vendorMeta}>{vendor.category} | {vendor.distance_label || t("discovery.nearby")}</Text>
               {vendor.verified_vendor || vendor.verification_status === "kyc_verified" ? (
                 <Text style={styles.verifiedBadge}>{t("discovery.verifiedVendor")}</Text>
@@ -544,6 +546,7 @@ const styles = StyleSheet.create({
   vendorPhotoPlaceholder: { width: 96, height: 72, borderRadius: 8, backgroundColor: "#ecfeff", borderWidth: 1, borderColor: "#99f6e4", alignItems: "center", justifyContent: "center" },
   verifiedBadge: { alignSelf: "flex-start", marginTop: 5, color: "#166534", backgroundColor: "#dcfce7", borderWidth: 1, borderColor: "#86efac", borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3, fontSize: 11, fontWeight: "900", overflow: "hidden" },
   shopName: { fontSize: 18, fontWeight: "900", color: "#0f172a" },
+  storeModeLabel: { color: "#0f766e", fontSize: 12, fontWeight: "800", marginTop: 2 },
   vendorMeta: { color: "#64748b", marginTop: 2, fontSize: 13 },
   status: { fontWeight: "900" },
   open: { color: "#16a34a" },

@@ -4,10 +4,32 @@ import { supabase } from "../connection.js";
 import { recordCreditPayment, recordCreditPurchase, upsertCreditAccount } from "../credit/vendorCreditService.js";
 import { writeOrderAuditLog } from "../audit/orderAudit.js";
 import { notifyCustomerPaymentConfirmed } from "../notifications/dispatchNotificationService.js";
+import { requireUserJwt } from "../security/apiSecurity.js";
+import { deductConfirmedOrderFee } from "../securityWallet/securityWalletService.js";
 
 const router = express.Router();
+const requireAuth = requireUserJwt(supabase);
 const PAID_METHODS = new Set(["cash", "vendor_qr", "bank_transfer", "other_digital"]);
 const PROFILE_METHODS = new Set(["cash", "vendor_qr", "bank_transfer", "other_digital"]);
+
+function requireOwnCustomer(req, res, next) {
+  if (req.auth.user_id !== req.params.customer_id) {
+    return res.status(403).json({ success: false, error: "Customers may access only their own vendor-credit records." });
+  }
+  return next();
+}
+
+async function requireOwnedVendor(req, res, next) {
+  try {
+    const { data, error } = await supabase.from("vendors").select("id")
+      .eq("id", req.params.vendor_id).eq("owner_user_id", req.auth.user_id).maybeSingle();
+    if (error) throw error;
+    if (!data) return res.status(403).json({ success: false, error: "This vendor account does not belong to the authenticated user." });
+    return next();
+  } catch (error) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+}
 
 function receiptNumber(orderId) {
   return `SSL-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${String(orderId).slice(0, 8).toUpperCase()}`;
@@ -59,15 +81,14 @@ async function getPrimaryQr(vendorId) {
 }
 
 
-router.get("/customer/:customer_id/credit", async (req, res) => {
+router.get("/customer/:customer_id/credit", requireAuth, requireOwnCustomer, async (req, res) => {
   try {
     const customerId = req.params.customer_id;
     const { data: accounts, error: accountError } = await supabase
       .from("vendor_credit_accounts")
       .select("*")
       .eq("customer_id", customerId)
-      .gt("outstanding_balance", 0)
-      .is("archived_at", null)
+      .or("outstanding_balance.gt.0,advance_balance.gt.0")
       .order("updated_at", { ascending: false });
     if (accountError) throw accountError;
 
@@ -99,7 +120,7 @@ router.get("/customer/:customer_id/credit", async (req, res) => {
   }
 });
 
-router.post("/customer/:customer_id/credit/:account_id/repayment", async (req, res) => {
+router.post("/customer/:customer_id/credit/:account_id/repayment", requireAuth, requireOwnCustomer, async (req, res) => {
   try {
     const { amount, payment_reference, customer_note, order_id, payment_method = "vendor_qr" } = req.body;
     const paidAmount = Number(amount);
@@ -153,7 +174,7 @@ router.post("/customer/:customer_id/credit/:account_id/repayment", async (req, r
   }
 });
 
-router.post("/vendor/:vendor_id/repayments/:request_id/verify", async (req, res) => {
+router.post("/vendor/:vendor_id/repayments/:request_id/verify", requireAuth, requireOwnedVendor, async (req, res) => {
   try {
     const { approved = true, vendor_user_id, vendor_note } = req.body;
     const { data: request, error: requestError } = await supabase
@@ -165,16 +186,6 @@ router.post("/vendor/:vendor_id/repayments/:request_id/verify", async (req, res)
     if (requestError || !request) return res.status(404).json({ success: false, error: "Repayment request not found." });
     if (request.status !== "submitted") return res.status(409).json({ success: false, error: "This repayment request has already been reviewed." });
 
-    const now = new Date().toISOString();
-    const nextStatus = approved ? "vendor_confirmed" : "rejected";
-    const { data: updatedRequest, error: updateError } = await supabase
-      .from("vendor_credit_repayment_requests")
-      .update({ status: nextStatus, verified_by: vendor_user_id || null, verified_at: now, vendor_note: vendor_note || null })
-      .eq("id", request.id)
-      .select()
-      .single();
-    if (updateError) throw updateError;
-
     let account = null;
     if (approved) {
       account = await recordCreditPayment({
@@ -183,8 +194,20 @@ router.post("/vendor/:vendor_id/repayments/:request_id/verify", async (req, res)
         amount: Number(request.amount || 0),
         vendorUserId: vendor_user_id || null,
         notes: vendor_note || `Vendor confirmed customer QR repayment reference ${request.payment_reference || request.id}.`,
+        idempotencyKey: `repayment-request:${request.id}`,
       });
     }
+
+    const now = new Date().toISOString();
+    const nextStatus = approved ? "vendor_confirmed" : "rejected";
+    const { data: updatedRequest, error: updateError } = await supabase
+      .from("vendor_credit_repayment_requests")
+      .update({ status: nextStatus, verified_by: req.auth.user_id, verified_at: now, vendor_note: vendor_note || null })
+      .eq("id", request.id)
+      .eq("status", "submitted")
+      .select()
+      .single();
+    if (updateError) throw updateError;
 
     return res.json({ success: true, repayment_request: updatedRequest, account });
   } catch (error) {
@@ -535,7 +558,17 @@ router.post("/orders/:order_id/settle", async (req, res) => {
       p_order_id: order.id,
       p_actor_user_id: actor_user_id || null,
     });
-    const platformCharge = platformChargeError ? { error: platformChargeError.message } : platformChargeData;
+    let walletDeduction = null;
+    if (!platformChargeError) {
+      try {
+        walletDeduction = await deductConfirmedOrderFee({ vendorId: order.vendor_id, orderId: order.id });
+      } catch (deductionError) {
+        walletDeduction = { error: deductionError.message };
+      }
+    }
+    const platformCharge = platformChargeError
+      ? { error: platformChargeError.message }
+      : { charge: platformChargeData, security_wallet: walletDeduction };
 
     let paymentNotification = null;
     try {

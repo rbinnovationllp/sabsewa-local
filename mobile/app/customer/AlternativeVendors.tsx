@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { apiUrl } from "@/lib/backend";
 import { useCart } from "@/providers/CartContext";
+import { ONLINE_PHYSICAL_STORE_LABEL } from "@/lib/storeTerminology";
 
 export default function AlternativeVendorsScreen() {
   const router = useRouter();
@@ -51,6 +52,7 @@ export default function AlternativeVendorsScreen() {
           <View key={vendor.id} style={styles.vendorCard}>
             <View>
               <Text style={styles.shopName}>{vendor.shop_name}</Text>
+              <Text style={styles.storeModeLabel}>{ONLINE_PHYSICAL_STORE_LABEL}</Text>
               <Text style={styles.shopMeta}>{vendor.category} • ⚡ {vendor.distance_label || "Within 1 km"}</Text>
               <Text style={styles.shopMeta}>⭐ {Number(vendor.rating || 4.5).toFixed(1)} • Approx. {vendor.estimated_fulfilment_minutes || 15} mins delivery</Text>
             </View>
@@ -76,6 +78,7 @@ const styles = StyleSheet.create({
   sectionHeader: { fontSize: 18, fontWeight: "800", color: "#0f172a", marginBottom: 12 },
   vendorCard: { borderWidth: 1, borderColor: "#e2e8f0", padding: 14, borderRadius: 10, marginBottom: 12, backgroundColor: "#f8fafc" },
   shopName: { fontSize: 16, fontWeight: "900", color: "#0f172a" },
+  storeModeLabel: { color: "#0f766e", fontSize: 12, fontWeight: "800", marginTop: 2 },
   shopMeta: { fontSize: 12, color: "#64748b", marginTop: 2 },
   selectBtn: { backgroundColor: "#0f766e", padding: 12, borderRadius: 8, marginTop: 10, alignItems: "center" },
   selectBtnText: { color: "#fff", fontWeight: "800", fontSize: 13 },

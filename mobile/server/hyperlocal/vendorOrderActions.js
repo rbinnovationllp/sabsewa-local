@@ -3,6 +3,7 @@ import { supabase } from "../connection.js";
 import { writeOrderAuditLog } from "../audit/orderAudit.js";
 import { notifyCustomerOrderDispatched } from "../notifications/dispatchNotificationService.js";
 import { recordPartnerCommissionForVendorRevenue } from "../partner/partnerCommissionService.js";
+import { deductConfirmedOrderFee } from "../securityWallet/securityWalletService.js";
 
 const router = express.Router();
 
@@ -817,6 +818,14 @@ router.post("/status", verifyVendor, async (req, res) => {
       p_actor_user_id: actor_user_id || null,
     });
     platformCharge = chargeError ? { error: chargeError.message } : chargeData;
+    if (!chargeError) {
+      try {
+        const wallet = await deductConfirmedOrderFee({ vendorId: req.order.vendor_id, orderId: order_id });
+        platformCharge = { platform_fee: chargeData, security_wallet: wallet };
+      } catch (deductionError) {
+        platformCharge = { platform_fee: chargeData, security_wallet_error: deductionError.message };
+      }
+    }
     if (!chargeError && chargeData) {
       try {
         const fee = firstPlatformCharge(chargeData);
@@ -829,9 +838,9 @@ router.post("/status", verifyVendor, async (req, res) => {
           gstAmount: 0,
           metadata: { order_id, platform_fee: fee || chargeData },
         });
-        platformCharge = { platform_fee: chargeData, partner_commission: partnerCommission };
+        platformCharge = { ...platformCharge, platform_fee: chargeData, partner_commission: partnerCommission };
       } catch (commissionError) {
-        platformCharge = { platform_fee: chargeData, partner_commission_error: commissionError?.message || String(commissionError) };
+        platformCharge = { ...platformCharge, platform_fee: chargeData, partner_commission_error: commissionError?.message || String(commissionError) };
       }
     }
   }

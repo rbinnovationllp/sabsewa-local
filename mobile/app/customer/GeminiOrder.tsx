@@ -16,6 +16,7 @@ import { useAuth } from "@/providers/AuthProvider";
 import { useLanguage } from "@/providers/LanguageProvider";
 import { apiUrl } from "@/lib/backend";
 import { supabase } from "@/lib/supabase";
+import { ONLINE_PHYSICAL_STORE_LABEL } from "@/lib/storeTerminology";
 import { parseOrderWithGemini, recognizeCustomerProductImageWithGemini } from "@/services/gemini";
 
 const CATEGORIES = [
@@ -514,6 +515,7 @@ export default function GeminiOrderScreen() {
               {shop.open_now ? "Open" : "Closed"}
             </Text>
           </View>
+          <Text style={styles.storeModeLabel}>{ONLINE_PHYSICAL_STORE_LABEL}</Text>
           <Text style={styles.meta}>{shop.category} | {shop.locality || "Nearby"} | {shop.distance_label || "Nearby"} | Verified</Text>
           <Text style={styles.meta}>{shop.delivery_terms || "Delivery terms confirmed by shop"}</Text>
           <Text style={styles.productsTitle}>Currently available</Text>
@@ -628,6 +630,7 @@ const styles = StyleSheet.create({
   shopCard: { borderWidth: 1, borderColor: "#e5e7eb", borderRadius: 10, padding: 14, marginBottom: 12, backgroundColor: "#fff" },
   shopHeader: { flexDirection: "row", justifyContent: "space-between", gap: 12 },
   shopName: { flex: 1, fontSize: 17, fontWeight: "900" },
+  storeModeLabel: { color: "#0f766e", fontSize: 12, fontWeight: "800", marginBottom: 3 },
   badge: { fontWeight: "900" },
   openBadge: { color: "#16a34a" },
   closedBadge: { color: "#dc2626" },

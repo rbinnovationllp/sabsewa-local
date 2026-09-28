@@ -122,7 +122,8 @@ export async function assertCreditOrderAllowed({ vendorId, customerId, orderAmou
 
   const balance = Number(account.outstanding_balance || 0);
   const limit = Number(account.credit_limit || 0);
-  const nextBalance = balance + Number(orderAmount);
+  const advance = Number(account.advance_balance || 0);
+  const nextBalance = balance + Math.max(Number(orderAmount) - advance, 0);
 
   if (nextBalance > limit) {
     await markCreditStatus(account, "exhausted", "Available credit exhausted.");
@@ -141,52 +142,22 @@ export async function assertCreditOrderAllowed({ vendorId, customerId, orderAmou
 }
 
 export async function recordCreditPurchase({ vendorId, customerId, orderId, amount, vendorUserId }) {
-  const account = await getCreditAccount(vendorId, customerId);
-  if (!account) throw new Error("Credit account not found.");
-
-  const balanceBefore = Number(account.outstanding_balance || 0);
-  const balanceAfter = balanceBefore + Number(amount);
-  const dueDate = account.due_date || addDays(account.payment_due_days);
-  const status = balanceAfter >= Number(account.credit_limit || 0) ? "exhausted" : "active";
-
-  const { data, error } = await supabase
-    .from("vendor_credit_accounts")
-    .update({
-      outstanding_balance: balanceAfter,
-      due_date: dueDate,
-      status,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", account.id)
-    .select()
-    .single();
-
-  if (error) throw error;
-
-  await writeCreditTransaction({
-    account: data,
-    orderId,
-    transactionType: "credit_purchase",
-    amount: Number(amount),
-    balanceBefore,
-    balanceAfter,
-    dueDate,
-    vendorUserId,
-    notes: "Vendor-approved customer credit purchase recorded.",
-    metadata: {
-      platform_role: "record_keeper_only",
-      recovery_responsibility: "vendor_and_customer_only",
-    },
+  const { data: result, error } = await supabase.rpc("record_vendor_credit_purchase_atomic", {
+    p_vendor_id: vendorId,
+    p_customer_id: customerId,
+    p_order_id: orderId,
+    p_amount: Number(amount),
+    p_vendor_user_id: vendorUserId || null,
   });
-
-  if (status === "exhausted") await queueCreditReminder(data, "exhausted");
-  return data;
+  if (error) throw error;
+  const account = await getCreditAccount(vendorId, customerId);
+  if (Number(account?.outstanding_balance || 0) >= Number(account?.credit_limit || 0)) {
+    await queueCreditReminder(account, "exhausted");
+  }
+  return { ...account, accounting_result: result };
 }
 
-export async function recordCreditPayment({ vendorId, customerId, amount, vendorUserId, notes }) {
-  const account = await getCreditAccount(vendorId, customerId);
-  if (!account) throw new Error("Credit account not found.");
-
+export async function recordCreditPayment({ vendorId, customerId, amount, vendorUserId, notes, idempotencyKey }) {
   const paidAmount = Number(amount);
   if (!paidAmount || paidAmount <= 0) {
     const error = new Error("Payment amount is required.");
@@ -194,47 +165,17 @@ export async function recordCreditPayment({ vendorId, customerId, amount, vendor
     throw error;
   }
 
-  const balanceBefore = Number(account.outstanding_balance || 0);
-  const balanceAfter = Math.max(balanceBefore - paidAmount, 0);
-  const nextStatus = account.status === "suspended" ? "suspended" : "active";
-
-  const { data, error } = await supabase
-    .from("vendor_credit_accounts")
-    .update({
-      outstanding_balance: balanceAfter,
-      due_date: balanceAfter > 0 ? account.due_date : null,
-      status: nextStatus,
-      updated_at: new Date().toISOString(),
-      ...(balanceAfter === 0 ? {
-        due_date: null,
-        status: "closed",
-        archived_at: new Date().toISOString(),
-        settled_at: new Date().toISOString(),
-        privacy_redacted_at: new Date().toISOString(),
-        archive_reason: "Credit balance fully paid; customer operational details redacted and accounting transactions retained.",
-        customer_name: null,
-        customer_mobile: null,
-        customer_address: null,
-      } : {}),
-    })
-    .eq("id", account.id)
-    .select()
-    .single();
-
-  if (error) throw error;
-
-  await writeCreditTransaction({
-    account: data,
-    transactionType: "payment_recorded",
-    amount: -paidAmount,
-    balanceBefore,
-    balanceAfter,
-    vendorUserId,
-    notes: notes || "Payment recorded by vendor.",
-    metadata: { recorded_by_vendor: true, auto_archived_after_full_payment: balanceAfter === 0 },
+  const { data: result, error } = await supabase.rpc("record_vendor_credit_payment_atomic", {
+    p_vendor_id: vendorId,
+    p_customer_id: customerId,
+    p_amount: paidAmount,
+    p_vendor_user_id: vendorUserId || null,
+    p_notes: notes || "Payment recorded by vendor.",
+    p_idempotency_key: idempotencyKey || null,
   });
-
-  return data;
+  if (error) throw error;
+  const account = await getCreditAccount(vendorId, customerId);
+  return { ...account, accounting_result: result };
 }
 
 export async function suspendCredit({ vendorId, customerId, vendorUserId, reason }) {

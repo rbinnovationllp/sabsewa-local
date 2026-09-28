@@ -8,6 +8,7 @@ import LanguageSelector from "@/components/LanguageSelector";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/AuthProvider";
 import { useLanguage } from "@/providers/LanguageProvider";
+import { ONLINE_PHYSICAL_STORE_LABEL } from "@/lib/storeTerminology";
 
 function sanitizeGreetingName(value?: string | null) {
   const name = String(value || "")
@@ -327,6 +328,7 @@ export default function HomeScreen() {
           <View style={styles.productDetails}>
             <TouchableOpacity onPress={handleShowcaseProductSelect} accessibilityRole="button" accessibilityLabel="Select Crisp Fresh Cucumber product card">
               <Text style={styles.vendorName}>Shree Ram Veggies • ⭐ 4.8</Text>
+              <Text style={styles.storeModeLabel}>{ONLINE_PHYSICAL_STORE_LABEL}</Text>
               <Text style={styles.productTitle}>Crisp Fresh Cucumber (खीरा)</Text>
             </TouchableOpacity>
             <Text style={styles.freshnessTag}>🌱 Fresh Harvest Today</Text>
@@ -508,6 +510,7 @@ const styles = StyleSheet.create({
   // Showcase Card Styles
   showcaseSection: { marginBottom: 16 },
   showcaseTitle: { fontSize: 18, fontWeight: "800", color: "#1f2937", marginBottom: 10 },
+  storeModeLabel: { color: "#0f766e", fontSize: 12, fontWeight: "800", marginTop: 2 },
   productCard: {
     flexDirection: "row",
     borderWidth: 1,

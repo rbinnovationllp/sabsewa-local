@@ -1,5 +1,6 @@
 import express from "express";
 import { supabase } from "../connection.js";
+import { requireRole, requireUserJwt } from "../security/apiSecurity.js";
 import {
   queueCreditReminder,
   recordCreditPayment,
@@ -8,8 +9,26 @@ import {
 } from "./vendorCreditService.js";
 
 const router = express.Router();
+const requireAuth = requireUserJwt(supabase);
+const companyRoles = ["admin", "company_admin", "super_admin", "master_admin", "finance_admin"];
 
-router.get("/:vendor_id", async (req, res) => {
+async function requireOwnedVendor(req, res, next) {
+  try {
+    const { data, error } = await supabase
+      .from("vendors")
+      .select("id")
+      .eq("id", req.params.vendor_id)
+      .eq("owner_user_id", req.auth.user_id)
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) return res.status(403).json({ success: false, error: "This vendor account does not belong to the authenticated user." });
+    return next();
+  } catch (error) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+}
+
+router.get("/:vendor_id", requireAuth, requireOwnedVendor, async (req, res) => {
   try {
     const vendorId = req.params.vendor_id;
     const includeArchive = req.query.include_archive === "true";
@@ -50,7 +69,7 @@ router.get("/:vendor_id", async (req, res) => {
   }
 });
 
-router.post("/:vendor_id/account", async (req, res) => {
+router.post("/:vendor_id/account", requireAuth, requireOwnedVendor, async (req, res) => {
   try {
     const account = await upsertCreditAccount({
       vendorId: req.params.vendor_id,
@@ -72,7 +91,7 @@ router.post("/:vendor_id/account", async (req, res) => {
   }
 });
 
-router.post("/:vendor_id/payment", async (req, res) => {
+router.post("/:vendor_id/payment", requireAuth, requireOwnedVendor, async (req, res) => {
   try {
     const account = await recordCreditPayment({
       vendorId: req.params.vendor_id,
@@ -80,6 +99,7 @@ router.post("/:vendor_id/payment", async (req, res) => {
       amount: req.body.amount,
       vendorUserId: req.body.vendor_user_id,
       notes: req.body.notes,
+      idempotencyKey: req.body.idempotency_key,
       customerName: req.body.customer_name,
       customerMobile: req.body.customer_mobile,
       customerAddress: req.body.customer_address,
@@ -92,7 +112,7 @@ router.post("/:vendor_id/payment", async (req, res) => {
   }
 });
 
-router.post("/:vendor_id/suspend", async (req, res) => {
+router.post("/:vendor_id/suspend", requireAuth, requireOwnedVendor, async (req, res) => {
   try {
     const account = await suspendCredit({
       vendorId: req.params.vendor_id,
@@ -107,7 +127,7 @@ router.post("/:vendor_id/suspend", async (req, res) => {
   }
 });
 
-router.post("/:vendor_id/reminder", async (req, res) => {
+router.post("/:vendor_id/reminder", requireAuth, requireOwnedVendor, async (req, res) => {
   try {
     const { customer_id, reminder_type = "due_soon" } = req.body;
     if (!customer_id) return res.status(400).json({ success: false, error: "customer_id is required." });
@@ -133,40 +153,14 @@ router.post("/:vendor_id/reminder", async (req, res) => {
   }
 });
 
-router.post("/:vendor_id/settle", async (req, res) => {
-  try {
-    const { customer_id, settlement_amount, acknowledgement } = req.body;
-
-    if (!customer_id || !Number(settlement_amount)) {
-      return res.status(400).json({ success: false, error: "Customer and settlement amount are required." });
-    }
-
-    const { data: account, error } = await supabase
-      .from("vendor_credit_accounts")
-      .update({
-        outstanding_balance: 0,
-        status: "settled",
-        settlement_status: "settled",
-        settled_at: new Date().toISOString(),
-        settlement_amount: Number(settlement_amount),
-        settlement_acknowledgement: acknowledgement || null,
-        archived_at: new Date().toISOString(),
-        archive_reason: "Credit account settled and moved to read-only archive; transaction history retained.",
-        updated_at: new Date().toISOString(),
-      })
-      .eq("vendor_id", req.params.vendor_id)
-      .eq("customer_id", customer_id)
-      .select()
-      .single();
-
-    if (error) throw error;
-    return res.json({ success: true, account });
-  } catch (error) {
-    return res.status(error.statusCode || 500).json({ success: false, error: error.message });
-  }
+router.post("/:vendor_id/settle", requireAuth, requireOwnedVendor, async (req, res) => {
+  return res.status(410).json({
+    success: false,
+    error: "The legacy direct-settlement endpoint is retired. Record the actual received amount through the idempotent payment endpoint.",
+  });
 });
 
-router.post("/admin/recovery/credit-accounts", async (req, res) => {
+router.post("/admin/recovery/credit-accounts", requireAuth, requireRole(companyRoles), async (req, res) => {
   try {
     const {
       admin_user_id,

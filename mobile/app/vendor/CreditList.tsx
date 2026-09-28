@@ -33,6 +33,7 @@ type CreditAccount = {
   credit_limit: number;
   outstanding_balance: number;
   available_credit: number;
+  advance_balance?: number;
   due_date?: string | null;
   status: string;
 };
@@ -55,6 +56,13 @@ export default function CreditListScreen() {
   const [notes, setNotes] = useState("");
   const [search, setSearch] = useState("");
   const [saving, setSaving] = useState(false);
+
+  async function authenticatedHeaders() {
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    if (!token) throw new Error("Your vendor session has expired. Please sign in again.");
+    return { "Content-Type": "application/json", Authorization: `Bearer ${token}` };
+  }
 
   const balances = useMemo(
     () => [...accounts].sort((a, b) => Number(b.outstanding_balance) - Number(a.outstanding_balance)),
@@ -136,7 +144,9 @@ export default function CreditListScreen() {
   async function loadLedger(nextVendorId = vendorId) {
     if (!nextVendorId) return;
 
-    const response = await fetch(apiUrl(`/api/vendor/credit/${nextVendorId}`));
+    const response = await fetch(apiUrl(`/api/vendor/credit/${nextVendorId}`), {
+      headers: await authenticatedHeaders(),
+    });
     const json = await response.json();
 
     if (!response.ok || !json.success) {
@@ -151,6 +161,7 @@ export default function CreditListScreen() {
       credit_limit: Number(account.credit_limit || 0),
       outstanding_balance: Number(account.outstanding_balance || 0),
       available_credit: Number(account.available_credit || 0),
+      advance_balance: Number(account.advance_balance || 0),
     })));
     setEntries((json.transactions || []).map((entry: any) => ({
       ...entry,
@@ -171,7 +182,7 @@ export default function CreditListScreen() {
     setSaving(true);
     const response = await fetch(apiUrl(`/api/vendor/credit/${vendorId}/account`), {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: await authenticatedHeaders(),
       body: JSON.stringify({
         customer_id: customerId.trim(),
         credit_limit: limit,
@@ -208,12 +219,13 @@ export default function CreditListScreen() {
     setSaving(true);
     const response = await fetch(apiUrl(`/api/vendor/credit/${vendorId}/payment`), {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: await authenticatedHeaders(),
       body: JSON.stringify({
         customer_id: customerId.trim(),
         amount: paymentAmount,
         vendor_user_id: user?.id,
         notes: notes.trim() || `Payment received: Rs ${paymentAmount}`,
+        idempotency_key: `vendor-payment:${vendorId}:${customerId.trim()}:${Date.now()}`,
       }),
     });
     const json = await response.json();
@@ -235,7 +247,7 @@ export default function CreditListScreen() {
     if (!vendorId) return;
     const response = await fetch(apiUrl(`/api/vendor/credit/${vendorId}/suspend`), {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: await authenticatedHeaders(),
       body: JSON.stringify({
         customer_id: nextCustomerId,
         vendor_user_id: user?.id,
@@ -255,7 +267,7 @@ export default function CreditListScreen() {
     if (!vendorId) return;
     const response = await fetch(apiUrl(`/api/settlement/vendor/${vendorId}/repayments/${requestId}/verify`), {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: await authenticatedHeaders(),
       body: JSON.stringify({
         approved,
         vendor_user_id: user?.id,
@@ -274,7 +286,7 @@ export default function CreditListScreen() {
     if (!vendorId) return;
     const response = await fetch(apiUrl(`/api/vendor/credit/${vendorId}/reminder`), {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: await authenticatedHeaders(),
       body: JSON.stringify({ customer_id: nextCustomerId, reminder_type: "due_soon" }),
     });
     const json = await response.json();
@@ -419,6 +431,7 @@ export default function CreditListScreen() {
             <Text>Customer ID: {balance.customer_id}</Text>
             <Text>Limit: Rs {balance.credit_limit.toFixed(2)}</Text>
             <Text>Available: Rs {balance.available_credit.toFixed(2)}</Text>
+            <Text>Customer advance with this vendor: Rs {Number(balance.advance_balance || 0).toFixed(2)}</Text>
             <Text>Due Date: {balance.due_date || "No dues"}</Text>
             <Text>Status: {balance.status}</Text>
             <Text

@@ -7,6 +7,7 @@ import { requireUserJwt } from "../security/apiSecurity.js";
 import { requireCompanyAdmin, writeAdminAudit } from "../company/adminProfileService.js";
 
 const router = express.Router();
+const requireAuth = requireUserJwt(supabase);
 const MB = 1024 * 1024;
 const MAX_VENDOR_QUOTA_BYTES = 2 * 1024 * MB;
 const MAX_ORIGINAL_IMAGE_BYTES = 5 * MB;
@@ -22,6 +23,28 @@ const MASTER_IMAGE_RIGHTS_TEXT =
   "I own this image or have permission to use it, and I authorise SabSewa Local to include it in the shared master catalogue and allow other registered vendors to reference it in their digital shops.";
 const MASTER_IMAGE_TERMS_VERSION = "sabsewa-local-master-image-consent-v1";
 const MAX_MASTER_THUMBNAIL_BYTES = 40 * 1024;
+
+async function requireOwnedVendor(req, res, next) {
+  try {
+    const vendorId = req.params.vendor_id || req.body?.vendorId || req.query?.vendorId;
+    if (!vendorId) return res.status(400).json({ success: false, error: "Vendor id is required." });
+
+    const { data: vendor, error } = await supabase
+      .from("vendors")
+      .select("id, owner_user_id")
+      .eq("id", vendorId)
+      .maybeSingle();
+    if (error) throw error;
+    if (!vendor || String(vendor.owner_user_id || "") !== String(req.auth?.user_id || "")) {
+      return res.status(403).json({ success: false, error: "You are not authorized to access this vendor storage." });
+    }
+
+    req.ownedVendor = vendor;
+    return next();
+  } catch (error) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+}
 
 function quotaForSuccessfulOrders(successfulOrders) {
   const orders = Number(successfulOrders || 0);
@@ -378,7 +401,7 @@ router.post(
   }
 );
 
-router.post("/presign-product-image", async (req, res) => {
+router.post("/presign-product-image", requireAuth, requireOwnedVendor, async (req, res) => {
   try {
     const {
       vendorId,
@@ -560,7 +583,7 @@ router.post("/presign-product-image", async (req, res) => {
   }
 });
 
-router.post("/presign-shared-product-image", async (req, res) => {
+router.post("/presign-shared-product-image", requireAuth, requireOwnedVendor, async (req, res) => {
   try {
     const {
       vendorId,
@@ -707,7 +730,7 @@ router.post("/presign-shared-product-image", async (req, res) => {
   }
 });
 
-router.get("/shared-product-images", async (req, res) => {
+router.get("/shared-product-images", requireAuth, async (req, res) => {
   try {
     const search = String(req.query.search || "").trim();
     let query = supabase
@@ -732,7 +755,7 @@ router.get("/shared-product-images", async (req, res) => {
   }
 });
 
-router.get("/master-product-images", async (req, res) => {
+router.get("/master-product-images", requireAuth, async (req, res) => {
   try {
     const search = String(req.query.search || "").trim();
     const productId = String(req.query.productId || "").trim();
@@ -764,7 +787,7 @@ router.get("/master-product-images", async (req, res) => {
   }
 });
 
-router.post("/presign-master-catalog-image", async (req, res) => {
+router.post("/presign-master-catalog-image", requireAuth, requireOwnedVendor, async (req, res) => {
   try {
     const {
       productId,
@@ -877,7 +900,7 @@ router.post("/presign-master-catalog-image", async (req, res) => {
       .insert({
         product_id: productId,
         source_vendor_id: vendorId,
-        source_user_id: userId || null,
+        source_user_id: req.auth.user_id,
         consent_text: MASTER_IMAGE_RIGHTS_TEXT,
         consent_terms_version: MASTER_IMAGE_TERMS_VERSION,
         original_filename: fileName,
@@ -908,7 +931,7 @@ router.post("/presign-master-catalog-image", async (req, res) => {
         thumbnail_object_key: thumbnailKey,
         source_type: "vendor_contributed",
         source_vendor_id: vendorId,
-        source_user_id: userId || null,
+        source_user_id: req.auth.user_id,
         licence_or_consent_reference: consent.id,
         consent_timestamp: consent.consented_at,
         original_filename: fileName,
@@ -943,7 +966,7 @@ router.post("/presign-master-catalog-image", async (req, res) => {
   }
 });
 
-router.post("/use-master-product-image", async (req, res) => {
+router.post("/use-master-product-image", requireAuth, requireOwnedVendor, async (req, res) => {
   try {
     const { vendorId, vendorItemId, masterImageId } = req.body;
     if (!vendorId || !vendorItemId || !masterImageId) {
@@ -987,7 +1010,7 @@ router.post("/use-master-product-image", async (req, res) => {
 });
 
 
-router.post("/presign-payment-qr", async (req, res) => {
+router.post("/presign-payment-qr", requireAuth, requireOwnedVendor, async (req, res) => {
   try {
     const {
       vendorId,
@@ -1052,7 +1075,7 @@ router.post("/presign-payment-qr", async (req, res) => {
         byte_size: expectedSize,
         purpose: "payment_qr",
         status: "pending",
-        metadata: { label, upi_id: upiId || null, uploaded_by: uploadedBy || null },
+        metadata: { label, upi_id: upiId || null, uploaded_by: req.auth.user_id },
       })
       .select()
       .single();
@@ -1064,7 +1087,7 @@ router.post("/presign-payment-qr", async (req, res) => {
   }
 });
 
-router.post("/confirm-payment-qr", async (req, res) => {
+router.post("/confirm-payment-qr", requireAuth, requireOwnedVendor, async (req, res) => {
   try {
     const { vendorId, storageFileId, objectKey, label = "UPI QR", upiId, uploadedBy, makePrimary = true } = req.body;
     if (!vendorId || (!storageFileId && !objectKey)) return res.status(400).json({ success: false, error: "Vendor id and QR storage reference are required." });
@@ -1101,7 +1124,7 @@ router.post("/confirm-payment-qr", async (req, res) => {
         content_type: file.content_type,
         byte_size: Number(file.byte_size || 0),
         is_primary: Boolean(makePrimary),
-        uploaded_by: uploadedBy || null,
+        uploaded_by: req.auth.user_id,
       })
       .select()
       .single();
@@ -1113,7 +1136,7 @@ router.post("/confirm-payment-qr", async (req, res) => {
     return res.status(err.statusCode || 500).json({ success: false, error: err.message });
   }
 });
-router.post("/confirm-product-image", async (req, res) => {
+router.post("/confirm-product-image", requireAuth, requireOwnedVendor, async (req, res) => {
   try {
     const { vendorId, storageFileId, objectKey } = req.body;
 
@@ -1149,7 +1172,7 @@ router.post("/confirm-product-image", async (req, res) => {
   }
 });
 
-router.get("/vendor/:vendor_id/usage", async (req, res) => {
+router.get("/vendor/:vendor_id/usage", requireAuth, requireOwnedVendor, async (req, res) => {
   try {
     const vendorId = req.params.vendor_id;
     const usage = await getVendorStorageUsage(vendorId);

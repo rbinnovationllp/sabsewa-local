@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from "react-native";
 import { supabase } from "@/lib/supabase";
 import { useUser } from "@/contexts/UserContext";
-import { apiUrl } from "@/lib/backend";
+import { authenticatedFetch } from "@/lib/backend";
 
 type ManagedOrder = {
   id: string;
@@ -20,7 +20,7 @@ export default function ManageOrder({ order }: { order: ManagedOrder }) {
       new_status: type,
     };
 
-    const res = await fetch(apiUrl("/api/vendor/orders/status"), {
+    const res = await authenticatedFetch("/api/vendor/orders/status", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -38,7 +38,7 @@ export default function ManageOrder({ order }: { order: ManagedOrder }) {
       vendor_comment: "Order accepted",
     };
 
-    const res = await fetch(apiUrl("/api/vendor/orders/accept"), {
+    const res = await authenticatedFetch("/api/vendor/orders/accept", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -56,7 +56,7 @@ export default function ManageOrder({ order }: { order: ManagedOrder }) {
       vendor_comment: "Out of stock",
     };
 
-    const res = await fetch(apiUrl("/api/vendor/orders/reject"), {
+    const res = await authenticatedFetch("/api/vendor/orders/reject", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),

@@ -16,8 +16,23 @@ import {
 } from "./securityWalletService.js";
 import { supabase } from "../connection.js";
 import { getPaymentReadiness } from "../payments/paymentEnvironment.js";
+import { requireRole, requireUserJwt } from "../security/apiSecurity.js";
 
 const router = express.Router();
+const requireAuth = requireUserJwt(supabase);
+const COMPANY_ROLES = ["admin", "company_admin", "super_admin", "master_admin", "national_admin", "state_admin", "district_admin", "city_admin", "finance_admin", "support_admin"];
+
+async function requireOwnedVendor(req, res, next) {
+  try {
+    const { data, error } = await supabase.from("vendors").select("id")
+      .eq("id", req.params.vendor_id).eq("owner_user_id", req.auth.user_id).maybeSingle();
+    if (error) throw error;
+    if (!data) return res.status(403).json({ success: false, error: "This vendor wallet does not belong to the authenticated user." });
+    return next();
+  } catch (error) { return res.status(500).json({ success: false, error: error.message }); }
+}
+
+router.use(requireAuth);
 
 function escapeCsv(value) {
   const text = value === null || value === undefined ? "" : String(value);
@@ -103,7 +118,7 @@ async function getTransactionEvidence({ vendorId, transactionId }) {
   };
 }
 
-router.get("/admin/disputes", async (req, res) => {
+router.get("/admin/disputes", requireRole(COMPANY_ROLES), async (req, res) => {
   try {
     const { vendor_id, order_id, transaction_id, from, to } = req.query;
 
@@ -127,7 +142,7 @@ router.get("/admin/disputes", async (req, res) => {
   }
 });
 
-router.post("/admin/disputes/:dispute_id/reversal", async (req, res) => {
+router.post("/admin/disputes/:dispute_id/reversal", requireRole(COMPANY_ROLES), async (req, res) => {
   try {
     const { admin_user_id, reason } = req.body;
 
@@ -148,7 +163,7 @@ router.post("/admin/disputes/:dispute_id/reversal", async (req, res) => {
   }
 });
 
-router.post("/admin/disputes/:dispute_id/reject", async (req, res) => {
+router.post("/admin/disputes/:dispute_id/reject", requireRole(COMPANY_ROLES), async (req, res) => {
   try {
     const { admin_user_id, reason } = req.body;
 
@@ -176,7 +191,7 @@ router.post("/admin/disputes/:dispute_id/reject", async (req, res) => {
   }
 });
 
-router.post("/admin/recovery/wallet-transactions", async (req, res) => {
+router.post("/admin/recovery/wallet-transactions", requireRole(COMPANY_ROLES), async (req, res) => {
   try {
     const {
       admin_user_id,
@@ -253,7 +268,7 @@ router.post("/admin/recovery/wallet-transactions", async (req, res) => {
   }
 });
 
-router.get("/:vendor_id", async (req, res) => {
+router.get("/:vendor_id", requireOwnedVendor, async (req, res) => {
   try {
     const vendorId = req.params.vendor_id;
     const includeArchive = req.query.include_archive === "true";
@@ -301,7 +316,7 @@ router.get("/:vendor_id", async (req, res) => {
   }
 });
 
-router.get("/:vendor_id/statement.csv", async (req, res) => {
+router.get("/:vendor_id/statement.csv", requireOwnedVendor, async (req, res) => {
   try {
     const vendorId = req.params.vendor_id;
     await getOrCreateSecurityWallet(vendorId);
@@ -360,7 +375,7 @@ router.get("/:vendor_id/statement.csv", async (req, res) => {
   }
 });
 
-router.get("/:vendor_id/transactions/:transaction_id/evidence", async (req, res) => {
+router.get("/:vendor_id/transactions/:transaction_id/evidence", requireOwnedVendor, async (req, res) => {
   try {
     const evidence = await getTransactionEvidence({
       vendorId: req.params.vendor_id,
@@ -373,7 +388,7 @@ router.get("/:vendor_id/transactions/:transaction_id/evidence", async (req, res)
   }
 });
 
-router.get("/:vendor_id/transactions/:transaction_id/evidence.csv", async (req, res) => {
+router.get("/:vendor_id/transactions/:transaction_id/evidence.csv", requireOwnedVendor, async (req, res) => {
   try {
     const evidence = await getTransactionEvidence({
       vendorId: req.params.vendor_id,
@@ -404,7 +419,7 @@ router.get("/:vendor_id/transactions/:transaction_id/evidence.csv", async (req, 
   }
 });
 
-router.post("/:vendor_id/transactions/:transaction_id/dispute", async (req, res) => {
+router.post("/:vendor_id/transactions/:transaction_id/dispute", requireOwnedVendor, async (req, res) => {
   try {
     const vendorId = req.params.vendor_id;
     const transactionId = req.params.transaction_id;
@@ -441,7 +456,7 @@ router.post("/:vendor_id/transactions/:transaction_id/dispute", async (req, res)
   }
 });
 
-router.post("/:vendor_id/topup-order", async (req, res) => {
+router.post("/:vendor_id/topup-order", requireOwnedVendor, async (req, res) => {
   try {
     const vendorId = req.params.vendor_id;
     const purpose = req.body.purpose === "vendor_initial_activation"
@@ -486,7 +501,7 @@ router.post("/:vendor_id/topup-order", async (req, res) => {
   }
 });
 
-router.post("/:vendor_id/verify-topup", async (req, res) => {
+router.post("/:vendor_id/verify-topup", requireOwnedVendor, async (req, res) => {
   try {
     const vendorId = req.params.vendor_id;
     const {
@@ -574,7 +589,7 @@ router.post("/:vendor_id/verify-topup", async (req, res) => {
   }
 });
 
-router.post("/:vendor_id/admin-adjustment", async (req, res) => {
+router.post("/:vendor_id/admin-adjustment", requireRole(COMPANY_ROLES), async (req, res) => {
   try {
     const vendorId = req.params.vendor_id;
     const { amount, admin_user_id, reason } = req.body;
@@ -603,7 +618,7 @@ router.post("/:vendor_id/admin-adjustment", async (req, res) => {
   }
 });
 
-router.get("/:vendor_id/closure-preview", async (req, res) => {
+router.get("/:vendor_id/closure-preview", requireOwnedVendor, async (req, res) => {
   try {
     const vendorId = req.params.vendor_id;
     const preview = await calculateVendorExitPreview({ vendorId });
@@ -613,7 +628,7 @@ router.get("/:vendor_id/closure-preview", async (req, res) => {
   }
 });
 
-router.post("/:vendor_id/closure-request", async (req, res) => {
+router.post("/:vendor_id/closure-request", requireOwnedVendor, async (req, res) => {
   try {
     const vendorId = req.params.vendor_id;
     const { requested_by, reason, vendor_acknowledged } = req.body;

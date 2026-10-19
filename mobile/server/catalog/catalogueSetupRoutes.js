@@ -1,6 +1,7 @@
 import express from "express";
 import multer from "multer";
-import XLSX from "xlsx";
+import ExcelJS from "exceljs";
+import { Readable } from "node:stream";
 import { supabase } from "../connection.js";
 import { genAI, geminiModel } from "../gemini/geminiClient.js";
 import { extractJsonObject } from "../gemini/json.js";
@@ -13,6 +14,16 @@ const bulkCatalogueUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 },
 });
+
+const BULK_FILE_EXTENSIONS = new Set(["csv", "xlsx"]);
+
+function bulkFileExtension(file) {
+  return clean(file?.originalname).split(".").pop()?.toLowerCase() || "";
+}
+
+function supportedBulkFile(file) {
+  return BULK_FILE_EXTENSIONS.has(bulkFileExtension(file));
+}
 
 const ALLOWED_CATEGORIES = new Set([
   "kirana",
@@ -263,11 +274,44 @@ function normalizeBulkRow(rawRow, index) {
   return { ...row, import_key: bulkKey(row), status: errors.length ? "error" : "valid" };
 }
 
-function parseBulkWorkbook(file) {
-  const workbook = XLSX.read(file.buffer, { type: "buffer", raw: false });
-  const sheetName = workbook.SheetNames?.[0];
-  if (!sheetName) return [];
-  return XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: "" });
+function spreadsheetCellValue(cell) {
+  const value = cell?.value;
+  if (value === null || value === undefined) return "";
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value === "object") {
+    if ("result" in value) return value.result ?? "";
+    if ("text" in value) return value.text ?? "";
+    if (Array.isArray(value.richText)) return value.richText.map((part) => part.text || "").join("");
+  }
+  return value;
+}
+
+async function parseBulkWorkbook(file) {
+  if (!supportedBulkFile(file)) {
+    throw new Error("Only .csv and .xlsx catalogue files are supported. Save legacy .xls files as .xlsx before upload.");
+  }
+
+  const workbook = new ExcelJS.Workbook();
+  if (bulkFileExtension(file) === "csv") {
+    await workbook.csv.read(Readable.from(file.buffer));
+  } else {
+    await workbook.xlsx.load(file.buffer);
+  }
+
+  const worksheet = workbook.worksheets[0];
+  if (!worksheet || worksheet.rowCount === 0) return [];
+
+  const headers = worksheet.getRow(1).values.slice(1).map((value) => clean(value));
+  const rows = [];
+  worksheet.eachRow((row, rowNumber) => {
+    if (rowNumber === 1) return;
+    const record = {};
+    headers.forEach((header, index) => {
+      if (header) record[header] = spreadsheetCellValue(row.getCell(index + 1));
+    });
+    if (Object.values(record).some((value) => clean(value))) rows.push(record);
+  });
+  return rows;
 }
 
 async function existingBulkKeys(vendorId, terminalId) {
@@ -299,7 +343,7 @@ function summarizeBulkRows(rows) {
 }
 
 async function buildBulkPreview(file, vendorId, terminalId) {
-  const rawRows = parseBulkWorkbook(file);
+  const rawRows = await parseBulkWorkbook(file);
   if (rawRows.length > 2000) {
     throw new Error("Bulk upload supports up to 2000 rows per file. Please split very large catalogues.");
   }
@@ -446,6 +490,12 @@ router.post("/setup/bulk-preview", bulkCatalogueUpload.single("file"), async (re
     const terminalId = clean(req.body?.terminal_id);
     if (!vendorId) return res.status(400).json({ success: false, error: "Vendor ID is required." });
     if (!req.file) return res.status(400).json({ success: false, error: "Upload an Excel or CSV file." });
+    if (!supportedBulkFile(req.file)) {
+      return res.status(400).json({
+        success: false,
+        error: "Only .csv and .xlsx catalogue files are supported. Save legacy .xls files as .xlsx before upload.",
+      });
+    }
 
     const validation = await validateVendorTerminal(vendorId, terminalId);
     if (!validation.ok) return validationErrorResponse(res, validation);

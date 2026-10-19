@@ -4,11 +4,12 @@ import { supabase } from "../connection.js";
 import { recordCreditPayment, recordCreditPurchase, upsertCreditAccount } from "../credit/vendorCreditService.js";
 import { writeOrderAuditLog } from "../audit/orderAudit.js";
 import { notifyCustomerPaymentConfirmed } from "../notifications/dispatchNotificationService.js";
-import { requireUserJwt } from "../security/apiSecurity.js";
+import { requireRole, requireUserJwt } from "../security/apiSecurity.js";
 import { deductConfirmedOrderFee } from "../securityWallet/securityWalletService.js";
 
 const router = express.Router();
 const requireAuth = requireUserJwt(supabase);
+const COMPANY_ROLES = ["admin", "company_admin", "super_admin", "master_admin", "national_admin", "state_admin", "district_admin", "city_admin", "finance_admin", "support_admin"];
 const PAID_METHODS = new Set(["cash", "vendor_qr", "bank_transfer", "other_digital"]);
 const PROFILE_METHODS = new Set(["cash", "vendor_qr", "bank_transfer", "other_digital"]);
 
@@ -30,6 +31,47 @@ async function requireOwnedVendor(req, res, next) {
     return res.status(500).json({ success: false, error: error.message });
   }
 }
+
+async function requireOrderParticipant(req, res, next) {
+  try {
+    const { data: order, error } = await supabase.from("hyperlocal_orders")
+      .select("id, vendor_id, customer_id, rider_id")
+      .eq("id", req.params.order_id).maybeSingle();
+    if (error) throw error;
+    if (!order) return res.status(404).json({ success: false, error: "Order not found." });
+    if (COMPANY_ROLES.includes(req.auth.role)) {
+      req.authorizedOrder = order;
+      req.authorizedOrderAccess = "company";
+      return next();
+    }
+    const { data: vendor } = await supabase.from("vendors").select("id").eq("id", order.vendor_id).eq("owner_user_id", req.auth.user_id).maybeSingle();
+    if (vendor) {
+      req.authorizedOrder = order;
+      req.authorizedOrderAccess = "vendor";
+      return next();
+    }
+    if (order.customer_id === req.auth.user_id) {
+      req.authorizedOrder = order;
+      req.authorizedOrderAccess = "customer";
+      return next();
+    }
+    if (order.rider_id === req.auth.user_id) {
+      req.authorizedOrder = order;
+      req.authorizedOrderAccess = "rider";
+      return next();
+    }
+    return res.status(403).json({ success: false, error: "You are not authorized for this order." });
+  } catch (error) { return res.status(500).json({ success: false, error: error.message }); }
+}
+
+function requireVendorOrCompanyOrderAccess(req, res, next) {
+  if (!["vendor", "company"].includes(req.authorizedOrderAccess)) {
+    return res.status(403).json({ success: false, error: "Only the order vendor or an authorized company administrator may settle this order." });
+  }
+  return next();
+}
+
+router.use(requireAuth);
 
 function receiptNumber(orderId) {
   return `SSL-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${String(orderId).slice(0, 8).toUpperCase()}`;
@@ -81,7 +123,7 @@ async function getPrimaryQr(vendorId) {
 }
 
 
-router.get("/customer/:customer_id/credit", requireAuth, requireOwnCustomer, async (req, res) => {
+router.get("/customer/:customer_id/credit", requireOwnCustomer, async (req, res) => {
   try {
     const customerId = req.params.customer_id;
     const { data: accounts, error: accountError } = await supabase
@@ -120,7 +162,7 @@ router.get("/customer/:customer_id/credit", requireAuth, requireOwnCustomer, asy
   }
 });
 
-router.post("/customer/:customer_id/credit/:account_id/repayment", requireAuth, requireOwnCustomer, async (req, res) => {
+router.post("/customer/:customer_id/credit/:account_id/repayment", requireOwnCustomer, async (req, res) => {
   try {
     const { amount, payment_reference, customer_note, order_id, payment_method = "vendor_qr" } = req.body;
     const paidAmount = Number(amount);
@@ -174,7 +216,7 @@ router.post("/customer/:customer_id/credit/:account_id/repayment", requireAuth, 
   }
 });
 
-router.post("/vendor/:vendor_id/repayments/:request_id/verify", requireAuth, requireOwnedVendor, async (req, res) => {
+router.post("/vendor/:vendor_id/repayments/:request_id/verify", requireOwnedVendor, async (req, res) => {
   try {
     const { approved = true, vendor_user_id, vendor_note } = req.body;
     const { data: request, error: requestError } = await supabase
@@ -214,7 +256,7 @@ router.post("/vendor/:vendor_id/repayments/:request_id/verify", requireAuth, req
     return res.status(error.statusCode || 500).json({ success: false, error: error.message });
   }
 });
-router.get("/vendor/:vendor_id/payment-profile", async (req, res) => {
+router.get("/vendor/:vendor_id/payment-profile", requireOwnedVendor, async (req, res) => {
   try {
     const vendorId = req.params.vendor_id;
     const [{ data: profile, error: profileError }, { data: qrCodes, error: qrError }, { data: plans, error: plansError }] = await Promise.all([
@@ -233,7 +275,7 @@ router.get("/vendor/:vendor_id/payment-profile", async (req, res) => {
   }
 });
 
-router.post("/vendor/:vendor_id/payment-profile", async (req, res) => {
+router.post("/vendor/:vendor_id/payment-profile", requireOwnedVendor, async (req, res) => {
   try {
     const vendorId = req.params.vendor_id;
     const { upi_id, preferred_methods, bank_account_number, bank_ifsc, bank_account_holder, other_payment_instructions, actor_user_id } = req.body;
@@ -272,7 +314,7 @@ router.post("/vendor/:vendor_id/payment-profile", async (req, res) => {
   }
 });
 
-router.get("/orders/:order_id/payment-context", async (req, res) => {
+router.get("/orders/:order_id/payment-context", requireOrderParticipant, async (req, res) => {
   try {
     const { data: order, error: orderError } = await supabase
       .from("hyperlocal_orders")
@@ -308,7 +350,7 @@ router.get("/orders/:order_id/payment-context", async (req, res) => {
   }
 });
 
-router.post("/orders/:order_id/settle", async (req, res) => {
+router.post("/orders/:order_id/settle", requireOrderParticipant, requireVendorOrCompanyOrderAccess, async (req, res) => {
   try {
     const orderId = req.params.order_id;
     const { payment_method, payment_reference, confirmed_by, credit_notes, due_date, actor_user_id, amount_received } = req.body;
@@ -615,7 +657,7 @@ router.post("/orders/:order_id/settle", async (req, res) => {
   }
 });
 
-router.get("/storage/admin/overview", async (_req, res) => {
+router.get("/storage/admin/overview", requireRole(COMPANY_ROLES), async (_req, res) => {
   try {
     const [{ data: usage, error: usageError }, { data: purchases, error: purchaseError }, { data: plans, error: planError }] = await Promise.all([
       supabase.from("vendor_storage_usage").select("*").order("updated_at", { ascending: false }).limit(500),
@@ -631,7 +673,7 @@ router.get("/storage/admin/overview", async (_req, res) => {
   }
 });
 
-router.post("/storage/:vendor_id/purchase", async (req, res) => {
+router.post("/storage/:vendor_id/purchase", requireOwnedVendor, async (req, res) => {
   try {
     const { plan_id, payment_reference, payment_status = "paid", actor_user_id } = req.body;
     const { data: plan, error: planError } = await supabase

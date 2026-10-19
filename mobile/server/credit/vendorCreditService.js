@@ -1,6 +1,6 @@
 import { supabase } from "../connection.js";
 
-const NEAR_LIMIT_RATIO = 0.8;
+const NEAR_LIMIT_RATIO = 0.9;
 
 function todayDate() {
   return new Date().toISOString().slice(0, 10);
@@ -273,6 +273,20 @@ export async function queueCreditReminder(account, reminderType) {
     suspended: "Credit with this vendor has been suspended by the vendor.",
   };
 
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const reminderKey = `${account.id}:${reminderType}:${Number(account.outstanding_balance || 0).toFixed(2)}:${todayDate()}`;
+  const { data: existing, error: lookupError } = await supabase
+    .from("vendor_credit_reminders")
+    .select("id")
+    .eq("account_id", account.id)
+    .eq("reminder_type", reminderType)
+    .eq("outstanding_balance", Number(account.outstanding_balance || 0))
+    .gte("created_at", since)
+    .limit(1)
+    .maybeSingle();
+  if (lookupError) throw lookupError;
+  if (existing) return { queued: false, duplicate: true };
+
   const { error } = await supabase.from("vendor_credit_reminders").insert({
     vendor_id: account.vendor_id,
     customer_id: account.customer_id,
@@ -283,9 +297,12 @@ export async function queueCreditReminder(account, reminderType) {
     due_date: account.due_date || null,
     message: messageMap[reminderType],
     status: "queued",
+    idempotency_key: reminderKey,
   });
 
+  if (error?.code === "23505") return { queued: false, duplicate: true };
   if (error) throw error;
+  return { queued: true, duplicate: false };
 }
 
 

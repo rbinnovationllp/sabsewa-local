@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  Linking,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -11,7 +11,7 @@ import {
   View,
 } from "react-native";
 import { useLocalSearchParams } from "expo-router";
-import { apiUrl } from "@/lib/backend";
+import { apiUrl, authenticatedFetch } from "@/lib/backend";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/AuthProvider";
 
@@ -76,7 +76,7 @@ export default function VendorSecurityWalletScreen() {
   async function loadWallet(nextVendorId = vendorId, includeArchive = showArchive) {
     if (!nextVendorId) return;
 
-    const response = await fetch(apiUrl(`/api/vendor/security-wallet/${nextVendorId}?include_archive=${includeArchive ? "true" : "false"}`));
+    const response = await authenticatedFetch(`/api/vendor/security-wallet/${nextVendorId}?include_archive=${includeArchive ? "true" : "false"}`);
     const json = await response.json();
 
     if (!response.ok || !json.success) {
@@ -121,7 +121,7 @@ export default function VendorSecurityWalletScreen() {
     setCreatingOrder(true);
 
     try {
-      const response = await fetch(apiUrl(`/api/vendor/security-wallet/${vendorId}/topup-order`), {
+      const response = await authenticatedFetch(`/api/vendor/security-wallet/${vendorId}/topup-order`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ purpose }),
@@ -162,7 +162,7 @@ export default function VendorSecurityWalletScreen() {
         theme: { color: "#1166ff" },
       });
 
-      const verifyResponse = await fetch(apiUrl(`/api/vendor/security-wallet/${vendorId}/verify-topup`), {
+      const verifyResponse = await authenticatedFetch(`/api/vendor/security-wallet/${vendorId}/verify-topup`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -216,7 +216,7 @@ export default function VendorSecurityWalletScreen() {
   async function viewEvidence(tx: any) {
     if (!vendorId) return;
 
-    const response = await fetch(apiUrl(`/api/vendor/security-wallet/${vendorId}/transactions/${tx.id}/evidence`));
+    const response = await authenticatedFetch(`/api/vendor/security-wallet/${vendorId}/transactions/${tx.id}/evidence`);
     const json = await response.json();
 
     if (!response.ok || !json.success) {
@@ -249,7 +249,7 @@ export default function VendorSecurityWalletScreen() {
       return;
     }
 
-    const response = await fetch(apiUrl(`/api/vendor/security-wallet/${vendorId}/transactions/${tx.id}/dispute`), {
+    const response = await authenticatedFetch(`/api/vendor/security-wallet/${vendorId}/transactions/${tx.id}/dispute`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -269,9 +269,25 @@ export default function VendorSecurityWalletScreen() {
     await loadWallet(vendorId);
   }
 
-  function openStatement() {
+  async function openStatement() {
     if (!vendorId) return;
-    Linking.openURL(apiUrl(`/api/vendor/security-wallet/${vendorId}/statement.csv`));
+    try {
+      const response = await authenticatedFetch(`/api/vendor/security-wallet/${vendorId}/statement.csv`);
+      if (!response.ok) throw new Error("Unable to download wallet statement.");
+      if (Platform.OS !== "web") {
+        Alert.alert("Statement ready", "Authenticated statement download is currently available from the SabSewa Local web app.");
+        return;
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `vendor-wallet-statement-${vendorId}.csv`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      Alert.alert("Statement", error instanceof Error ? error.message : "Unable to download wallet statement.");
+    }
   }
 
   if (loading) {

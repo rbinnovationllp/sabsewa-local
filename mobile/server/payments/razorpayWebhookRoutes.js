@@ -13,20 +13,17 @@ import {
 } from "../securityWallet/securityWalletService.js";
 import { getPaymentReadiness } from "./paymentEnvironment.js";
 import { processCapturedPlatformBillingWebhookPayment } from "../billing/platformBillingService.js";
+import { requireUserJwt } from "../security/apiSecurity.js";
+import { deriveRazorpayWebhookEventId, verifyRazorpayWebhookSignature } from "./razorpayWebhookSecurity.js";
 
 const router = express.Router();
+const requireAuth = requireUserJwt(supabase);
 
 /**
  * Helper to verify Razorpay Webhook Signatures
  */
 function verifyWebhookSignature(rawBody, signature) {
-  const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET || "";
-  if (!webhookSecret || !signature) return false;
-
-  const expected = crypto.createHmac("sha256", webhookSecret).update(rawBody).digest("hex");
-  const received = String(signature);
-  if (expected.length !== received.length) return false;
-  return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(received));
+  return verifyRazorpayWebhookSignature(rawBody, signature, process.env.RAZORPAY_WEBHOOK_SECRET || "");
 }
 
 /**
@@ -90,7 +87,7 @@ async function markWebhookEvent(eventId, fields) {
  * @route POST /api/payments/verify-vendor-invoice
  * @desc Manual verification endpoint called from frontend upon payment completion
  */
-router.post("/verify-vendor-invoice", async (req, res) => {
+router.post("/verify-vendor-invoice", requireAuth, async (req, res) => {
   try {
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature, invoice_id } = req.body;
 
@@ -104,7 +101,33 @@ router.post("/verify-vendor-invoice", async (req, res) => {
       return res.status(400).json({ success: false, error: "Invalid payment signature." });
     }
 
-    // 1. Update Invoice Payment Status
+    const { data: existingInvoice, error: lookupError } = await supabase
+      .from("vendor_invoices")
+      .select("id, vendor_id, payment_status, razorpay_order_id, razorpay_payment_id")
+      .eq("id", invoice_id)
+      .maybeSingle();
+    if (lookupError) throw lookupError;
+    if (!existingInvoice) return res.status(404).json({ success: false, error: "Invoice not found." });
+
+    const { data: ownedVendor, error: vendorError } = await supabase
+      .from("vendors")
+      .select("id")
+      .eq("id", existingInvoice.vendor_id)
+      .eq("owner_user_id", req.auth.user_id)
+      .maybeSingle();
+    if (vendorError) throw vendorError;
+    if (!ownedVendor) return res.status(403).json({ success: false, error: "You are not authorized to verify this invoice." });
+    if (existingInvoice.razorpay_order_id && existingInvoice.razorpay_order_id !== razorpay_order_id) {
+      return res.status(409).json({ success: false, error: "Payment does not belong to this invoice." });
+    }
+    if (existingInvoice.payment_status === "paid") {
+      const samePayment = existingInvoice.razorpay_order_id === razorpay_order_id
+        && existingInvoice.razorpay_payment_id === razorpay_payment_id;
+      return samePayment
+        ? res.json({ success: true, duplicate: true, message: "Payment was already verified.", invoice: existingInvoice })
+        : res.status(409).json({ success: false, error: "Invoice was already paid using a different payment." });
+    }
+
     const { data: invoice, error: invErr } = await supabase
       .from("vendor_invoices")
       .update({
@@ -113,6 +136,8 @@ router.post("/verify-vendor-invoice", async (req, res) => {
         razorpay_payment_id
       })
       .eq("id", invoice_id)
+      .eq("vendor_id", existingInvoice.vendor_id)
+      .neq("payment_status", "paid")
       .select()
       .single();
 
@@ -122,7 +147,8 @@ router.post("/verify-vendor-invoice", async (req, res) => {
     await supabase
       .from("vendor_platform_fee_ledger")
       .update({ settlement_status: "billed" })
-      .eq("invoice_id", invoice_id);
+      .eq("invoice_id", invoice_id)
+      .eq("vendor_id", existingInvoice.vendor_id);
 
     return res.json({ success: true, message: "Payment verified successfully.", invoice });
   } catch (error) {
@@ -144,7 +170,7 @@ router.post("/razorpay/webhook", express.raw({ type: "application/json" }), asyn
     }
 
     const body = JSON.parse(req.body.toString("utf8"));
-    const eventId = body.id || `${body.event}_${Date.now()}`;
+    const eventId = deriveRazorpayWebhookEventId(body, req.body);
     const eventType = body.event;
     const payment = body.payload?.payment?.entity;
 

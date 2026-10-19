@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, Alert } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import CrossPlatformMap from "@/components/CrossPlatformMap";
-import { apiUrl } from "@/lib/backend";
+import { apiUrl, authenticatedFetch } from "@/lib/backend";
 import { useAuth } from "@/providers/AuthProvider";
 import { useLanguage } from "@/providers/LanguageProvider";
 
@@ -35,7 +35,7 @@ export default function CustomerTrackScreen() {
   }
 
   async function respondToQuote(accepted: boolean) {
-    const response = await fetch(apiUrl("/api/vendor/orders/price-quote-response"), {
+    const response = await authenticatedFetch("/api/vendor/orders/price-quote-response", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

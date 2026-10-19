@@ -34,7 +34,8 @@ assert.match(sql, /for update/, "Atomic database functions must lock the vendor-
 assert.match(sql, /uq_vendor_credit_transaction_idempotency/, "Financial ledger needs an idempotency uniqueness constraint.");
 assert.match(sql, /advance_balance/, "Vendor-specific advance balance must be persisted.");
 assert.match(routes, /requireAuth, requireOwnedVendor/, "Vendor credit mutations must require authenticated ownership.");
-assert.match(settlement, /requireAuth, requireOwnCustomer/, "Customer credit records must require the matching authenticated customer.");
+assert.match(settlement, /router\.use\(requireAuth\)/, "Settlement routes must require authentication globally.");
+assert.match(settlement, /requireOwnCustomer/, "Customer credit records must require the matching authenticated customer.");
 assert.match(settlement, /repayment-request:\$\{request\.id\}/, "Repayment verification must use a stable idempotency key.");
 assert.match(settlement, /deductConfirmedOrderFee\(\{ vendorId: order\.vendor_id, orderId: order\.id \}\)/, "Payment completion must deduct platform fee and GST from the vendor security wallet.");
 assert.match(vendorActions, /deductConfirmedOrderFee\(\{ vendorId: req\.order\.vendor_id, orderId: order_id \}\)/, "Vendor completion must deduct platform fee and GST from the vendor security wallet.");

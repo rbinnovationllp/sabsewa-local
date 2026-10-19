@@ -4,8 +4,40 @@ import { writeOrderAuditLog } from "../audit/orderAudit.js";
 import { notifyCustomerOrderDispatched } from "../notifications/dispatchNotificationService.js";
 import { recordPartnerCommissionForVendorRevenue } from "../partner/partnerCommissionService.js";
 import { deductConfirmedOrderFee } from "../securityWallet/securityWalletService.js";
+import { requireUserJwt } from "../security/apiSecurity.js";
 
 const router = express.Router();
+const requireAuth = requireUserJwt(supabase);
+router.use(requireAuth);
+
+async function vendorOwnedByUser(vendorId, userId) {
+  const { data, error } = await supabase.from("vendors").select("id")
+    .eq("id", vendorId).eq("owner_user_id", userId).maybeSingle();
+  if (error) throw error;
+  return Boolean(data);
+}
+
+async function requireVendorQueryOwner(req, res, next) {
+  try {
+    const vendorId = req.query.vendor_id;
+    if (!vendorId) return res.status(400).json({ success: false, error: "vendor_id is required" });
+    if (!(await vendorOwnedByUser(vendorId, req.auth.user_id))) {
+      return res.status(403).json({ success: false, error: "You may access only your own vendor orders." });
+    }
+    return next();
+  } catch (error) { return res.status(500).json({ success: false, error: error.message }); }
+}
+
+async function requireCustomerOrderOwner(req, res, next) {
+  try {
+    const orderId = req.body.order_id;
+    const { data, error } = await supabase.from("hyperlocal_orders").select("id, customer_id").eq("id", orderId).maybeSingle();
+    if (error) throw error;
+    if (!data) return res.status(404).json({ success: false, error: "Order not found." });
+    if (data.customer_id !== req.auth.user_id) return res.status(403).json({ success: false, error: "This order does not belong to the authenticated customer." });
+    return next();
+  } catch (error) { return res.status(500).json({ success: false, error: error.message }); }
+}
 
 const VENDOR_RESPONSE_EXPIRED_STATUS = "expired_vendor_no_response";
 
@@ -160,7 +192,7 @@ function vendorOrderView(order) {
 }
 
 
-router.get("/count", async (req, res) => {
+router.get("/count", requireVendorQueryOwner, async (req, res) => {
   try {
     const vendorId = req.query.vendor_id;
     const terminalId = req.query.terminal_id;
@@ -193,7 +225,7 @@ router.get("/count", async (req, res) => {
     return res.status(500).json({ success: false, error: error.message });
   }
 });
-router.get("/", async (req, res) => {
+router.get("/", requireVendorQueryOwner, async (req, res) => {
   try {
     const vendorId = req.query.vendor_id;
     const terminalId = req.query.terminal_id;
@@ -273,7 +305,7 @@ async function verifyVendor(req, res, next) {
       return res.status(404).json({ success: false, message: "Order not found" });
     }
 
-    if (order.vendor_id !== vendor_id) {
+    if (order.vendor_id !== vendor_id || !(await vendorOwnedByUser(order.vendor_id, req.auth.user_id))) {
       return res.status(403).json({
         success: false,
         message: "Not allowedâ€”Vendor mismatch",
@@ -406,7 +438,7 @@ router.post("/partial-offer", verifyVendor, async (req, res) => {
   });
 });
 
-router.post("/partial-offer-response", async (req, res) => {
+router.post("/partial-offer-response", requireCustomerOrderOwner, async (req, res) => {
   const { order_id, customer_id, accepted, actor_user_id } = req.body;
 
   if (!order_id || !customer_id || typeof accepted !== "boolean") {
@@ -546,7 +578,7 @@ router.post("/price-quote", verifyVendor, async (req, res) => {
   }
 });
 
-router.post("/price-quote-response", async (req, res) => {
+router.post("/price-quote-response", requireCustomerOrderOwner, async (req, res) => {
   const { order_id, customer_id, accepted, actor_user_id } = req.body;
 
   if (!order_id || !customer_id || typeof accepted !== "boolean") {

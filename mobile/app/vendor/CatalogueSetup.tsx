@@ -3,7 +3,7 @@ import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, Text, TextInpu
 import * as ImagePicker from "expo-image-picker";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import BrandHeader from "@/components/BrandHeader";
-import { apiUrl } from "@/lib/backend";
+import { apiUrl, authenticatedFetch } from "@/lib/backend";
 import { optimizeProductImage, validatePickedProductImage } from "@/lib/imageUploadPolicy";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/AuthProvider";
@@ -295,7 +295,7 @@ export default function CatalogueSetupScreen() {
     const optimized = await optimizeProductImage(photo);
     const fileName = photo.fileName || photo.uri.split("/").pop() || `vendor-product-${Date.now()}.jpg`;
     const endpoint = shareImage ? "/api/storage/s3/presign-shared-product-image" : "/api/storage/s3/presign-product-image";
-    const response = await fetch(apiUrl(endpoint), {
+    const response = await authenticatedFetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -323,7 +323,7 @@ export default function CatalogueSetupScreen() {
     });
     if (!upload.ok) throw new Error("Image upload failed.");
     if (!shareImage) {
-      await fetch(apiUrl("/api/storage/s3/confirm-product-image"), {
+      await authenticatedFetch("/api/storage/s3/confirm-product-image", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ vendorId, storageFileId: json.storage_file_id, objectKey: json.object_key }),

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput, Alert } from "react-native";
 import { useLocalSearchParams, Link } from "expo-router";
-import { apiUrl } from "@/lib/backend";
+import { apiUrl, authenticatedFetch } from "@/lib/backend";
 import * as Haptics from "expo-haptics";
 import { createSmartRejectionMessage } from "@/services/gemini";
 import { useAuth } from "@/providers/AuthProvider";
@@ -104,7 +104,7 @@ export default function VendorOrdersScreen() {
     if (terminalId) query.set("terminal_id", String(terminalId));
     if (user?.id) query.set("actor_user_id", user.id);
 
-    const response = await fetch(apiUrl(`/api/vendor/orders?${query.toString()}`));
+    const response = await authenticatedFetch(`/api/vendor/orders?${query.toString()}`);
     const json = await response.json();
 
     if (!response.ok || !json.success) {
@@ -166,7 +166,7 @@ export default function VendorOrdersScreen() {
         ? { order_id: orderId, vendor_id: vendorId, actor_user_id: user?.id }
         : { order_id: orderId, vendor_id: vendorId, new_status: status, actor_user_id: user?.id };
 
-    const response = await fetch(apiUrl(endpoint), {
+    const response = await authenticatedFetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -215,7 +215,7 @@ export default function VendorOrdersScreen() {
       return;
     }
 
-    const response = await fetch(apiUrl("/api/vendor/orders/partial-offer"), {
+    const response = await authenticatedFetch("/api/vendor/orders/partial-offer", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -310,7 +310,7 @@ export default function VendorOrdersScreen() {
       return;
     }
 
-    const response = await fetch(apiUrl(`/api/settlement/orders/${order.id}/settle`), {
+    const response = await authenticatedFetch(`/api/settlement/orders/${order.id}/settle`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -371,7 +371,7 @@ export default function VendorOrdersScreen() {
       geminiMessage = null;
     }
 
-    const response = await fetch(apiUrl("/api/vendor/orders/reject"), {
+    const response = await authenticatedFetch("/api/vendor/orders/reject", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -414,7 +414,7 @@ export default function VendorOrdersScreen() {
       return;
     }
 
-    const response = await fetch(apiUrl("/api/vendor/orders/price-quote"), {
+    const response = await authenticatedFetch("/api/vendor/orders/price-quote", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -445,7 +445,7 @@ export default function VendorOrdersScreen() {
       return;
     }
 
-    const response = await fetch(apiUrl("/api/vendor/orders/delivery-charge-override"), {
+    const response = await authenticatedFetch("/api/vendor/orders/delivery-charge-override", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

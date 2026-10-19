@@ -4,7 +4,7 @@ import { useLocalSearchParams } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/AuthProvider";
-import { apiUrl } from "@/lib/backend";
+import { apiUrl, authenticatedFetch } from "@/lib/backend";
 import { optimizeProductImage, validatePickedProductImage } from "@/lib/imageUploadPolicy";
 
 const PRICE_MODES = [
@@ -107,7 +107,7 @@ export default function EditItem() {
     const fileName = file.fileName || file.uri.split("/").pop() || `product-${Date.now()}.jpg`;
     const contentType = optimizedImage.contentType || file.mimeType || "image/jpeg";
 
-    const presignResponse = await fetch(apiUrl("/api/storage/s3/presign-product-image"), {
+    const presignResponse = await authenticatedFetch("/api/storage/s3/presign-product-image", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -139,7 +139,7 @@ export default function EditItem() {
       return null;
     }
 
-    const confirmResponse = await fetch(apiUrl("/api/storage/s3/confirm-product-image"), {
+    const confirmResponse = await authenticatedFetch("/api/storage/s3/confirm-product-image", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

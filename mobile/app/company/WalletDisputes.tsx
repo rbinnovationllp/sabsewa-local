@@ -8,7 +8,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { apiUrl } from "@/lib/backend";
+import { authenticatedFetch } from "@/lib/backend";
 import { useAuth } from "@/providers/AuthProvider";
 import BrandHeader from "@/components/BrandHeader";
 
@@ -26,7 +26,7 @@ export default function CompanyWalletDisputesScreen() {
     if (orderId.trim()) query.set("order_id", orderId.trim());
     if (transactionId.trim()) query.set("transaction_id", transactionId.trim());
 
-    const response = await fetch(apiUrl(`/api/vendor/security-wallet/admin/disputes?${query.toString()}`));
+    const response = await authenticatedFetch(`/api/vendor/security-wallet/admin/disputes?${query.toString()}`);
     const json = await response.json();
 
     if (!response.ok || !json.success) {
@@ -49,7 +49,7 @@ export default function CompanyWalletDisputesScreen() {
         ? `/api/vendor/security-wallet/admin/disputes/${dispute.id}/reversal`
         : `/api/vendor/security-wallet/admin/disputes/${dispute.id}/reject`;
 
-    const response = await fetch(apiUrl(endpoint), {
+    const response = await authenticatedFetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

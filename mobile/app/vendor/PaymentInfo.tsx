@@ -3,7 +3,7 @@ import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, Text, TextInpu
 import * as ImagePicker from "expo-image-picker";
 import { useLocalSearchParams } from "expo-router";
 import { useAuth } from "@/providers/AuthProvider";
-import { apiUrl } from "@/lib/backend";
+import { apiUrl, authenticatedFetch } from "@/lib/backend";
 import { optimizeQrImage, validatePickedProductImage } from "@/lib/imageUploadPolicy";
 
 const METHOD_OPTIONS = [
@@ -38,7 +38,7 @@ export default function VendorPaymentInfoScreen() {
     if (!vendorId) return;
     setLoading(true);
     try {
-      const response = await fetch(apiUrl(`/api/settlement/vendor/${vendorId}/payment-profile`));
+      const response = await authenticatedFetch(`/api/settlement/vendor/${vendorId}/payment-profile`);
       const json = await response.json();
       if (!response.ok || !json.success) throw new Error(json.error || "Unable to load payment profile.");
       setProfile(json.profile);
@@ -80,7 +80,7 @@ export default function VendorPaymentInfoScreen() {
     const fileName = qrAsset.fileName || qrAsset.uri.split("/").pop() || `payment-qr-${Date.now()}.jpg`;
     const contentType = optimized.contentType || qrAsset.mimeType || "image/jpeg";
 
-    const presignResponse = await fetch(apiUrl("/api/storage/s3/presign-payment-qr"), {
+    const presignResponse = await authenticatedFetch("/api/storage/s3/presign-payment-qr", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -107,7 +107,7 @@ export default function VendorPaymentInfoScreen() {
     });
     if (!uploadResponse.ok) throw new Error("QR image upload failed.");
 
-    const confirmResponse = await fetch(apiUrl("/api/storage/s3/confirm-payment-qr"), {
+    const confirmResponse = await authenticatedFetch("/api/storage/s3/confirm-payment-qr", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -134,7 +134,7 @@ export default function VendorPaymentInfoScreen() {
     setSaving(true);
     try {
       await uploadQrIfSelected();
-      const response = await fetch(apiUrl(`/api/settlement/vendor/${vendorId}/payment-profile`), {
+      const response = await authenticatedFetch(`/api/settlement/vendor/${vendorId}/payment-profile`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

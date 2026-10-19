@@ -97,11 +97,21 @@ export default function CustomerCreditLedgerScreen() {
 
       {accounts.map((account) => {
         const pending = pendingByAccount.get(account.id);
+        const creditLimit = Number(account.credit_limit || 0);
+        const outstanding = Number(account.outstanding_balance || 0);
+        const usagePercent = creditLimit > 0 ? (outstanding / creditLimit) * 100 : 0;
         return (
           <View key={account.id} style={styles.card}>
             <Text style={styles.vendorName}>{account.vendor?.shop_name || account.vendor?.vendor_name || "Vendor"}</Text>
             <Text style={styles.amount}>Outstanding: Rs {Number(account.outstanding_balance || 0).toFixed(2)}</Text>
             <Text style={styles.advance}>Advance with this vendor: Rs {Number(account.advance_balance || 0).toFixed(2)}</Text>
+            <Text style={styles.muted}>Credit limit: Rs {creditLimit.toFixed(2)} | Available: Rs {Math.max(creditLimit - outstanding, 0).toFixed(2)}</Text>
+            {usagePercent >= 90 ? (
+              <View style={styles.creditAlert}>
+                <Text style={styles.creditAlertTitle}>Credit Limit Alert</Text>
+                <Text style={styles.creditAlertText}>You have used 90% or more of the credit limit provided by this vendor. Please repay your outstanding amount to continue using the credit facility.</Text>
+              </View>
+            ) : null}
             <Text style={styles.muted}>Due date: {account.due_date || "Not set"}</Text>
 
             {account.qr_code?.public_url ? (
@@ -172,6 +182,9 @@ const styles = StyleSheet.create({
   btnText: { color: "#fff", fontWeight: "900", textAlign: "center" },
   warningPanel: { borderWidth: 1, borderColor: "#fed7aa", borderRadius: 8, padding: 12, backgroundColor: "#fff7ed", marginVertical: 12 },
   warningText: { color: "#7c2d12", lineHeight: 19 },
+  creditAlert: { borderWidth: 1, borderColor: "#f59e0b", borderRadius: 8, padding: 12, backgroundColor: "#fff7ed", marginTop: 10 },
+  creditAlertTitle: { color: "#9a3412", fontWeight: "900", marginBottom: 4 },
+  creditAlertText: { color: "#7c2d12", lineHeight: 19 },
   pendingPanel: { borderWidth: 1, borderColor: "#bfdbfe", borderRadius: 8, padding: 12, backgroundColor: "#eff6ff", marginTop: 12 },
   pendingTitle: { color: "#1d4ed8", fontWeight: "900" },
 });

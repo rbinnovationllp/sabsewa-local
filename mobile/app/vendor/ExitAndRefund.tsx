@@ -10,7 +10,7 @@ import {
   View,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { apiUrl } from "@/lib/backend";
+import { authenticatedFetch } from "@/lib/backend";
 import { useAuth } from "@/providers/AuthProvider";
 
 function money(value: unknown) {
@@ -37,7 +37,7 @@ export default function VendorExitAndRefundScreen() {
     if (!vendorId) return;
     setLoading(true);
     try {
-      const response = await fetch(apiUrl(`/api/vendor/security-wallet/${vendorId}/closure-preview`));
+      const response = await authenticatedFetch(`/api/vendor/security-wallet/${vendorId}/closure-preview`);
       const json = await response.json();
       if (!response.ok || !json.success) throw new Error(json.error || "Unable to calculate refund.");
       setPreview(json.preview);
@@ -57,7 +57,7 @@ export default function VendorExitAndRefundScreen() {
 
     setSubmitting(true);
     try {
-      const response = await fetch(apiUrl(`/api/vendor/security-wallet/${vendorId}/closure-request`), {
+      const response = await authenticatedFetch(`/api/vendor/security-wallet/${vendorId}/closure-request`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

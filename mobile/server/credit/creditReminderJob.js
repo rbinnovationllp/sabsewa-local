@@ -49,7 +49,7 @@ export async function runVendorCreditReminderJob() {
     if (limit > 0 && outstanding >= limit) {
       await queueCreditReminder(account, "exhausted");
       queued += 1;
-    } else if (limit > 0 && outstanding >= limit * 0.8) {
+    } else if (limit > 0 && outstanding >= limit * 0.9) {
       await queueCreditReminder(account, "near_limit");
       queued += 1;
     }

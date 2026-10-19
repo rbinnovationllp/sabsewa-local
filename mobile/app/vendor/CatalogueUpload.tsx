@@ -48,7 +48,6 @@ export default function CatalogueUploadScreen() {
       const result = await DocumentPicker.getDocumentAsync({
         type: [
           "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-          "application/vnd.ms-excel",
           "text/csv",
         ],
       });
@@ -221,7 +220,7 @@ export default function CatalogueUploadScreen() {
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Upload Product List (Excel / CSV)</Text>
           <Text style={styles.muted}>
-            Supported format: .xlsx, .xls, or .csv (Up to 500 products per upload).
+            Supported formats: .xlsx and .csv (Up to 500 products per upload).
           </Text>
           <TouchableOpacity style={styles.primaryBtn} onPress={handleSpreadsheetPick}>
             <Text style={styles.primaryBtnText}>📁 Choose Spreadsheet File</Text>

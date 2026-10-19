@@ -8,7 +8,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { apiUrl } from "@/lib/backend";
+import { apiUrl, authenticatedFetch } from "@/lib/backend";
 import { useAuth } from "@/providers/AuthProvider";
 import BrandHeader from "@/components/BrandHeader";
 
@@ -28,7 +28,7 @@ export default function CompanyDataRecoveryScreen() {
       return;
     }
 
-    const response = await fetch(apiUrl("/api/vendor/security-wallet/admin/recovery/wallet-transactions"), {
+    const response = await authenticatedFetch("/api/vendor/security-wallet/admin/recovery/wallet-transactions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

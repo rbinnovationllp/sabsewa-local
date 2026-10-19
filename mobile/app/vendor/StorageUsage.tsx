@@ -1,7 +1,7 @@
 ﻿import { useEffect, useState } from "react";
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { apiUrl } from "@/lib/backend";
+import { apiUrl, authenticatedFetch } from "@/lib/backend";
 
 function mb(bytes: unknown) {
   return (Number(bytes || 0) / (1024 * 1024)).toFixed(1);
@@ -27,8 +27,8 @@ export default function VendorStorageUsageScreen() {
     setLoading(true);
     try {
       const [usageResponse, profileResponse] = await Promise.all([
-        fetch(apiUrl(`/api/storage/s3/vendor/${vendorId}/usage`)),
-        fetch(apiUrl(`/api/settlement/vendor/${vendorId}/payment-profile`)),
+        authenticatedFetch(`/api/storage/s3/vendor/${vendorId}/usage`),
+        authenticatedFetch(`/api/settlement/vendor/${vendorId}/payment-profile`),
       ]);
       const usageJson = await usageResponse.json();
       const profileJson = await profileResponse.json();

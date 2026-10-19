@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Location from "expo-location";
-import { apiUrl } from "@/lib/backend";
+import { apiUrl, authenticatedFetch } from "@/lib/backend";
 
 const PAYMENT_OPTIONS = [
   { key: "cash", label: "Cash collected" },
@@ -37,7 +37,7 @@ export default function RiderOrderScreen() {
   async function loadPaymentContext() {
     if (!orderId) return;
     try {
-      const response = await fetch(apiUrl(`/api/settlement/orders/${orderId}/payment-context`));
+      const response = await authenticatedFetch(`/api/settlement/orders/${orderId}/payment-context`);
       const json = await response.json();
       if (json.success) {
         setPaymentContext(json);
